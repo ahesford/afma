@@ -5,7 +5,7 @@
 #include "integrate.h"
 #include "mlfma.h"
 
-fmadesc mlfma;
+fmadesc fmaconf;
 
 /* Compute the radiation pattern of a square cell. */
 void radpattern (int gi, float *cen, float *s, Complex *ans) {
@@ -17,8 +17,8 @@ void radpattern (int gi, float *cen, float *s, Complex *ans) {
 	sc = s[0] * cen[0] + s[1] * cen[1] + s[2] * cen[2];
 	sr = s[0] * rv[0] + s[1] * rv[1] + s[2] * rv[2];
 
-	val = mlfma.k0 * cexp (I * mlfma.k0 * sc) * cexp (-I * mlfma.k0 * sr);
-	val *= mlfma.cell[0] * mlfma.cell[1] * mlfma.cell[2];
+	val = fmaconf.k0 * cexp (I * fmaconf.k0 * sc) * cexp (-I * fmaconf.k0 * sr);
+	val *= fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
 
 	/* Copy the value into the solution. */
 	ans->re = creal (val);
@@ -37,14 +37,14 @@ void impedance (int gi, int gj, Complex *ans) {
 	complex float val;
 
 	/* This is the self term, so use the analytic approximation. */
-	if (gi == gj) val = selfint (mlfma.k0, mlfma.cell);
+	if (gi == gj) val = selfint (fmaconf.k0, fmaconf.cell);
 	else { 
 		/* Find the source and observation centers. */
 		bscenter (gi, obs);
 		bscenter (gj, src); 
 		
 		/* Compute the near-neighbor term, using Gaussian quadrature. */
-		val = srcint (mlfma.k0, src, obs, mlfma.cell);
+		val = srcint (fmaconf.k0, src, obs, fmaconf.cell);
 	}
 	
 	/* Copy the value into the solution. */
@@ -57,11 +57,11 @@ void impedance (int gi, int gj, Complex *ans) {
 void bscenter (int gi, float *cen) {
 	int i, j, k;
 
-	i = gi % mlfma.nx;
-	j = (gi / mlfma.nx) % mlfma.ny;
-	k = gi / (mlfma.nx * mlfma.ny);
+	i = gi % fmaconf.nx;
+	j = (gi / fmaconf.nx) % fmaconf.ny;
+	k = gi / (fmaconf.nx * fmaconf.ny);
 
-	cen[0] = mlfma.min[0] + ((float)i + 0.5) * mlfma.cell[0];
-	cen[1] = mlfma.min[1] + ((float)j + 0.5) * mlfma.cell[1];
-	cen[2] = mlfma.min[2] + ((float)k + 0.5) * mlfma.cell[2];
+	cen[0] = fmaconf.min[0] + ((float)i + 0.5) * fmaconf.cell[0];
+	cen[1] = fmaconf.min[1] + ((float)j + 0.5) * fmaconf.cell[1];
+	cen[2] = fmaconf.min[2] + ((float)k + 0.5) * fmaconf.cell[2];
 }

@@ -11,8 +11,8 @@
 
 #define NUMPTS 4
 
-complex float rcvint (complex float, float *, float *, float *);
-complex float srcint (complex float, float *, float *, float *);
-complex float selfint (complex float, float *);
+complex float rcvint (float, float *, float *, float *);
+complex float srcint (float, float *, float *, float *);
+complex float selfint (float, float *);
 
 #endif /* __INTEGRATE_H_ */

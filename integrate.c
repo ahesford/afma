@@ -7,7 +7,7 @@
 float pts[4] = { -OUTPT, -INPT, INPT, OUTPT };
 float wts[4] = { OUTWT, INWT, INWT, OUTWT };
 
-complex float rcvint (complex float k, float *src, float *cen, float *dc) {
+complex float rcvint (float k, float *src, float *cen, float *dc) {
 	complex float ans, val;
 	int i, j, l;
 	float obs[3];
@@ -28,7 +28,7 @@ complex float rcvint (complex float k, float *src, float *cen, float *dc) {
 	return ans;
 }
 
-complex float srcint (complex float k, float *src, float *obs, float *dc) {
+complex float srcint (float k, float *src, float *obs, float *dc) {
 	complex float ans, val;
 	int i, j, l;
 	float srcpt[3];
@@ -49,7 +49,7 @@ complex float srcint (complex float k, float *src, float *obs, float *dc) {
 	return ans;
 }
 
-complex float selfint (complex float k, float *dc) {
+complex float selfint (float k, float *dc) {
 	complex float ans, ikr, ex;
 	float r;
 

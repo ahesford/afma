@@ -1,7 +1,7 @@
 #include <math.h>
 #include <complex.h>
 
-complex float fsgreen (complex float k, float *r, float *rp) {
+complex float fsgreen (float k, float *r, float *rp) {
 	complex float ans;
 	float dist;
 
