@@ -40,7 +40,7 @@ int ScaleME_preconf (void) {
 	ScaleME_setWaveNumber (fmaconf.k0);
 
 	/* Set some MLFMA parameters. */
-	ScaleME_setNumBasis (fmaconf.nx * fmaconf.ny * fmaconf.nz);
+	ScaleME_setNumBasis (fmaconf.gnumbases);
 	ScaleME_setMaxLevel (fmaconf.maxlev);
 	ScaleME_setPrecision (fmaconf.precision);
 	ScaleME_setMAC (fmaconf.numbuffer);

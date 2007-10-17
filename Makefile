@@ -7,7 +7,7 @@ CINCDIR= -I../../scaleme/include
 CFLAGS?= $(OPTFLAGS) -Wall
 FFLAGS?= $(OPTFLAGS) -Wall
 
-OBJS= fsgreen.o integrate.o mlfma.o scaleme.o
+OBJS= fsgreen.o integrate.o mlfma.o scaleme.o itsolver.o cmgres.o
 
 all: $(OBJS)
 	echo "Objects built."
