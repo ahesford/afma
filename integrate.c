@@ -8,7 +8,7 @@ float pts[4] = { -OUTPT, -INPT, INPT, OUTPT };
 float wts[4] = { OUTWT, INWT, INWT, OUTWT };
 
 complex float rcvint (float k, float *src, float *cen, float *dc) {
-	complex float ans, val;
+	complex float ans = 0, val;
 	int i, j, l;
 	float obs[3];
 
@@ -29,7 +29,7 @@ complex float rcvint (float k, float *src, float *cen, float *dc) {
 }
 
 complex float srcint (float k, float *src, float *obs, float *dc) {
-	complex float ans, val;
+	complex float ans = 0, val;
 	int i, j, l;
 	float srcpt[3];
 
