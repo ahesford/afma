@@ -50,7 +50,7 @@ complex float srcint (float k, float *src, float *obs, float *dc) {
 }
 
 complex float selfint (float k, float *dc) {
-	complex float ans, ikr, ex;
+	complex float ans, ikr;
 	float r;
 
 	r = cbrt (3 * dc[0] * dc[1] * dc[2] / (4 * M_PI));
