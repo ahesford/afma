@@ -101,7 +101,7 @@ int cgmres (Complex *rhs, Complex *sol) {
 		/* Hastriter added Ccopy and reset info[0] to trick it into
 		 * giving results even though it didn't converge but reached
 		 * its maximum iterations */
-		writelog (logfile, "WARNING: DID NOT CONVERGE! Return value from cgmres = %d\n", info[0]);
+		fprintf (stdout, "WARNING: DID NOT CONVERGE! Return value from cgmres = %d\n", info[0]);
 		Ccopy(fmaconf.numbases, zwork, sol);
 		info[0] = 0;
 	}
