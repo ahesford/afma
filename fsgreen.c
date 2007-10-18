@@ -1,6 +1,8 @@
 #include <math.h>
 #include <complex.h>
 
+#include "utility.h"
+
 /* Computes the free-space Green's function between two points. */
 complex float fsgreen (float k, float *r, float *rp) {
 	complex float ans;
