@@ -36,7 +36,6 @@ int cgmres (Complex *rhs, Complex *sol) {
 	icntl[4] = 0; /* Use MGS for orthogonalization. */
 	icntl[5] = 0; /* Don't use an initial guess. */
 	icntl[6] = solver.maxit; /* Set the maximum interation count. */
-	icntl[7] = 0; /* Don't use an explicit MVP to compute residual. */
 
 	cntl[0] = solver.epscg;
 
