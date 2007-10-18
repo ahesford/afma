@@ -81,13 +81,7 @@ int cgmres (Complex *rhs, Complex *sol) {
 				   ldot[0] = lzdot.re;
 				   ldot[1] = lzdot.im;
 				   gdot[0] = gdot[1] = 0.0;
-#ifdef DOUBLEPREC
-				   MPI_Allreduce(ldot, gdot, 2, MPI_DOUBLE,
-						   MPI_SUM, MPI_COMM_WORLD);
-#else
-				   MPI_Allreduce(ldot, gdot, 2, MPI_FLOAT,
-						   MPI_SUM, MPI_COMM_WORLD);
-#endif
+				   MPI_Allreduce(ldot, gdot, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 				   tz->re = gdot[0];
 				   tz->im = gdot[1];
 				   ++tz;
@@ -97,25 +91,17 @@ int cgmres (Complex *rhs, Complex *sol) {
 		}
 	} while (irc[0]);
 
-	if (info[0]) {
-		/* Hastriter added Ccopy and reset info[0] to trick it into
-		 * giving results even though it didn't converge but reached
-		 * its maximum iterations */
-		fprintf (stdout, "WARNING: DID NOT CONVERGE! Return value from cgmres = %d\n", info[0]);
-		Ccopy(fmaconf.numbases, zwork, sol);
-		info[0] = 0;
+	if (info[0]) fprintf (stdout, "CGMRES: return value: %d\n", info[0]); 
+	
+	Ccopy(fmaconf.numbases, zwork, sol);
+	
+	if (!myRank) {
+		fprintf(stdout, "CGMRES: %d iterations\n", info[1]);
+		fprintf(stdout, "CGMRES: workspace size: %d\n", info[2]);
+		fprintf(stdout, "CGMRES: Preconditioned B.E.: %.6E\n", rinfo[0]);
+		fprintf(stdout, "CGMRES: Non-preconditioned B.E.: %.6E\n", rinfo[1]);
 	}
 
-	if (!(info[0])) {		/* on normal exit */
-		Ccopy(fmaconf.numbases, zwork, sol);
-		if (!myRank) {
-			fprintf(stdout, "Number of iterations performed = %d\n", info[1]);
-			fprintf(stdout, "Minimal size for workspace = %d\n", info[2]);
-			fprintf(stdout, "Backward Error for the preconditioned system: %.3E\n", rinfo[0]);
-			fprintf(stdout, "Backward Error for the non-preconditioned system: %.3E\n", rinfo[1]);
-		}
-	}
-
-	if (zwork) free(zwork);
+	free(zwork);
 	return info[0];
 }
