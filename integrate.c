@@ -7,7 +7,7 @@
 float pts[4] = { -OUTPT, -INPT, INPT, OUTPT };
 float wts[4] = { OUTWT, INWT, INWT, OUTWT };
 
-complex float rcvint (float k, float *src, float *cen, float *dc) {
+complex float rcvint (igrandf green, float k, float *src, float *cen, float *dc) {
 	complex float ans = 0, val;
 	int i, j, l;
 	float obs[3];
@@ -18,7 +18,7 @@ complex float rcvint (float k, float *src, float *cen, float *dc) {
 			obs[1] = cen[1] + 0.5 * dc[1] * pts[j];
 			for (l = 0; l < NUMPTS; ++l) {
 				obs[2] = cen[2] + 0.5 * dc[2] * pts[l];
-				val = fsgreen (k, obs, src);
+				val = green (k, obs, src);
 				ans += wts[i] * wts[j] * wts[l] * val;
 			}
 		}
@@ -39,7 +39,7 @@ complex float srcint (float k, float *src, float *obs, float *dc) {
 			srcpt[1] = src[1] + 0.5 * dc[1] * pts[j];
 			for (l = 0; l < NUMPTS; ++l) {
 				srcpt[2] = src[2] + 0.5 * dc[2] * pts[l];
-				val = rcvint (k, srcpt, obs, dc);
+				val = rcvint (fsgreen, k, srcpt, obs, dc);
 				ans += wts[i] * wts[j] * wts[l] * val;
 			}
 		}

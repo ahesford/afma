@@ -1,6 +1,7 @@
 #include <math.h>
 #include <complex.h>
 
+/* Computes the free-space Green's function between two points. */
 complex float fsgreen (float k, float *r, float *rp) {
 	complex float ans;
 	float dist;
@@ -12,6 +13,24 @@ complex float fsgreen (float k, float *r, float *rp) {
 	dist = sqrt (dist);
 
 	ans = cexp (I * k * dist) / dist;
+
+	return ans;
+}
+
+/* Computes a plane wave from a specific direction at a point. */
+complex float fsplane (float k, float *r, float *s) {
+	complex float ans;
+	float sr, smag;
+
+	/* Normalize the direction vector. */
+	smag = sqrt (s[0] * s[0] + s[1] * s[1] + s[2] * s[2]);
+	s[0] /= smag;
+	s[1] /= smag;
+	s[2] /= smag;
+
+	sr = s[0] * r[0] + s[1] * r[1] + s[2] * r[2];
+
+	ans = cexp (I * k * sr);
 
 	return ans;
 }

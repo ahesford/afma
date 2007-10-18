@@ -11,7 +11,9 @@
 
 #define NUMPTS 4
 
-complex float rcvint (float, float *, float *, float *);
+typedef complex float (*igrandf) (float, float *, float *);
+
+complex float rcvint (igrandf, float, float *, float *, float *);
 complex float srcint (float, float *, float *, float *);
 complex float selfint (float, float *);
 
