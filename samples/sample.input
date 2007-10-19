@@ -1,0 +1,27 @@
+# Comments begin with hash marks; any line containing hash marks will be
+# ignored. This means that comments are not supported after valid fields.
+#
+# Number of cells: Nx Ny Nz
+100 100 100
+# Domain minimum: mx my mz
+-5.0 -5.0 -5.0
+# Domain maximum: Mx My Mz
+5.0 5.0 5.0
+# MLFMA level configuration
+# Maximum level, lowest computed level, and maximum shared level
+3 2 0
+# Number of MLFMA buffer boxes
+1
+# MLFMA precision: see ScaleME documentation
+2.9
+# MLFMA minimum box size
+0.0
+# MLFMA interpolation order
+4
+# Iterative solver configuration
+# Number of iterations, restart
+100 50
+# Preconditioner: 1 enables, 0 disables
+1
+# Solver tolerance
+1e-3

@@ -3,7 +3,7 @@
 
 #include "mlfma.h"
 #include "integrate.h"
-#include "utility.h"
+#include "fsgreen.h"
 #include "excite.h"
 
 /* Computes the RHS for a plane-wave in a given direction. */

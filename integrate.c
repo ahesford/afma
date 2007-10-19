@@ -1,7 +1,7 @@
 #include <math.h>
 #include <complex.h>
 
-#include "utility.h"
+#include "fsgreen.h"
 #include "integrate.h"
 
 float pts[4] = { -OUTPT, -INPT, INPT, OUTPT };
