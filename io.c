@@ -18,6 +18,7 @@ void skipcomments (FILE *fp) {
 	fsetpos (fp, &loc);
 }
 
+/* Read the configuration file and set parameters. */
 void getconfig (char *fname) {
 	FILE *fp;
 	char buf[1024];
@@ -93,6 +94,31 @@ void getconfig (char *fname) {
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%f", &(solver.epscg));
+
+	fclose (fp);
+}
+
+/* Read a portion of the contrast file and store it. */
+void getcontrast (char *fname, int *bslist, int nbs) {
+	FILE *fp;
+	int size[3], i, offset;
+	long spos;
+
+	if (!(fp = fopen (fname, "r"))) {
+		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
+		return;
+	}
+
+	/* Read the size of the contrast grid. */
+	fread (size, sizeof(int), 3, fp);
+
+	for (offset = 0, i = 0; i < nbs; ++i) {
+		spos = (long)(bslist[i] - offset) * sizeof(complex float);
+		offset = bslist[i] + 1;
+
+		fseek (fp, spos, SEEK_CUR);
+		fread (fmaconf.contrast + i, sizeof(complex float), 1, fp);
+	}
 
 	fclose (fp);
 }

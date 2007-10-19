@@ -9,7 +9,9 @@ typedef struct {
 	float precision, smallbox;
 	int nx, ny, nz, gnumbases, numbases;
 	int maxlev, numbuffer, interpord, toplev, sharedmax;
+	int *bslist;
 	float k0;
+	complex float *contrast;
 } fmadesc;
 
 extern fmadesc fmaconf;

@@ -10,10 +10,35 @@
 
 solveparm solver;
 
+static int compcrt (Complex *dst, Complex *src) {
+	int i;
+	complex float val, buf;
+
+	for (i = 0; i < fmaconf.numbases; ++i) {
+		buf = src[i].re + I * src[i].im;
+		val = buf * fmaconf.contrast[i];
+		dst[i].re = creal (val);
+		dst[i].im = cimag (val);
+	}
+
+	return fmaconf.numbases;
+}
+
+static int augcrt (Complex *dst, Complex *src) {
+	int i;
+
+	for (i = 0; i < fmaconf.numbases; ++i) {
+		dst[i].re += src[i].re;
+		dst[i].im += src[i].im;
+	}
+
+	return fmaconf.numbases;
+}
+
 int cgmres (Complex *rhs, Complex *sol) {
 	int icntl[7], irc[5], lwork, info[3], i, myRank;
 	float rinfo[2], cntl[5], ldot[2], gdot[2];
-	Complex *zwork = NULL, *tx, *ty, *tz, lzdot;
+	Complex *zwork, *solbuf, *tx, *ty, *tz, lzdot;
 
 	MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 
@@ -21,6 +46,7 @@ int cgmres (Complex *rhs, Complex *sol) {
 	lwork = solver.restart * solver.restart +
 		solver.restart * (fmaconf.numbases + 5) + 5 * fmaconf.numbases + 1;
 	zwork = calloc (lwork, sizeof(Complex));
+	solbuf = malloc (fmaconf.numbases * sizeof(Complex));
 
 	/* Initialize the parameters. */
 	initcgmres_(icntl, cntl);
@@ -55,7 +81,9 @@ int cgmres (Complex *rhs, Complex *sol) {
 			   /* fortran indices start from 1 */
 			   tx = zwork+irc[1] - 1;
 			   ty = zwork+irc[3] - 1;
-			   ScaleME_applyParFMA(REGULAR, tx, ty);
+			   compcrt (solbuf, tx);
+			   ScaleME_applyParFMA(REGULAR, solbuf, ty);
+			   augcrt (ty, tx);
 			   break;
 		case LEFT_PRECOND:
 			   tx = zwork+irc[1] - 1;
@@ -101,6 +129,7 @@ int cgmres (Complex *rhs, Complex *sol) {
 		fprintf(stdout, "CGMRES: Non-preconditioned B.E.: %.6E\n", rinfo[1]);
 	}
 
-	free(zwork);
+	free (zwork);
+	free (solbuf);
 	return info[0];
 }
