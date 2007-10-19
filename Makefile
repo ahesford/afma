@@ -8,7 +8,7 @@ CFLAGS?= $(OPTFLAGS) -Wall
 FFLAGS?= $(OPTFLAGS) -Wall
 
 OBJS= fsgreen.o integrate.o mlfma.o scaleme.o itsolver.o excite.o io.o \
-      cgmres.o
+      measure.o cgmres.o
 
 all: $(OBJS)
 	@echo "Objects built."

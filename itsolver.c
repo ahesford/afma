@@ -1,3 +1,6 @@
+#include <complex.h>
+#include <string.h>
+
 #include <mpi.h>
 
 /* These headers are provided by ScaleME. */
@@ -35,7 +38,7 @@ static int augcrt (Complex *dst, Complex *src) {
 	return fmaconf.numbases;
 }
 
-int cgmres (Complex *rhs, Complex *sol) {
+int cgmres (complex float *rhs, complex float *sol) {
 	int icntl[7], irc[5], lwork, info[3], i, myRank;
 	float rinfo[2], cntl[5], ldot[2], gdot[2];
 	Complex *zwork, *solbuf, *tx, *ty, *tz, lzdot;
@@ -66,8 +69,8 @@ int cgmres (Complex *rhs, Complex *sol) {
 	cntl[0] = solver.epscg;
 
 	/* copy the input and solution vectors to zwork */
-	Ccopy(fmaconf.numbases, sol, zwork);
-	Ccopy(fmaconf.numbases, rhs, zwork + fmaconf.numbases);
+	memcpy (zwork, sol, fmaconf.numbases * sizeof(complex float));
+	memcpy (zwork + fmaconf.numbases, rhs, fmaconf.numbases * sizeof(complex float));
 
 	do {
 		drivecgmres_(&(fmaconf.gnumbases), &(fmaconf.numbases),
@@ -91,7 +94,7 @@ int cgmres (Complex *rhs, Complex *sol) {
 			   
 			   /* No preconditioner is desired */
 			   if (!solver.precond) {
-				   Ccopy(fmaconf.numbases, tx, ty);
+				   memcpy (ty, tx, fmaconf.numbases * sizeof(Complex));
 				   break;
 			   }
 
@@ -119,8 +122,8 @@ int cgmres (Complex *rhs, Complex *sol) {
 	} while (irc[0]);
 
 	if (info[0]) fprintf (stdout, "CGMRES: return value: %d\n", info[0]); 
-	
-	Ccopy(fmaconf.numbases, zwork, sol);
+
+	memcpy (sol, zwork, fmaconf.numbases * sizeof(complex float));
 	
 	if (!myRank) {
 		fprintf(stdout, "CGMRES: %d iterations\n", info[1]);
