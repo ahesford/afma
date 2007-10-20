@@ -78,7 +78,7 @@ int printfield (char *fname, measdesc *obs, complex float *field) {
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i;
+	int mpirank, mpisize, i, j;
 	complex float *rhs, *field;
 
 	MPI_Init (&argc, &argv);
@@ -157,6 +157,10 @@ int main (int argc, char **argv) {
 
 		/* Run the iterative solver. The solution is stored in the RHS. */
 		cgmres (rhs, rhs);
+
+		/* Convert total field into contrast current. */
+		for (j = 0; j < fmaconf.numbases; ++j)
+			rhs[i] *= fmaconf.contrast[i];
 
 		sprintf (fname, "%s.%d.currents", outproj, i);
 		printcrt (fname, rhs);
