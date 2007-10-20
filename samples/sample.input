@@ -25,3 +25,16 @@
 1
 # Solver tolerance
 1e-3
+# Source and observation locations
+# Source: radius
+100.0
+# Source: theta min, theta max, theta step
+0.0 0.0 1
+# Source: phi min, phi max, phi step
+0.0 0.0 1
+# Observation: radius
+100.0
+# Observation: theta min, theta max, theta step
+0.0 0.0 1
+# Observation: phi min, phi max, phi step
+0.0 0.0 1

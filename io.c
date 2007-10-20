@@ -5,6 +5,7 @@
 #include "io.h"
 #include "mlfma.h"
 #include "itsolver.h"
+#include "measure.h"
 
 void skipcomments (FILE *fp) {
 	fpos_t loc;
@@ -94,6 +95,36 @@ void getconfig (char *fname) {
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%f", &(solver.epscg));
+
+	/* Read the source radius. */
+	skipcomments (fp);
+	fgets (buf, 1024, fp);
+	sscanf (buf, "%f", &(srcmeas.radius));
+
+	/* Read the source theta values. */
+	skipcomments (fp);
+	fgets (buf, 1024, fp);
+	sscanf (buf, "%f %f %d", srcmeas.trange, srcmeas.trange + 1, &(srcmeas.ntheta));
+
+	/* Read the source phi values. */
+	skipcomments (fp);
+	fgets (buf, 1024, fp);
+	sscanf (buf, "%f %f %d", srcmeas.prange, srcmeas.prange + 1, &(srcmeas.nphi));
+
+	/* Read the observer radius. */
+	skipcomments (fp);
+	fgets (buf, 1024, fp);
+	sscanf (buf, "%f", &(obsmeas.radius));
+
+	/* Read the observer theta values. */
+	skipcomments (fp);
+	fgets (buf, 1024, fp);
+	sscanf (buf, "%f %f %d", obsmeas.trange, obsmeas.trange + 1, &(obsmeas.ntheta));
+
+	/* Read the observer phi values. */
+	skipcomments (fp);
+	fgets (buf, 1024, fp);
+	sscanf (buf, "%f %f %d", obsmeas.prange, obsmeas.prange + 1, &(obsmeas.nphi));
 
 	fclose (fp);
 }

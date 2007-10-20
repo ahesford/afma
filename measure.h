@@ -4,13 +4,15 @@
 #include <Complex.h>
 
 typedef struct {
-	int numsrc, numobs;
-	float *srcloc, *obsloc;
+	int count, ntheta, nphi;
+	float radius;
+	float prange[2], trange[2], *locations;
 } measdesc;
 
-extern measdesc measures;
+extern measdesc srcmeas, obsmeas;
 
 int farfield (complex float *, int, int, float *, float *, complex float *);
-int directfield (complex float *, complex float *);
+int directfield (complex float *, int, float *, complex float *);
+int buildlocs (measdesc *);
 
 #endif /* __MEASURE_H_ */
