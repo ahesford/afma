@@ -10,6 +10,8 @@
 #include "mlfma.h"
 #include "fsgreen.h"
 
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+
 measdesc srcmeas, obsmeas;
 
 int farfield (complex float *currents, int nthetas, int nphis,
@@ -58,10 +60,10 @@ int buildlocs (measdesc *desc) {
 	desc->count = desc->ntheta * desc->nphi;
 
 	dtheta = (desc->trange[1] - desc->trange[0]);
-	dtheta /= max (desc->ntheta - 1, 1);
+	dtheta /= MAX (desc->ntheta - 1, 1);
 
 	dphi = (desc->prange[1] - desc->prange[0]);
-	dphi /= max (desc->nphi - 1, 1);
+	dphi /= MAX (desc->nphi - 1, 1);
 
 	desc->locations = malloc (3 * desc->count * sizeof(float));
 

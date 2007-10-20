@@ -106,10 +106,18 @@ void getconfig (char *fname) {
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%f %f %d", srcmeas.trange, srcmeas.trange + 1, &(srcmeas.ntheta));
 
+	/* Convert the degree values to radians. */
+	srcmeas.trange[0] *= M_PI / 180;
+	srcmeas.trange[1] *= M_PI / 180;
+
 	/* Read the source phi values. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%f %f %d", srcmeas.prange, srcmeas.prange + 1, &(srcmeas.nphi));
+
+	/* Convert the degree values to radians. */
+	srcmeas.prange[0] *= M_PI / 180;
+	srcmeas.prange[1] *= M_PI / 180;
 
 	/* Read the observer radius. */
 	skipcomments (fp);
@@ -121,10 +129,18 @@ void getconfig (char *fname) {
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%f %f %d", obsmeas.trange, obsmeas.trange + 1, &(obsmeas.ntheta));
 
+	/* Convert the degree values to radians. */
+	obsmeas.trange[0] *= M_PI / 180;
+	obsmeas.trange[1] *= M_PI / 180;
+
 	/* Read the observer phi values. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%f %f %d", obsmeas.prange, obsmeas.prange + 1, &(obsmeas.nphi));
+
+	/* Convert the degree values to radians. */
+	obsmeas.prange[0] *= M_PI / 180;
+	obsmeas.prange[1] *= M_PI / 180;
 
 	fclose (fp);
 }

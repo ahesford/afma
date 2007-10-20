@@ -5,5 +5,6 @@
 
 void skipcomments (FILE *);
 void getconfig (char *);
+void getcontrast (char *, int *, int);
 
 #endif /* __IO_H_ */
