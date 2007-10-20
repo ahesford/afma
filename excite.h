@@ -5,5 +5,6 @@
 
 complex float planerhs (int, float *);
 complex float pointrhs (int, float *);
+int buildrhs (complex float *, float *, int);
 
 #endif /* __EXCITE_H_ */

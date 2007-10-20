@@ -28,3 +28,17 @@ complex float pointrhs (int gi, float *srcloc) {
 
 	return ans;
 }
+
+/* Computes the entire RHS vector. */
+int buildrhs (complex float *rhs, float *srcloc, int type) {
+	int i;
+	complex float (*rhsfunc) (int, float *);
+
+	if (type) rhsfunc = planerhs;
+	else rhsfunc = pointrhs;
+
+	for (i = 0; i < fmaconf.numbases; ++i)
+		rhs[i] = rhsfunc (fmaconf.bslist[i], srcloc);
+
+	return fmaconf.numbases;
+}
