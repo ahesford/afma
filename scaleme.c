@@ -88,9 +88,11 @@ int ScaleME_postconf (void) {
 		goto error_handle;
 	}
 
-	if (ScaleME_initParBP (&mem)) {
-		fprintf (stdout, "ERROR: ScaleME BD preconditioner failed.\n");
-		goto error_handle;
+	if (solver.precond) {
+		if (ScaleME_initParBP (&mem)) {
+			fprintf (stdout, "ERROR: ScaleME BD preconditioner failed.\n");
+			goto error_handle;
+		}
 	}
 
 	return 0;

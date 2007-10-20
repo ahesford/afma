@@ -160,7 +160,7 @@ int main (int argc, char **argv) {
 
 		/* Convert total field into contrast current. */
 		for (j = 0; j < fmaconf.numbases; ++j)
-			rhs[i] *= fmaconf.contrast[i];
+			rhs[j] *= fmaconf.contrast[j];
 
 		sprintf (fname, "%s.%d.currents", outproj, i);
 		printcrt (fname, rhs);
