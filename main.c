@@ -18,7 +18,7 @@
 
 void usage (char *);
 int printcrt (char *, complex float *);
-int printfield (char *, complex float *);
+int printfield (char *, measdesc *, complex float *);
 
 void usage (char *name) {
 	fprintf (stderr, "Usage: %s [-o <output prefix>] -i <input prefix>\n", name);
@@ -43,7 +43,7 @@ int printcrt (char *fname, complex float *currents) {
 
 	MPI_Reduce (lct, globct, 2 * fmaconf.gnumbases, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-	if (mpirank) return;
+	if (mpirank) return fmaconf.gnumbases;
 
 	if (!(fp = fopen (fname, "w"))) {
 		fprintf (stderr, "ERROR: could not open current output.\n");
