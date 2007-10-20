@@ -24,6 +24,7 @@ Copyright: Sanjay Velamparambil, Weng Cho Chew, University of Illinois.
 #include "scaleme.h" /* The local ScaleME include, defining these functions. */
 
 #include "mlfma.h"
+#include "itsolver.h"
 
 /* initialisation and finalisation routines for ScaleME */
 int ScaleME_preconf (void) {
