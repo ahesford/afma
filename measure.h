@@ -11,8 +11,8 @@ typedef struct {
 
 extern measdesc srcmeas, obsmeas;
 
-int farfield (complex float *, int, int, float *, float *, complex float *);
-int directfield (complex float *, int, float *, complex float *);
+int farfield (complex float *, measdesc *, complex float *);
+int directfield (complex float *, measdesc *, complex float *);
 int buildlocs (measdesc *);
 
 #endif /* __MEASURE_H_ */

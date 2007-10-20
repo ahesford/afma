@@ -14,7 +14,7 @@ complex float fsgreen (float k, float *r, float *rp) {
 	dist += (r[2] - rp[2]) * (r[2] - rp[2]);
 	dist = sqrt (dist);
 
-	ans = cexp (I * k * dist) / dist;
+	ans = cexp (I * k * dist) / (4 * M_PI * dist);
 
 	return ans;
 }

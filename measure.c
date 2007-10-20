@@ -14,43 +14,57 @@
 
 measdesc srcmeas, obsmeas;
 
-int farfield (complex float *currents, int nthetas, int nphis,
-		float *thetas, float *phis, complex float *result) {
+int farfield (complex float *currents, measdesc *obs, complex float *result) {
+	int i;
+	float *thetas, dtheta;
 	Complex *fields = (Complex *)result;
-	/* The result must be a pointer to the pointer. */
-	if (ScaleME_evlRootFarFld_PI (6, nthetas, nphis, thetas, phis,
-				(Complex *)currents, &fields)) return 0;
 
+	thetas = malloc (obs->ntheta * sizeof(float));
+
+	dtheta = (obs->trange[1] - obs->trange[0]);
+	dtheta /= MAX(obs->ntheta - 1, 1);
+
+	for (i = 0; i < obs->ntheta; ++i)
+		thetas[i] = obs->trange[0] + i * dtheta;
+
+	/* The result must be a pointer to the pointer. */
+	if (ScaleME_evlRootFarFld_PI (6, obs->ntheta, obs->nphi, thetas,
+				obs->prange, (Complex *)currents, &fields))
+		return 0;
+
+	free (thetas);
 	return 1;
 }
 
-int directfield (complex float *currents, int numobs,
-		float *locations, complex float *result) {
+int directfield (complex float *currents, measdesc *obs, complex float *result) {
 	int i, j, gi;
 	complex float val, *buf;
-	float *cen;
+	float cen[3];
 
-	buf = malloc (numobs * sizeof(complex float));
-	memset (buf, 0, numobs * sizeof(complex float));
+	buf = malloc (obs->count * sizeof(complex float));
+	memset (buf, 0, obs->count * sizeof(complex float));
 
 	/* Compute the fields radiated by the local fields. */
 	for (j = 0; j < fmaconf.numbases; ++j) {
 		gi = fmaconf.bslist[j];
 		bscenter (gi, cen);
-		for (i = 0; i < numobs; ++i) {
-			val = fsgreen (fmaconf.k0, cen, locations + 3 * i);
+		for (i = 0; i < obs->count; ++i) {
+			val = fsgreen (fmaconf.k0, cen, obs->locations + 3 * i);
 			buf[i] += val * currents[j];
 		}
 	}
 
-	/* Multiply by cell volume. */
-	for (i = 0; i < numobs; ++i)
+	for (i = 0; i < obs->count; ++i) {
+		/* Scale by cell volume for one-point integration. */
 		buf[i] *= fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
+		/* Include the factor of k0^2 in front of the integral. */
+		buf[i] *= fmaconf.k0 * fmaconf.k0;
+	}
 
 	/* Collect the solution across all processors. */
-	MPI_Allreduce (result, buf, 2 * numobs, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce (result, buf, 2 * obs->count, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
-	return numobs;
+	return obs->count;
 }
 
 int buildlocs (measdesc *desc) {

@@ -25,7 +25,7 @@ void usage (char *name) {
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i;
-	complex float *rhs;
+	complex float *rhs, *field;
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -65,11 +65,16 @@ int main (int argc, char **argv) {
 	/* Convert the source range format to an explicit location list. */
 	buildlocs (&srcmeas);
 
+	/* If the observation radius is less than 10, use direct integration.
+	 * This means converting the observation range to an explicit list. */
+	if (obsmeas.radius < 10) buildlocs (&obsmeas);
+
 	/* Initialize ScaleME and find the local basis set. */
 	ScaleME_preconf ();
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
 	/* Allocate the RHS vector, which will also store the solution. */
 	rhs = malloc (fmaconf.numbases * sizeof(complex float));
+	field = malloc (obsmeas.ntheta * obsmeas.nphi * sizeof(complex float));
 
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the contrast for the local basis set. */
@@ -95,12 +100,16 @@ int main (int argc, char **argv) {
 		/* Run the iterative solver. The solution is stored in the RHS. */
 		cgmres (rhs, rhs);
 
+		if (obsmeas.radius < 10) directfield (rhs, &obsmeas, field);
+		else farfield (rhs, &obsmeas, field);
+
 		MPI_Barrier (MPI_COMM_WORLD);
 	}
 
 	ScaleME_finalizeParHostFMA ();
 
 	free (rhs);
+	free (field);
 
 	MPI_Barrier (MPI_COMM_WORLD);
 	MPI_Finalize ();
