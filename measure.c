@@ -62,7 +62,7 @@ int directfield (complex float *currents, measdesc *obs, complex float *result) 
 	}
 
 	/* Collect the solution across all processors. */
-	MPI_Allreduce (result, buf, 2 * obs->count, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce (buf, result, 2 * obs->count, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
 	return obs->count;
 }
