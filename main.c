@@ -158,12 +158,12 @@ int main (int argc, char **argv) {
 		/* Run the iterative solver. The solution is stored in the RHS. */
 		cgmres (rhs, rhs);
 
+		sprintf (fname, "%s.%d.currents", outproj, i);
+		printcrt (fname, rhs);
+
 		/* Convert total field into contrast current. */
 		for (j = 0; j < fmaconf.numbases; ++j)
 			rhs[j] *= fmaconf.contrast[j];
-
-		sprintf (fname, "%s.%d.currents", outproj, i);
-		printcrt (fname, rhs);
 
 		MPI_Barrier (MPI_COMM_WORLD);
 
