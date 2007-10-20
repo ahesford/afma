@@ -126,6 +126,9 @@ int main (int argc, char **argv) {
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
 	/* Allocate the RHS vector, which will also store the solution. */
 	rhs = malloc (fmaconf.numbases * sizeof(complex float));
+	/* Allocate the local portion of the contrast storage. */
+	fmaconf.contrast = malloc (fmaconf.numbases * sizeof(complex float));
+	/* Allocate the observation array. */
 	field = malloc (obsmeas.count * sizeof(complex float));
 
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
