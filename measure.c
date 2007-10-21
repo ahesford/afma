@@ -35,7 +35,7 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	/* The fields need to be multiplied by k^2 for proper scaling. */
 	j = obs->ntheta * obs->nphi;
 	for (i = 0; i < j; ++i)
-		fields[i] *= fmaconf.k0 * fmaconf.k0;
+		result[i] *= fmaconf.k0 * fmaconf.k0;
 
 	free (thetas);
 	return 1;
