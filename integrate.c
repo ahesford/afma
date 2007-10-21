@@ -7,6 +7,7 @@
 float pts[4] = { -OUTPT, -INPT, INPT, OUTPT };
 float wts[4] = { OUTWT, INWT, INWT, OUTWT };
 
+/* Four-point (per dimension) integration of the receiver. */
 complex float rcvint (igrandf green, float k, float *src, float *cen, float *dc) {
 	complex float ans = 0, val;
 	int i, j, l;
@@ -28,6 +29,19 @@ complex float rcvint (igrandf green, float k, float *src, float *cen, float *dc)
 	return ans;
 }
 
+/* One-point integration for the source, and four-point (per dimension)
+ * integration of the receiver. Seems to be accurate enough... */
+complex float fastint (float k, float *src, float *obs, float *dc) {
+	complex float ans;
+
+	/* Use four-point integration in the receiver box. */
+	ans = rcvint (fsgreen, k, src, obs, dc);
+	ans *= dc[0] * dc[1] * dc[2];
+
+	return ans;
+}
+
+/* Four-point (per dimension) integration of both source and receiver. */
 complex float srcint (float k, float *src, float *obs, float *dc) {
 	complex float ans = 0, val;
 	int i, j, l;
@@ -49,6 +63,8 @@ complex float srcint (float k, float *src, float *obs, float *dc) {
 	return ans;
 }
 
+/* Analytic approximation to the self-integration term. The square cell is
+ * approximated as a sphere with the same volume. */
 complex float selfint (float k, float *dc) {
 	complex float ans, ikr;
 	float r;

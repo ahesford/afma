@@ -62,8 +62,10 @@ void impedance (int gi, int gj, Complex *ans) {
 		bscenter (gi, obs);
 		bscenter (gj, src); 
 		
-		/* Compute the near-neighbor term, using Gaussian quadrature. */
-		val = srcint (fmaconf.k0, src, obs, fmaconf.cell);
+		/* Compute the near-neighbor term, using Gaussian quadrature.
+		 * One-point integration for the inner integral seems
+		 * sufficient, and is much faster than higher orders. */
+		val = fastint (fmaconf.k0, src, obs, fmaconf.cell);
 	}
 
 	/* The factor of (1 / 4 pi) is included in the Green's function
