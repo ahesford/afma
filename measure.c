@@ -15,7 +15,7 @@
 measdesc srcmeas, obsmeas;
 
 int farfield (complex float *currents, measdesc *obs, complex float *result) {
-	int i;
+	int i, j;
 	float *thetas, dtheta;
 	Complex *fields = (Complex *)result;
 
@@ -31,6 +31,11 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	if (ScaleME_evlRootFarFld_PI (6, obs->ntheta, obs->nphi, thetas,
 				obs->prange, (Complex *)currents, &fields))
 		return 0;
+
+	/* The fields need to be multiplied by k^2 for proper scaling. */
+	j = obs->ntheta * obs->nphi;
+	for (i = 0; i < j; ++i)
+		fields[i] *= fmaconf.k0 * fmaconf.k0;
 
 	free (thetas);
 	return 1;
