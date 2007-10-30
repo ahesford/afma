@@ -6,22 +6,22 @@ SCALEME_ROOT= ../../scaleme
 
 OPTFLAGS?= -O3 -xP -parallel
 CINCDIR= -I$(SCALEME_ROOT)/include
-LIBDIR= -L$(SCALEME_ROOT)/fma2
+LIBDIR= -L$(SCALEME_ROOT)/fma2 -L/usr/local/lib
 
-LIBS?= -lScaleME2 -llapack -lblas -lm
+LIBS?= -lScaleME2 -llapack-icc -lblas-icc -lm
 
 CFLAGS?= $(OPTFLAGS) -Wall
 FFLAGS?= $(OPTFLAGS) -Wall
-LFLAGS?= $(OPTFLAGS)
+LFLAGS?= $(OPTFLAGS) -nofor_main
 
 OBJS= fsgreen.o integrate.o mlfma.o scaleme.o itsolver.o excite.o io.o \
-      measure.o main.o frechet.o cg.o cgmres.o
+      measure.o frechet.o cg.o cgmres.o
 
 all: adbim afma
 	@echo "Combined build."
 
 adbim: $(OBJS) dbim.o
-	@echo "Building acoustic MLFMA."
+	@echo "Building acoustic DBIM."
 	$(LD) $(LFLAGS) -o $@ dbim.o $(OBJS) $(LIBDIR) $(LIBS)
 
 afma: $(OBJS) main.o
