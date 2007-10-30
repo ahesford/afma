@@ -2,7 +2,7 @@ CC=mpicc
 FF=mpif90
 LD=mpif90
 
-SCALEME_ROOT= ../../scaleme
+SCALEME_ROOT= $(HOME)/software/scaleme
 
 OPTFLAGS?= -O3 -xP -parallel
 CINCDIR= -I$(SCALEME_ROOT)/include
