@@ -5,6 +5,7 @@
 #include "integrate.h"
 #include "fsgreen.h"
 #include "excite.h"
+#include "measure.h"
 
 /* Computes the RHS for a plane-wave in a given direction. */
 complex float planerhs (int gi, float *srcdir) {
@@ -41,4 +42,20 @@ int buildrhs (complex float *rhs, float *srcloc, int type) {
 		rhs[i] = rhsfunc (fmaconf.bslist[i], srcloc);
 
 	return fmaconf.numbases;
+}
+
+int multirhs (complex float *rhs, measdesc *src, complex float *mag, int type) {
+	int i, j;
+	complex float (*rhsfunc) (int, float *);
+
+	if (type) rhsfunc = planerhs;
+	else rhsfunc = pointrhs;
+
+	for (i = 0; i < fmaconf.numbases; ++i) {
+		rhs[i] = 0;
+		for (j = 0; j < src->count; ++j)
+			rhs[i] += mag[j] * rhsfunc (fmaconf.bslist[i], src->locations + 3 * j);
+	}
+
+	return fmaconf.numbases * src->count;
 }

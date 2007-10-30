@@ -5,7 +5,7 @@
 
 typedef struct {
   int restart, maxit, precond;
-  float epscg;
+  float epscg, regparm;
 } solveparm;
 
 extern solveparm solver;

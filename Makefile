@@ -15,13 +15,21 @@ FFLAGS?= $(OPTFLAGS) -Wall
 LFLAGS?= $(OPTFLAGS)
 
 OBJS= fsgreen.o integrate.o mlfma.o scaleme.o itsolver.o excite.o io.o \
-      measure.o main.o cgmres.o
+      measure.o main.o frechet.o cg.o cgmres.o
 
-afma: $(OBJS)
-	$(LD) $(LFLAGS) -o $@ $(OBJS) $(LIBDIR) $(LIBS)
+all: adbim afma
+	@echo "Combined build."
+
+adbim: $(OBJS) dbim.o
+	@echo "Building acoustic MLFMA."
+	$(LD) $(LFLAGS) -o $@ dbim.o $(OBJS) $(LIBDIR) $(LIBS)
+
+afma: $(OBJS) main.o
+	@echo "Building acoustic MLFMA."
+	$(LD) $(LFLAGS) -o $@ main.o $(OBJS) $(LIBDIR) $(LIBS)
 
 clean:
-	rm -f $(OBJS) afma *.core core
+	rm -f $(OBJS) main.o dbim.o adbim afma *.core core
 
 .SUFFIXES: .o .f .c
 
