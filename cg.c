@@ -103,6 +103,7 @@ float cgmn (complex float *rhs, complex float *sol) {
 	asol = pn + nmeas;
 
 	/* Initialize some values. */
+	rnorm = 0;
 	for (i = 0; i < nmeas; ++i) {
 		pn[i] = rn[i] = rhs[i];
 		alpha = cabs (rhs[i]);
