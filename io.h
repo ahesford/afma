@@ -6,6 +6,7 @@
 #include "measure.h"
 
 void skipcomments (FILE *);
+void getdbimcfg (char *, int *, float *, float *);
 void getconfig (char *);
 void getcontrast (char *, int *, int);
 

@@ -12,7 +12,7 @@
 #include "cg.h"
 
 /* Least-squares solution using CG. The residual must be precomputed. */
-float cgls (complex float *rn, complex float *sol) {
+float cgls (complex float *rn, complex float *sol, float regparm) {
 	int i, j, k;
 	complex float *ifld, *mptr, *pn, *scat, *adjcrt;
 	float rnorm, pnorm, lrnorm, alpha, beta, rninc;
@@ -57,12 +57,12 @@ float cgls (complex float *rn, complex float *sol) {
 			mptr += obsmeas.count;
 		}
 
-		alpha  = rnorm / (alpha + solver.regparm * pnorm);
+		alpha  = rnorm / (alpha + regparm * pnorm);
 		beta = rnorm;
 
 		/* Update the residual. */
 		for (i = 0, lrnorm = 0; i < fmaconf.numbases; ++i) {
-			rn[i] -= alpha * (adjcrt[i] + solver.regparm * pn[i]);
+			rn[i] -= alpha * (adjcrt[i] + regparm * pn[i]);
 			rnorm = cabs (rn[i]);
 			lrnorm += rnorm * rnorm;
 		}
@@ -78,7 +78,7 @@ float cgls (complex float *rn, complex float *sol) {
 			pn[i] = rn[i] + beta * pn[i];
 		}
 
-		if (rnorm / rninc) break;
+		if (rnorm / rninc < solver.epscg) break;
 	}
 
 	free (ifld);
@@ -87,7 +87,7 @@ float cgls (complex float *rn, complex float *sol) {
 	return rnorm;
 }
 
-float cgmn (complex float *rhs, complex float *sol) {
+float cgmn (complex float *rhs, complex float *sol, float regparm) {
 	int i, j, nmeas;
 	complex float *ifld, *mptr, *rn, *pn, *scat, *adjcrt, *asol;
 	float rnorm, pnorm, lrnorm, alpha, beta, rninc;
@@ -135,7 +135,7 @@ float cgmn (complex float *rhs, complex float *sol) {
 
 		MPI_Allreduce (&lrnorm, &alpha, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
-		alpha  = rnorm / (alpha + solver.regparm * pnorm);
+		alpha  = rnorm / (alpha + regparm * pnorm);
 		beta = rnorm;
 
 		for (i = 0, mptr = scat; i < srcmeas.count; ++i) {
@@ -151,7 +151,7 @@ float cgmn (complex float *rhs, complex float *sol) {
 
 		/* Update the residual. */
 		for (i = 0, rnorm = 0; i < nmeas; ++i) {
-			rn[i] -= alpha * (scat[i] + solver.regparm * pn[i]);
+			rn[i] -= alpha * (scat[i] + regparm * pn[i]);
 			lrnorm = cabs (rn[i]);
 			rnorm += lrnorm * lrnorm;
 		}
@@ -164,7 +164,7 @@ float cgmn (complex float *rhs, complex float *sol) {
 			pn[i] = rn[i] + beta * pn[i];
 		}
 
-		if (rnorm / rninc) break;
+		if (rnorm / rninc < solver.epscg) break;
 	}
 
 	memset (sol, 0, fmaconf.numbases * sizeof(complex float));

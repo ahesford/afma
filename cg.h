@@ -3,7 +3,7 @@
 
 #include <complex.h>
 
-float cgls (complex float *, complex float *);
-float cgmn (complex float *, complex float *);
+float cgls (complex float *, complex float *, float);
+float cgmn (complex float *, complex float *, float);
 
 #endif /* __CG_H_ */

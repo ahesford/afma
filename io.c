@@ -24,6 +24,33 @@ void skipcomments (FILE *fp) {
 	fsetpos (fp, &loc);
 }
 
+void getdbimcfg (char *fname, int *maxit, float *regparm, float *tol) {
+	FILE *fp;
+	char buf[1024];
+
+	if (!(fp = fopen (fname, "r"))) {
+		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
+		return;
+	}
+
+	/* Read the number of DBIM iterations. */
+	skipcomments (fp);
+	fgets (buf, 1024, fp);
+	sscanf (buf, "%d", maxit);
+
+	/* Read the regularization bounds and step. */
+	skipcomments (fp);
+	fgets (buf, 1024, fp);
+	sscanf (buf, "%f %f %f", regparm, regparm + 1, regparm + 2);
+
+	/* Read the DBIM tolerance. */
+	skipcomments (fp);
+	fgets (buf, 1024, fp);
+	sscanf (buf, "%f", tol);
+
+	fclose (fp);
+}
+
 /* Read the configuration file and set parameters. */
 void getconfig (char *fname) {
 	FILE *fp;
@@ -229,7 +256,7 @@ int getfield (char *fname, complex float *field, int len) {
 	FILE *fp;
 	int nmeas;
 
-	if (!(fp = fopen (fname, "w"))) {
+	if (!(fp = fopen (fname, "r"))) {
 		fprintf (stderr, "ERROR: could not open field input.\n");
 		return 0;
 	}

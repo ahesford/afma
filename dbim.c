@@ -31,7 +31,7 @@ int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i, j, k, nmeas, dbimit;
 	complex float *rhs, *rn, *currents, *field, *error, *errptr, *fldptr;
-	float errnorm, tolerance, lerr;
+	float errnorm, tolerance, lerr, regparm[3];
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -68,6 +68,10 @@ int main (int argc, char **argv) {
 	sprintf (fname, "%s.input", inproj);
 	getconfig (fname);
 
+	/* Read the DBIM-specific configuration. */
+	sprintf (fname, "%s.dbimin", inproj);
+	getdbimcfg (fname, &dbimit, regparm, &tolerance);
+
 	/* Convert the source range format to an explicit location list. */
 	buildlocs (&srcmeas);
 	/* Do the same for the observation locations. */
@@ -102,6 +106,8 @@ int main (int argc, char **argv) {
 		sprintf (fname, "%s.%d.field", inproj, i);
 		getfield (fname, field + i * obsmeas.count, obsmeas.count);
 	}
+
+	bldfrechbuf (fmaconf.numbases);
 
 	MPI_Barrier (MPI_COMM_WORLD);
 
@@ -153,7 +159,7 @@ int main (int argc, char **argv) {
 		}
 
 		/* Solve the system with CG for least-squares. */
-		cgls (rn, currents);
+		cgls (rn, currents, regparm[0]);
 
 		/* Update the background. */
 		for (j = 0; j < fmaconf.numbases; ++j)
@@ -163,12 +169,16 @@ int main (int argc, char **argv) {
 		prtcontrast (fname, fmaconf.contrast);
 
 		if (errnorm < tolerance) break;
+
+		/* Scale the DBIM regularization parameter, if appropriate. */
+		if (regparm[0] > regparm[1]) regparm[0] *= regparm[2];
 	}
 
 	ScaleME_finalizeParHostFMA ();
 
 	free (rhs);
 	free (field);
+	delfrechbuf ();
 
 	MPI_Barrier (MPI_COMM_WORLD);
 	MPI_Finalize ();
