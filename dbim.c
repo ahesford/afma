@@ -114,8 +114,7 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
 
 	for (i = 0; i < dbimit; ++i) {
-		if (!mpirank)
-			fprintf (stderr, "Computing DBIM error, iteration %d.\n", i);
+		if (!mpirank) fprintf (stderr, "DBIM iteration %d.\n", i);
 
 		errptr = error;
 		fldptr = field;
@@ -124,7 +123,7 @@ int main (int argc, char **argv) {
 		for (j = 0; j < srcmeas.count; ++j) {
 			/* Build the right-hand side for the specified location. Use
 			 * point sources, rather than plane waves, for excitation. */
-			buildrhs (rhs, srcmeas.locations + 3 * i, 0); 
+			buildrhs (rhs, srcmeas.locations + 3 * i, 1); 
 
 			MPI_Barrier (MPI_COMM_WORLD);
 			/* Run the iterative solver. The solution is stored in the RHS. */
@@ -137,12 +136,8 @@ int main (int argc, char **argv) {
 			MPI_Barrier (MPI_COMM_WORLD);
 
 			/* Evaluate the scattered field. */
-			if (obsmeas.radius < 10)
-				directfield (currents, &obsmeas, errptr);
-			else {
-				farfield (currents, &obsmeas, errptr);
-				MPI_Bcast (errptr, 2 * obsmeas.count, MPI_FLOAT, 0, MPI_COMM_WORLD);
-			}
+			farfield (currents, &obsmeas, errptr);
+			MPI_Bcast (errptr, 2 * obsmeas.count, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
 			/* Compute the error vector. */
 			for (k = 0; k < obsmeas.count; ++k) {
@@ -161,6 +156,8 @@ int main (int argc, char **argv) {
 		/* Solve the system with CG for least-squares. */
 		cgls (rn, currents, regparm[0]);
 
+		if (!mpirank)
+			fprintf (stderr, "Updating contrast, iteration %d.\n", i);
 		/* Update the background. */
 		for (j = 0; j < fmaconf.numbases; ++j)
 			fmaconf.contrast[j] += currents[j]; 

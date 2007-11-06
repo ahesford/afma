@@ -41,14 +41,11 @@ int frechet (complex float *crt, complex float *fld, complex float *sol) {
 
 	/* Convert this into a current distribution. */
 	for (j = 0; j < fmaconf.numbases; ++j)
-		zwork[j] *= fmaconf.contrast[j];
+		zwork[j] = fmaconf.contrast[j] * zwork[j] + zwcrt[j];
 
 	/* Compute the measured scattered field. */
-	if (obsmeas.radius < 10) directfield (zwork, &obsmeas, sol);
-	else {
-		farfield (zwork, &obsmeas, sol);
-		MPI_Bcast (sol, 2 * obsmeas.count, MPI_FLOAT, 0, MPI_COMM_WORLD);
-	}
+	farfield (zwork, &obsmeas, sol);
+	MPI_Bcast (sol, 2 * obsmeas.count, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
 	return obsmeas.count;
 }
@@ -61,8 +58,8 @@ int frechadj (complex float *mag, complex float *fld, complex float *sol) {
 
 	/* Compute the RHS for the provided magnitude distribution.
 	 * For now, the slow, direct calculation routine will be used. */
-	multirhs (zwork, &obsmeas, mag, 0);
-
+	multirhs (zwork, &obsmeas, mag, 1); 
+	
 	/* Compute the adjoint Frechet derivative field. */
 	cgmres (zwork, zwork);
 

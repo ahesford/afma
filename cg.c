@@ -41,7 +41,7 @@ float cgls (complex float *rn, complex float *sol, float regparm) {
 		alpha = 0;
 		for (i = 0, mptr = scat; i < srcmeas.count; ++i) {
 			/* Build the incident field. */
-			buildrhs (ifld, srcmeas.locations + 3 * i, 0);
+			buildrhs (ifld, srcmeas.locations + 3 * i, 1);
 			/* Solve for the internal field. */
 			cgmres (ifld, ifld);
 			/* Compute the Frechet derivative. */
@@ -118,7 +118,7 @@ float cgmn (complex float *rhs, complex float *sol, float regparm) {
 		memset (adjcrt, 0, fmaconf.numbases * sizeof(complex float));
 		for (i = 0, mptr = pn; i < srcmeas.count; ++i) {
 			/* Build the incident field. */
-			buildrhs (ifld, srcmeas.locations + 3 * i, 0);
+			buildrhs (ifld, srcmeas.locations + 3 * i, 1);
 			/* Solve for the internal field. */
 			cgmres (ifld, ifld);
 			/* Compute the adjoint Frechet derivative. */
@@ -140,7 +140,7 @@ float cgmn (complex float *rhs, complex float *sol, float regparm) {
 
 		for (i = 0, mptr = scat; i < srcmeas.count; ++i) {
 			/* Build the incident field. */
-			buildrhs (ifld, srcmeas.locations + 3 * i, 0);
+			buildrhs (ifld, srcmeas.locations + 3 * i, 1);
 			/* Solve for the internal field. */
 			cgmres (ifld, ifld);
 			/* Compute the adjoint Frechet derivative. */
@@ -171,7 +171,7 @@ float cgmn (complex float *rhs, complex float *sol, float regparm) {
 	/* Compute the adjoint acting on the RHS. */
 	for (i = 0, mptr = asol; i < srcmeas.count; ++i) {
 		/* Build the incident field. */
-		buildrhs (ifld, srcmeas.locations + 3 * i, 0);
+		buildrhs (ifld, srcmeas.locations + 3 * i, 1);
 		/* Solve for the internal field. */
 		cgmres (ifld, ifld);
 

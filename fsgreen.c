@@ -22,13 +22,7 @@ complex float fsgreen (float k, float *r, float *rp) {
 /* Computes a plane wave from a specific direction at a point. */
 complex float fsplane (float k, float *r, float *s) {
 	complex float ans;
-	float sr, smag;
-
-	/* Normalize the direction vector. */
-	smag = sqrt (s[0] * s[0] + s[1] * s[1] + s[2] * s[2]);
-	s[0] /= smag;
-	s[1] /= smag;
-	s[2] /= smag;
+	float sr;
 
 	sr = s[0] * r[0] + s[1] * r[1] + s[2] * r[2];
 
