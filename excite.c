@@ -14,7 +14,10 @@ complex float planerhs (int gi, float *srcdir) {
 
 	/* Find the center of the requested basis. */
 	bscenter (gi, ctr);
-	ans = rcvint (fsplane, fmaconf.k0, srcdir, ctr, fmaconf.cell);
+
+	/* Use a single-point integration rule. */
+	ans = fsplane (fmaconf.k0, ctr, srcdir);
+	ans *= fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
 
 	return ans;
 }

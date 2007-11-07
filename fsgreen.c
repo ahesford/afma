@@ -26,7 +26,7 @@ complex float fsplane (float k, float *r, float *s) {
 
 	sr = s[0] * r[0] + s[1] * r[1] + s[2] * r[2];
 
-	ans = cexp (I * k * sr);
+	ans = cexp (-I * k * sr);
 
 	return ans;
 }
