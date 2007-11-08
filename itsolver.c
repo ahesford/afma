@@ -55,8 +55,11 @@ int cgmres (complex float *rhs, complex float *sol) {
 	initcgmres_(icntl, cntl);
 
 	/* Only the root process should print convergence history. */
-	if (!myRank) icntl[2] = 6;
-	else icntl[2] = 0;
+	/* if (!myRank) icntl[2] = 6;
+	else icntl[2] = 0; */
+
+	/* None of the processes should make noise about GMRES. */
+	icntl[0] = icntl[1] = icntl[2] = 0;
 
 	/* Decide if a preconditioner should be used. */
 	if (solver.precond) icntl[3] = 1;
@@ -125,12 +128,8 @@ int cgmres (complex float *rhs, complex float *sol) {
 
 	memcpy (sol, zwork, fmaconf.numbases * sizeof(complex float));
 	
-	if (!myRank) {
-		fprintf(stdout, "CGMRES: %d iterations\n", info[1]);
-		fprintf(stdout, "CGMRES: workspace size: %d\n", info[2]);
-		fprintf(stdout, "CGMRES: Preconditioned B.E.: %.6E\n", rinfo[0]);
-		fprintf(stdout, "CGMRES: Non-preconditioned B.E.: %.6E\n", rinfo[1]);
-	}
+	if (!myRank)
+		fprintf(stdout, "CGMRES: %d iterations, %.6E PBE, %.6E BE.\n", info[1], rinfo[0], rinfo[1]);
 
 	free (zwork);
 	free (solbuf);

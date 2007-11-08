@@ -31,7 +31,7 @@ int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i, j, k, nmeas, dbimit;
 	complex float *rhs, *rn, *currents, *field, *error, *errptr, *fldptr;
-	float errnorm, tolerance, lerr, regparm[3], cgnorm;
+	float errnorm, tolerance, lerr, regparm[3], cgnorm, erninc;
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -102,9 +102,16 @@ int main (int argc, char **argv) {
 	error = field + nmeas;
 
 	/* Read the measurements. */
+	fldptr = field;
+	erninc = 0;
 	for (i = 0; i < srcmeas.count; ++i) {
 		sprintf (fname, "%s.%d.field", inproj, i);
-		getfield (fname, field + i * obsmeas.count, obsmeas.count);
+		getfield (fname, fldptr, obsmeas.count);
+		for (j = 0; j < obsmeas.count; ++j) {
+			lerr = cabs (fldptr[j]);
+			erninc += lerr * lerr;
+		}
+		fldptr += obsmeas.count;
 	}
 
 	bldfrechbuf (fmaconf.numbases);
@@ -158,14 +165,17 @@ int main (int argc, char **argv) {
 
 		if (!mpirank)
 			fprintf (stderr, "CG relative error: %f, iteration %d.\n", cgnorm, i);
+
 		/* Update the background. */
 		for (j = 0; j < fmaconf.numbases; ++j)
-			fmaconf.contrast[j] += currents[j]; 
+			fmaconf.contrast[j] -= currents[j]; 
 		
 		sprintf (fname, "%s.inverse", outproj);
 		prtcontrast (fname, fmaconf.contrast);
 
-		if (errnorm < tolerance) break;
+		if (!mpirank)
+			fprintf (stderr, "DBIM relative error: %f, iteration %d.\n", errnorm / erninc, i);
+		if (errnorm / erninc < tolerance) break;
 
 		/* Scale the DBIM regularization parameter, if appropriate. */
 		if (regparm[0] > regparm[1]) regparm[0] *= regparm[2];
