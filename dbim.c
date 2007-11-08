@@ -31,7 +31,7 @@ int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i, j, k, nmeas, dbimit;
 	complex float *rhs, *rn, *currents, *field, *error, *errptr, *fldptr;
-	float errnorm, tolerance, lerr, regparm[3];
+	float errnorm, tolerance, lerr, regparm[3], cgnorm;
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -154,10 +154,10 @@ int main (int argc, char **argv) {
 		}
 
 		/* Solve the system with CG for least-squares. */
-		cgls (rn, currents, regparm[0]);
+		cgnorm = cgls (rn, currents, regparm[0]);
 
 		if (!mpirank)
-			fprintf (stderr, "Updating contrast, iteration %d.\n", i);
+			fprintf (stderr, "CG relative error: %f, iteration %d.\n", cgnorm, i);
 		/* Update the background. */
 		for (j = 0; j < fmaconf.numbases; ++j)
 			fmaconf.contrast[j] += currents[j]; 

@@ -84,7 +84,7 @@ float cgls (complex float *rn, complex float *sol, float regparm) {
 	free (ifld);
 	free (scat);
 
-	return rnorm;
+	return rnorm / rninc;
 }
 
 float cgmn (complex float *rhs, complex float *sol, float regparm) {
@@ -185,5 +185,5 @@ float cgmn (complex float *rhs, complex float *sol, float regparm) {
 	free (ifld);
 	free (scat);
 
-	return rnorm;
+	return rnorm / rninc;
 }
