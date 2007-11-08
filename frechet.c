@@ -1,3 +1,4 @@
+#include <math.h>
 #include <complex.h>
 
 #include <mpi.h>
@@ -52,6 +53,10 @@ int frechet (complex float *crt, complex float *fld, complex float *sol) {
 
 int frechadj (complex float *mag, complex float *fld, complex float *sol) {
 	int j;
+	float factor;
+
+	/* Compute the constant factor outside the adjoint. */
+	factor = fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
 
 	for (j = 0; j < obsmeas.count; ++j)
 		mag[j] = conj(mag[j]);
@@ -65,7 +70,7 @@ int frechadj (complex float *mag, complex float *fld, complex float *sol) {
 
 	/* Augment the solution for this transmitter. */
 	for (j = 0; j < fmaconf.numbases; ++j)
-		sol[j] += conj (zwork[j] * fld[j]);
+		sol[j] += factor * conj (zwork[j] * fld[j]);
 
 	for (j = 0; j < obsmeas.count; ++j)
 		mag[j] = conj(mag[j]);

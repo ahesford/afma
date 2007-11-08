@@ -1,4 +1,5 @@
 #include <string.h>
+#include <math.h>
 #include <complex.h>
 
 #include <mpi.h>
@@ -32,10 +33,11 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 				obs->prange, (Complex *)currents, &fields))
 		return 0;
 
-	/* The fields need to be multiplied by k^2 for proper scaling. */
+	/* The far-field pattern already has a factor of k in the front.
+	 * However, the actual integral needs (k^2 / 4 pi), so we need the
+	 * extra factors in the field. */
 	j = obs->ntheta * obs->nphi;
-	for (i = 0; i < j; ++i)
-		result[i] *= fmaconf.k0 * fmaconf.k0;
+	for (i = 0; i < j; ++i) result[i] *= fmaconf.k0 / (4 * M_PI);
 
 	free (thetas);
 	return 1;
