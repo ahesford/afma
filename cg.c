@@ -14,14 +14,14 @@
 /* Least-squares solution using CG. The residual must be precomputed. */
 float cgls (complex float *rn, complex float *sol, float regparm) {
 	int i, j, k;
-	complex float *ifld, *mptr, *pn, *scat, *adjcrt;
+	complex float *ifld, *pn, *scat, *adjcrt;
 	float rnorm, pnorm, lrnorm, alpha, beta, rninc;
 
 	ifld = malloc (3 * fmaconf.numbases * sizeof(complex float));
 	pn = ifld + fmaconf.numbases;
 	adjcrt = pn + fmaconf.numbases;
 
-	scat = malloc (srcmeas.count * obsmeas.count * sizeof(complex float));
+	scat = malloc (obsmeas.count * sizeof(complex float));
 
 	/* Initialize some values. */
 	lrnorm = 0;
@@ -39,22 +39,20 @@ float cgls (complex float *rn, complex float *sol, float regparm) {
 	for (j = 0; j < solver.maxit; ++j) {
 		memset (adjcrt, 0, fmaconf.numbases * sizeof(complex float));
 		alpha = 0;
-		for (i = 0, mptr = scat; i < srcmeas.count; ++i) {
+		for (i = 0; i < srcmeas.count; ++i) {
 			/* Build the incident field. */
 			buildrhs (ifld, srcmeas.locations + 3 * i, 1);
 			/* Solve for the internal field. */
 			cgmres (ifld, ifld);
 			/* Compute the Frechet derivative. */
-			frechet (pn, ifld, mptr);
+			frechet (pn, ifld, scat);
 			/* Compute the adjoint Frechet derivative. */
-			frechadj (mptr, ifld, adjcrt);
+			frechadj (scat, ifld, adjcrt);
 			/* Update the local norm. */
 			for (k = 0; k < obsmeas.count; ++k) {
-				beta = cabs (mptr[k]);
+				beta = cabs (scat[k]);
 				alpha += beta * beta;
 			}
-			/* Augment the pointer. */
-			mptr += obsmeas.count;
 		}
 
 		alpha  = rnorm / (alpha + regparm * pnorm);

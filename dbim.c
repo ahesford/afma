@@ -168,7 +168,7 @@ int main (int argc, char **argv) {
 
 		/* Update the background. */
 		for (j = 0; j < fmaconf.numbases; ++j)
-			fmaconf.contrast[j] -= currents[j]; 
+			fmaconf.contrast[j] += currents[j]; 
 		
 		sprintf (fname, "%s.inverse", outproj);
 		prtcontrast (fname, fmaconf.contrast);
