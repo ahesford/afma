@@ -66,13 +66,14 @@ int cgmres (complex float *rhs, complex float *sol) {
 	else icntl[3] = 0;
 
 	icntl[4] = 0; /* Use MGS for orthogonalization. */
-	icntl[5] = 0; /* Don't use an initial guess. */
+	icntl[5] = 1; /* Use an initial guess: the incident field. */
 	icntl[6] = solver.maxit; /* Set the maximum interation count. */
 
 	cntl[0] = solver.epscg;
 
-	/* copy the input and solution vectors to zwork */
-	memcpy (zwork, sol, fmaconf.numbases * sizeof(complex float));
+	/* copy the initial guess: use the RHS. */
+	memcpy (zwork, rhs, fmaconf.numbases * sizeof(complex float));
+	/* Copy the unpreconditioned RHS. */
 	memcpy (zwork + fmaconf.numbases, rhs, fmaconf.numbases * sizeof(complex float));
 
 	do {

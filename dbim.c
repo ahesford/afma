@@ -130,7 +130,7 @@ int main (int argc, char **argv) {
 		for (j = 0; j < srcmeas.count; ++j) {
 			/* Build the right-hand side for the specified location. Use
 			 * point sources, rather than plane waves, for excitation. */
-			buildrhs (rhs, srcmeas.locations + 3 * i, 1); 
+			buildrhs (rhs, srcmeas.locations + 3 * j, 1); 
 
 			MPI_Barrier (MPI_COMM_WORLD);
 			/* Run the iterative solver. The solution is stored in the RHS. */
