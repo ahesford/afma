@@ -61,10 +61,7 @@ void impedance (int gi, int gj, Complex *ans) {
 		/* Find the source and observation centers. */
 		bscenter (gi, obs);
 		bscenter (gj, src); 
-		
-		/* Compute the near-neighbor term, using Gaussian quadrature.
-		 * One-point integration for the inner integral seems
-		 * sufficient, and is much faster than higher orders. */
+
 		val = fastint (fmaconf.k0, src, obs, fmaconf.cell);
 	}
 

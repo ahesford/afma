@@ -38,7 +38,7 @@ static int augcrt (Complex *dst, Complex *src) {
 	return fmaconf.numbases;
 }
 
-int cgmres (complex float *rhs, complex float *sol) {
+int cgmres (complex float *rhs, complex float *sol, int silent) {
 	int icntl[7], irc[5], lwork, info[3], i, myRank;
 	float rinfo[2], cntl[5], ldot[2], gdot[2];
 	Complex *zwork, *solbuf, *tx, *ty, *tz, lzdot;
@@ -95,7 +95,7 @@ int cgmres (complex float *rhs, complex float *sol) {
 		case LEFT_PRECOND:
 			   tx = zwork+irc[1] - 1;
 			   ty = zwork+irc[3] - 1;
-			   
+
 			   /* No preconditioner is desired */
 			   if (!solver.precond) {
 				   memcpy (ty, tx, fmaconf.numbases * sizeof(Complex));
@@ -129,7 +129,7 @@ int cgmres (complex float *rhs, complex float *sol) {
 
 	memcpy (sol, zwork, fmaconf.numbases * sizeof(complex float));
 	
-	if (!myRank)
+	if (!myRank && !silent)
 		fprintf(stdout, "CGMRES: %d iterations, %.6E PBE, %.6E BE.\n", info[1], rinfo[0], rinfo[1]);
 
 	free (zwork);

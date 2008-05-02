@@ -3,6 +3,7 @@
 #include <complex.h>
 #include <math.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <mpi.h>
 
@@ -28,12 +29,16 @@ int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i, j;
 	complex float *rhs, *field;
+	clock_t tstart, tend;
+	double cputime;
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
 	MPI_Comm_size (MPI_COMM_WORLD, &mpisize);
 
 	if (!mpirank) fprintf (stderr, "Square-cell acoustic MLFMA.\n");
+
+	fprintf (stderr, "MPI Rank %d, pid %d\n", mpirank, getpid());
 
 	arglist = argv;
 
@@ -101,8 +106,13 @@ int main (int argc, char **argv) {
 		sprintf (fname, "%s.%d.rhs", outproj, i);
 		prtcontrast (fname, rhs);
 
+		tstart = clock ();
 		/* Run the iterative solver. The solution is stored in the RHS. */
-		cgmres (rhs, rhs);
+		cgmres (rhs, rhs, 0);
+		tend = clock ();
+		cputime = (double) (tend - tstart) / CLOCKS_PER_SEC;
+
+		if (!mpirank) fprintf (stderr, "CPU time for CGMRES: %f\n", cputime);
 
 		sprintf (fname, "%s.%d.currents", outproj, i);
 		prtcontrast (fname, rhs);

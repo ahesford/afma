@@ -16,6 +16,7 @@ typedef complex float (*igrandf) (float, float *, float *);
 complex float rcvint (igrandf, float, float *, float *, float *);
 complex float srcint (float, float *, float *, float *);
 complex float fastint (float, float *, float *, float *);
+complex float oneptint (float, float *, float *, float *);
 complex float selfint (float, float *);
 
 #endif /* __INTEGRATE_H_ */

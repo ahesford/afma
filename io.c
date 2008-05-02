@@ -219,7 +219,10 @@ int prtcontrast (char *fname, complex float *currents) {
 
 	MPI_Reduce (lct, globct, 2 * fmaconf.gnumbases, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-	if (mpirank) return fmaconf.gnumbases;
+	if (mpirank) {
+		free (lct);
+		return fmaconf.gnumbases;
+	}
 
 	if (!(fp = fopen (fname, "w"))) {
 		fprintf (stderr, "ERROR: could not open current output.\n");
@@ -231,6 +234,9 @@ int prtcontrast (char *fname, complex float *currents) {
 	fwrite (globct, sizeof(complex float), fmaconf.gnumbases, fp);
 
 	fclose (fp);
+
+	free (lct);
+	free (globct);
 
 	return fmaconf.gnumbases;
 }

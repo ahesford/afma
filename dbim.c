@@ -134,7 +134,7 @@ int main (int argc, char **argv) {
 
 			MPI_Barrier (MPI_COMM_WORLD);
 			/* Run the iterative solver. The solution is stored in the RHS. */
-			cgmres (rhs, rhs); 
+			cgmres (rhs, rhs, 1); 
 
 			/* Convert total field into contrast current. */
 			for (k = 0; k < fmaconf.numbases; ++k)
@@ -160,6 +160,12 @@ int main (int argc, char **argv) {
 			fldptr += obsmeas.count;
 		}
 
+		errnorm = sqrt (errnorm  / erninc);
+
+		if (!mpirank)
+			fprintf (stderr, "DBIM relative error: %f, iteration %d.\n", errnorm, i);
+		if (errnorm < tolerance) break;
+
 		/* Solve the system with CG for least-squares. */
 		cgnorm = cgls (rn, currents, regparm[0]);
 
@@ -170,12 +176,8 @@ int main (int argc, char **argv) {
 		for (j = 0; j < fmaconf.numbases; ++j)
 			fmaconf.contrast[j] += currents[j]; 
 		
-		sprintf (fname, "%s.inverse", outproj);
+		sprintf (fname, "%s.inverse.%d", outproj, i);
 		prtcontrast (fname, fmaconf.contrast);
-
-		if (!mpirank)
-			fprintf (stderr, "DBIM relative error: %f, iteration %d.\n", errnorm / erninc, i);
-		if (errnorm / erninc < tolerance) break;
 
 		/* Scale the DBIM regularization parameter, if appropriate. */
 		if (regparm[0] > regparm[1]) regparm[0] *= regparm[2];

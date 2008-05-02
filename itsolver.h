@@ -10,6 +10,6 @@ typedef struct {
 
 extern solveparm solver;
 
-int cgmres (complex float *, complex float *);
+int cgmres (complex float *, complex float *, int);
 
 #endif /* __ITSOLVER_H_ */

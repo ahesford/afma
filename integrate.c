@@ -41,6 +41,18 @@ complex float fastint (float k, float *src, float *obs, float *dc) {
 	return ans;
 }
 
+complex float oneptint (float k, float *src, float *obs, float *dc) {
+	complex float ans;
+	float vol;
+
+	vol = dc[0] * dc[1] * dc[2];
+
+	ans = fsgreen (k, src, obs);
+	ans *= vol * vol;
+
+	return vol;
+}
+
 /* Four-point (per dimension) integration of both source and receiver. */
 complex float srcint (float k, float *src, float *obs, float *dc) {
 	complex float ans = 0, val;

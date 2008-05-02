@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <math.h>
 #include <complex.h>
 #include <string.h>
 
@@ -43,7 +44,7 @@ float cgls (complex float *rn, complex float *sol, float regparm) {
 			/* Build the incident field. */
 			buildrhs (ifld, srcmeas.locations + 3 * i, 1);
 			/* Solve for the internal field. */
-			cgmres (ifld, ifld);
+			cgmres (ifld, ifld, 1);
 			/* Compute the Frechet derivative. */
 			frechet (pn, ifld, scat);
 			/* Compute the adjoint Frechet derivative. */
@@ -76,13 +77,13 @@ float cgls (complex float *rn, complex float *sol, float regparm) {
 			pn[i] = rn[i] + beta * pn[i];
 		}
 
-		if (rnorm / rninc < solver.epscg) break;
+		if (sqrt(rnorm / rninc) < solver.epscg) break;
 	}
 
 	free (ifld);
 	free (scat);
 
-	return rnorm / rninc;
+	return sqrt(rnorm / rninc);
 }
 
 float cgmn (complex float *rhs, complex float *sol, float regparm) {
@@ -118,7 +119,7 @@ float cgmn (complex float *rhs, complex float *sol, float regparm) {
 			/* Build the incident field. */
 			buildrhs (ifld, srcmeas.locations + 3 * i, 1);
 			/* Solve for the internal field. */
-			cgmres (ifld, ifld);
+			cgmres (ifld, ifld, 1);
 			/* Compute the adjoint Frechet derivative. */
 			frechadj (mptr, ifld, adjcrt);
 			/* Augment the pointer. */
@@ -140,7 +141,7 @@ float cgmn (complex float *rhs, complex float *sol, float regparm) {
 			/* Build the incident field. */
 			buildrhs (ifld, srcmeas.locations + 3 * i, 1);
 			/* Solve for the internal field. */
-			cgmres (ifld, ifld);
+			cgmres (ifld, ifld, 1);
 			/* Compute the adjoint Frechet derivative. */
 			frechet (adjcrt, ifld, mptr);
 			/* Augment the pointer. */
@@ -162,7 +163,7 @@ float cgmn (complex float *rhs, complex float *sol, float regparm) {
 			pn[i] = rn[i] + beta * pn[i];
 		}
 
-		if (rnorm / rninc < solver.epscg) break;
+		if (sqrt(rnorm / rninc) < solver.epscg) break;
 	}
 
 	memset (sol, 0, fmaconf.numbases * sizeof(complex float));
@@ -171,7 +172,7 @@ float cgmn (complex float *rhs, complex float *sol, float regparm) {
 		/* Build the incident field. */
 		buildrhs (ifld, srcmeas.locations + 3 * i, 1);
 		/* Solve for the internal field. */
-		cgmres (ifld, ifld);
+		cgmres (ifld, ifld, 1);
 
 		/* The contribution to the adjoint Frechet derivative. */
 		frechadj (mptr, ifld, sol);
@@ -183,5 +184,5 @@ float cgmn (complex float *rhs, complex float *sol, float regparm) {
 	free (ifld);
 	free (scat);
 
-	return rnorm / rninc;
+	return sqrt(rnorm / rninc);
 }
