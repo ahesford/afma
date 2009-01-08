@@ -1,0 +1,5 @@
+# use glob syntax (as opposed to regex)
+syntax: glob
+
+afma
+adbim

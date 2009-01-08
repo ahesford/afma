@@ -4,15 +4,15 @@ LD=mpif90
 
 SCALEME_ROOT= $(HOME)/software/scaleme
 
-OPTFLAGS?= -O2 -march=nocona -mtune=nocona
+OPTFLAGS= -O2 -march=opteron -mtune=opteron -m64
 CINCDIR= -I$(SCALEME_ROOT)/include
 LIBDIR= -L$(SCALEME_ROOT)/fma2 -L/usr/local/lib
 
-LIBS?= -lScaleME2 -llapack -lblas
+LIBS= -lScaleME2 -llapack -lblas
 
-CFLAGS?= $(OPTFLAGS) -Wall
-FFLAGS?= $(OPTFLAGS) -Wall
-LFLAGS?= $(OPTFLAGS)
+CFLAGS= $(OPTFLAGS) -Wall
+FFLAGS= $(OPTFLAGS) -Wall
+LFLAGS= $(OPTFLAGS)
 
 OBJS= fsgreen.o integrate.o mlfma.o scaleme.o itsolver.o excite.o io.o \
       measure.o frechet.o cg.o cgmres.o

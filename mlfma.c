@@ -10,10 +10,10 @@
 fmadesc fmaconf;
 
 static complex float genpat (int gi, float *cen, float *s) {
-	float sc, sr, rv[3];
+	float sc, sr, *rv;
 	complex float val;
 
-	bscenter (gi, rv);
+	rv = fmaconf.centers + 3 * fmaconf.glob2loc[gi];
 
 	sc = s[0] * cen[0] + s[1] * cen[1] + s[2] * cen[2];
 	sr = s[0] * rv[0] + s[1] * rv[1] + s[2] * rv[2];
@@ -52,15 +52,15 @@ void rcvpattern (int gi, float *cen, float *s, Complex *ans) {
 
 /* Direct interactions between two global basis indices. */
 void impedance (int gi, int gj, Complex *ans) {
-	float src[3], obs[3];
+	float *obs, *src;
 	complex float val;
 
 	/* This is the self term, so use the analytic approximation. */
 	if (gi == gj) val = selfint (fmaconf.k0, fmaconf.cell);
 	else { 
 		/* Find the source and observation centers. */
-		bscenter (gi, obs);
-		bscenter (gj, src); 
+		obs = fmaconf.centers + 3 * fmaconf.glob2loc[gi];
+		src = fmaconf.centers + 3 * fmaconf.glob2loc[gj];
 
 		val = fastint (fmaconf.k0, src, obs, fmaconf.cell);
 	}
@@ -74,17 +74,4 @@ void impedance (int gi, int gj, Complex *ans) {
 	ans->re = creal (val);
 	ans->im = cimag (val);
 	return;
-}
-
-/* Find the center of the basis function referred to by the global index. */
-void bscenter (int gi, float *cen) {
-	int i, j, k;
-
-	i = gi % fmaconf.nx;
-	j = (gi / fmaconf.nx) % fmaconf.ny;
-	k = gi / (fmaconf.nx * fmaconf.ny);
-
-	cen[0] = fmaconf.min[0] + ((float)i + 0.5) * fmaconf.cell[0];
-	cen[1] = fmaconf.min[1] + ((float)j + 0.5) * fmaconf.cell[1];
-	cen[2] = fmaconf.min[2] + ((float)k + 0.5) * fmaconf.cell[2];
 }

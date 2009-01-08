@@ -44,17 +44,16 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 }
 
 int directfield (complex float *currents, measdesc *obs, complex float *result) {
-	int i, j, gi;
+	int i, j;
 	complex float val, *buf;
-	float cen[3];
+	float *cen;
 
 	buf = malloc (obs->count * sizeof(complex float));
 	memset (buf, 0, obs->count * sizeof(complex float));
 
 	/* Compute the fields radiated by the local fields. */
 	for (j = 0; j < fmaconf.numbases; ++j) {
-		gi = fmaconf.bslist[j];
-		bscenter (gi, cen);
+		cen = fmaconf.centers + 3 * j;
 		for (i = 0; i < obs->count; ++i) {
 			val = fsgreen (fmaconf.k0, cen, obs->locations + 3 * i);
 			buf[i] += val * currents[j];

@@ -28,7 +28,12 @@ Copyright: Sanjay Velamparambil, Weng Cho Chew, University of Illinois.
 
 /* initialisation and finalisation routines for ScaleME */
 int ScaleME_preconf (void) {
-	int error;
+	int error, start, share, myrank, nproc;
+
+	MPI_Comm_rank (MPI_COMM_WORLD, &myrank);
+	MPI_Comm_size (MPI_COMM_WORLD, &nproc);
+
+	MPI_Barrier (MPI_COMM_WORLD);
 	
 	/* The problem and tree are both three-dimensional. */
 	ScaleME_setDimen (3);
@@ -56,6 +61,16 @@ int ScaleME_preconf (void) {
 	
 	if (fmaconf.smallbox > 0)
 		ScaleME_setSmallestBoxSize(fmaconf.smallbox);
+
+	share = fmaconf.gnumbases / nproc;
+	error = fmaconf.gnumbases % nproc;
+
+	if (myrank < error) {
+		++share;
+		start = share * myrank;
+	} else start = share * myrank + error;
+
+	ScaleME_useArrayOfCenters (start, share, fmaconf.centers);
 	
 	/*  let all processes start the initialisation together */
 	MPI_Barrier(MPI_COMM_WORLD); 
@@ -65,7 +80,7 @@ int ScaleME_preconf (void) {
 	MPFMA_stderr = stderr; 
 	
 	error = ScaleME_initSetUp (MPI_COMM_WORLD, impedance,
-			radpattern, rcvpattern, bscenter);
+			radpattern, rcvpattern, NULL);
 
 	if (error) {
 		fprintf(stdout, "ERROR: ScaleME pre-init failed.\n");

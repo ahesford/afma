@@ -55,11 +55,11 @@ int cgmres (complex float *rhs, complex float *sol, int silent) {
 	initcgmres_(icntl, cntl);
 
 	/* Only the root process should print convergence history. */
-	/* if (!myRank) icntl[2] = 6;
-	else icntl[2] = 0; */
+	if (!myRank) icntl[2] = 6;
+	else icntl[2] = 0;
 
 	/* None of the processes should make noise about GMRES. */
-	icntl[0] = icntl[1] = icntl[2] = 0;
+	/* icntl[0] = icntl[1] = icntl[2] = 0; */
 
 	/* Decide if a preconditioner should be used. */
 	if (solver.precond) icntl[3] = 1;

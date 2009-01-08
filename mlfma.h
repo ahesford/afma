@@ -7,10 +7,11 @@
 typedef struct {
 	float min[3], max[3], cell[3];
 	float precision, smallbox;
-	int nx, ny, nz, gnumbases, numbases;
+	int gnumbases, numbases;
 	int maxlev, numbuffer, interpord, toplev, sharedmax;
-	int *bslist;
+	int *bslist, *glob2loc;
 	float k0;
+	float *centers;
 	complex float *contrast;
 } fmadesc;
 
@@ -20,6 +21,5 @@ void radpattern (int, float *, float *, Complex *);
 void rcvpattern (int, float *, float *, Complex *);
 
 void impedance (int, int, Complex *);
-void bscenter (int, float *);
 
 #endif /* __MLFMA_H_ */

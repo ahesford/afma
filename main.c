@@ -27,7 +27,7 @@ void usage (char *name) {
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, j;
+	int mpirank, mpisize, mpishare, i, j;
 	complex float *rhs, *field;
 	clock_t tstart, tend;
 	double cputime;
@@ -69,6 +69,20 @@ int main (int argc, char **argv) {
 	sprintf (fname, "%s.input", inproj);
 	getconfig (fname);
 
+	mpishare = fmaconf.gnumbases / mpisize;
+	i = fmaconf.gnumbases % mpisize;
+
+	if (mpirank < i) {
+		++mpishare;
+		i = mpishare * mpirank;
+	} else i += mpishare * mpirank;
+
+	fmaconf.centers = malloc (3 * mpishare * sizeof(float));
+	if (!mpirank) fprintf (stderr, "Reading local portion of centers.\n");
+	/* Read the contrast for the local basis set. */
+	sprintf (fname, "%s.contrast", inproj);
+	getcenters (fname, i, mpishare);
+
 	/* Convert the source range format to an explicit location list. */
 	buildlocs (&srcmeas);
 	/* Do the same for the observation locations. */
@@ -76,13 +90,25 @@ int main (int argc, char **argv) {
 
 	/* Initialize ScaleME and find the local basis set. */
 	ScaleME_preconf ();
+	/* The temporary center array is no longer needed. */
+	free (fmaconf.centers);
+
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
 	/* Allocate the RHS vector, which will also store the solution. */
 	rhs = malloc (fmaconf.numbases * sizeof(complex float));
 	/* Allocate the local portion of the contrast storage. */
 	fmaconf.contrast = malloc (fmaconf.numbases * sizeof(complex float));
+	/* Allocate the permanent local portion of the center array. */
+	fmaconf.centers = malloc (3 * fmaconf.numbases * sizeof(float));
 	/* Allocate the observation array. */
 	field = malloc (obsmeas.count * sizeof(complex float));
+
+	/* Set up the global-to-local map. */
+	fmaconf.glob2loc = malloc (fmaconf.gnumbases * sizeof(int));
+	/* First clear the whole map. */
+	for (i = 0; i < fmaconf.gnumbases; ++i) fmaconf.glob2loc[i] = -1;
+	/* Now populate the local bases in the map. */
+	for (i = 0; i < fmaconf.numbases; ++i) fmaconf.glob2loc[fmaconf.bslist[i]] = i;
 
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the contrast for the local basis set. */
