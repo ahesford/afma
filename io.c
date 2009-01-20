@@ -9,8 +9,11 @@
 #include "mlfma.h"
 #include "itsolver.h"
 #include "measure.h"
+#include "integrate.h"
 
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
+
+void gaqd_ (int *, double *, double *, double *, double *, int *);
 
 void skipcomments (FILE *fp) {
 	fpos_t loc;
@@ -54,6 +57,7 @@ void getdbimcfg (char *fname, int *maxit, float *regparm, float *tol) {
 /* Read the configuration file and set parameters. */
 void getconfig (char *fname) {
 	FILE *fp;
+	int ierr;
 	char buf[1024];
 
 	if (!(fp = fopen (fname, "r"))) {
@@ -61,15 +65,28 @@ void getconfig (char *fname) {
 		return;
 	}
 
-	/* Read the cell count. */
+	/* Read the number of cells. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%d", &fmaconf.gnumbases);
+	sscanf (buf, "%d %d %d", &(fmaconf.nx), &(fmaconf.ny), &(fmaconf.nz));
 
-	/* Read the cell size. */
+	/* Read the lower corner of the domain. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %f", fmaconf.cell, fmaconf.cell + 1, fmaconf.cell + 2);
+	sscanf (buf, "%f %f %f", fmaconf.min, fmaconf.min + 1, fmaconf.min + 2);
+
+	/* Set the global number of bases, for easy reference. */
+	fmaconf.gnumbases = fmaconf.nx * fmaconf.ny * fmaconf.nz;
+
+	/* Read the upper corner of the domain. */
+	skipcomments (fp);
+	fgets (buf, 1024, fp);
+	sscanf (buf, "%f %f %f", fmaconf.max, fmaconf.max + 1, fmaconf.max + 2);
+
+	/* Compute the individual cell size. */
+	fmaconf.cell[0] = (fmaconf.max[0] - fmaconf.min[0]) / fmaconf.nx;
+	fmaconf.cell[1] = (fmaconf.max[1] - fmaconf.min[1]) / fmaconf.ny;
+	fmaconf.cell[2] = (fmaconf.max[2] - fmaconf.min[2]) / fmaconf.nz;
 
 	/* Set the wave number to 2 pi, since wavelength is the length unit. */
 	fmaconf.k0 = 2 * M_PI;
@@ -99,6 +116,25 @@ void getconfig (char *fname) {
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%d", &(fmaconf.interpord));
+
+	/* Read the integration points for source and receiver. */
+	skipcomments (fp);
+	fgets (buf, 1024, fp);
+	sscanf (buf, "%d %d", &(fmaconf.nsrcint), &(fmaconf.nrcvint));
+
+	/* Find the quadrature points for the source integration. */
+	fmaconf.srcpts = malloc (2 * fmaconf.nsrcint * sizeof(double));
+	fmaconf.srcwts = fmaconf.srcpts + fmaconf.nsrcint;
+	gaqd_ (&(fmaconf.nsrcint), fmaconf.srcpts, fmaconf.srcwts, NULL, NULL, &ierr);
+	for (ierr = 0; ierr < fmaconf.nsrcint; ++ierr)
+		fmaconf.srcpts[ierr] = cos (fmaconf.srcpts[ierr]);
+
+	/* Find the quadrature points for the receiver integration. */
+	fmaconf.rcvpts = malloc (2 * fmaconf.nrcvint * sizeof(double));
+	fmaconf.rcvwts = fmaconf.rcvpts + fmaconf.nrcvint;
+	gaqd_ (&(fmaconf.nrcvint), fmaconf.rcvpts, fmaconf.rcvwts, NULL, NULL, &ierr);
+	for (ierr = 0; ierr < fmaconf.nrcvint; ++ierr)
+		fmaconf.rcvpts[ierr] = cos (fmaconf.rcvpts[ierr]);
 
 	/* Read the iterative solver configuration. */
 	skipcomments (fp);
@@ -164,40 +200,10 @@ void getconfig (char *fname) {
 	fclose (fp);
 }
 
-/* Get only the centers from a continguous block of unknowns. */
-void getcenters (char *fname, int offset, int nbs) {
-	FILE *fp;
-	int ntbs, i;
-	long spos;
-	complex float buf;
-
-	if (!(fp = fopen (fname, "r"))) {
-		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
-		return;
-	}
-
-	/* Read the size of the contrast grid. */
-	fread (&ntbs, sizeof(int), 1, fp);
-
-	/* Advance to the starting point in the file. */
-	spos = (long)(offset) * (sizeof(complex float) + 3 * sizeof(float));
-	fseek (fp, spos, SEEK_CUR);
-
-	for (i = 0; i < nbs; ++i) {
-		/* Grab the center array. */
-		fread (fmaconf.centers + 3 * i, sizeof(float), 3, fp);
-		/* Throw away the contrast value. */
-		fread (&buf, sizeof(complex float), 1, fp);
-	}
-
-	fclose (fp);
-}
-
-/* Read a portion of the contrast file and store it, along with the
- * basis centers. */
+/* Read a portion of the contrast file and store it. */
 void getcontrast (char *fname, int *bslist, int nbs) {
 	FILE *fp;
-	int ntbs, i, offset;
+	int size[3], i, offset;
 	long spos;
 
 	if (!(fp = fopen (fname, "r"))) {
@@ -206,18 +212,13 @@ void getcontrast (char *fname, int *bslist, int nbs) {
 	}
 
 	/* Read the size of the contrast grid. */
-	fread (&ntbs, sizeof(int), 1, fp);
+	fread (size, sizeof(int), 3, fp);
 
 	for (offset = 0, i = 0; i < nbs; ++i) {
-		spos = (long)(bslist[i] - offset) * (sizeof(complex float) + 3 * sizeof(float));
+		spos = (long)(bslist[i] - offset) * sizeof(complex float);
 		offset = bslist[i] + 1;
 
-		/* Seek to the basis record. */
 		fseek (fp, spos, SEEK_CUR);
-
-		/* Read the basis center. */
-		fread (fmaconf.centers + 3 * i, sizeof(float), 3, fp);
-		/* Now read the basis contrast. */
 		fread (fmaconf.contrast + i, sizeof(complex float), 1, fp);
 	}
 
@@ -225,28 +226,21 @@ void getcontrast (char *fname, int *bslist, int nbs) {
 }
 
 int prtcontrast (char *fname, complex float *currents) {
-	int i, mpirank;
+	int i, mpirank, size[3];
 	FILE *fp;
-	float *lct, *globct = NULL;
+	complex float *lct, *globct = NULL;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
 
-	lct = calloc (fmaconf.gnumbases, 5 * sizeof(float));
+	lct = calloc (fmaconf.gnumbases, sizeof(complex float));
 
 	if (!mpirank)
-		globct = calloc (fmaconf.gnumbases, 5 * sizeof(float));
+		globct = calloc (fmaconf.gnumbases, sizeof(complex float));
 
-	for (i = 0; i < fmaconf.numbases; ++i) {
-		/* First copy the center coordinates. */
-		lct[5 * fmaconf.bslist[i] + 0] = fmaconf.centers[3 * i + 0];
-		lct[5 * fmaconf.bslist[i] + 1] = fmaconf.centers[3 * i + 1];
-		lct[5 * fmaconf.bslist[i] + 2] = fmaconf.centers[3 * i + 2];
-		/* Now copy the real and imaginary part of the currents. */
-		lct[5 * fmaconf.bslist[i] + 3] = creal (currents[i]);
-		lct[5 * fmaconf.bslist[i] + 4] = cimag (currents[i]);
-	}
+	for (i = 0; i < fmaconf.numbases; ++i)
+		lct[fmaconf.bslist[i]] = currents[i];
 
-	MPI_Reduce (lct, globct, 5 * fmaconf.gnumbases, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+	MPI_Reduce (lct, globct, 2 * fmaconf.gnumbases, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
 	if (mpirank) {
 		free (lct);
@@ -258,8 +252,9 @@ int prtcontrast (char *fname, complex float *currents) {
 		return 0;
 	}
 
-	fwrite (&fmaconf.gnumbases, sizeof(int), 1, fp);
-	fwrite (globct, sizeof(float), 5 * fmaconf.gnumbases, fp);
+	size[0] = fmaconf.nx; size[1] = fmaconf.ny; size[2] = fmaconf.nz;
+	fwrite (size, sizeof(int), 3, fp);
+	fwrite (globct, sizeof(complex float), fmaconf.gnumbases, fp);
 
 	fclose (fp);
 

@@ -13,10 +13,10 @@
 /* Computes the RHS for a plane-wave in a given direction. */
 complex float planerhs (int gi, float *srcdir) {
 	complex float ans;
-	float *ctr;
+	float ctr[3];
 
 	/* Find the center of the requested basis. */
-	ctr = fmaconf.centers + 3 * fmaconf.glob2loc[gi];
+	bscenter (gi, ctr);
 
 	/* Use a single-point integration rule. */
 	ans = fsplane (fmaconf.k0, ctr, srcdir);
@@ -28,10 +28,11 @@ complex float planerhs (int gi, float *srcdir) {
 /* Computes the RHS for a point source at the given location. */
 complex float pointrhs (int gi, float *srcloc) {
 	complex float ans;
-	float *ctr;
+	float ctr[3];
 
-	ctr = fmaconf.centers + 3 * fmaconf.glob2loc[gi];
-	ans = rcvint (fsgreen, fmaconf.k0, srcloc, ctr, fmaconf.cell);
+	bscenter (gi, ctr);
+	ans = rcvint (fsgreen, fmaconf.k0, srcloc, ctr, fmaconf.cell,
+			fmaconf.nrcvint, fmaconf.rcvpts, fmaconf.rcvwts);
 
 	return ans;
 }

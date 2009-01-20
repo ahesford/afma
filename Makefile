@@ -6,9 +6,9 @@ SCALEME_ROOT= $(HOME)/software/scaleme
 
 OPTFLAGS?= -O3 -xP -parallel
 CINCDIR= -I$(SCALEME_ROOT)/include
-LIBDIR= -L$(SCALEME_ROOT)/fma2 -L/usr/local/lib
+LIBDIR= -L$(SCALEME_ROOT)/fma2 -L/usr/local/lib -L../spherepack31
 
-LIBS?= -lScaleME2 -llapack-icc -lblas-icc -lm
+LIBS?= -lScaleME2 -lspherepack -llapack-icc -lblas-icc -lm
 
 CFLAGS?= $(OPTFLAGS) -Wall
 FFLAGS?= $(OPTFLAGS) -Wall

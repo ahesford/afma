@@ -19,6 +19,34 @@
 
 void usage (char *);
 
+void prtzmat () {
+	FILE *zout;
+	Complex *crt, *sol;
+	int i, j;
+
+	/* zout = fopen ("new.debug.zmat", "w"); */
+	zout = stderr;
+
+	crt = malloc (2 * fmaconf.numbases * sizeof(Complex));
+	sol = crt + fmaconf.numbases;
+
+	for (i = 0; i < fmaconf.numbases; ++i) {
+		for (j = 0; j < fmaconf.numbases; ++j) crt[j].re = crt[j].im = 0;
+		crt[i].re = 1; 
+		
+		ScaleME_applyParFMA (REGULAR, crt, sol);
+
+		for (j = 0; j < fmaconf.numbases; ++j)
+			fprintf (zout, "%d %d %g %g\n", fmaconf.bslist[j] + 1, fmaconf.bslist[i] + 1, sol[j].re, sol[j].im);
+
+		fflush (zout);
+	}
+
+	/* fclose (zout); */
+
+	free (crt);
+}
+
 void usage (char *name) {
 	fprintf (stderr, "Usage: %s [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
@@ -27,7 +55,7 @@ void usage (char *name) {
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, mpishare, i, j;
+	int mpirank, mpisize, i, j;
 	complex float *rhs, *field;
 	clock_t tstart, tend;
 	double cputime;
@@ -69,20 +97,6 @@ int main (int argc, char **argv) {
 	sprintf (fname, "%s.input", inproj);
 	getconfig (fname);
 
-	mpishare = fmaconf.gnumbases / mpisize;
-	i = fmaconf.gnumbases % mpisize;
-
-	if (mpirank < i) {
-		++mpishare;
-		i = mpishare * mpirank;
-	} else i += mpishare * mpirank;
-
-	fmaconf.centers = malloc (3 * mpishare * sizeof(float));
-	if (!mpirank) fprintf (stderr, "Reading local portion of centers.\n");
-	/* Read the contrast for the local basis set. */
-	sprintf (fname, "%s.contrast", inproj);
-	getcenters (fname, i, mpishare);
-
 	/* Convert the source range format to an explicit location list. */
 	buildlocs (&srcmeas);
 	/* Do the same for the observation locations. */
@@ -90,30 +104,22 @@ int main (int argc, char **argv) {
 
 	/* Initialize ScaleME and find the local basis set. */
 	ScaleME_preconf ();
-	/* The temporary center array is no longer needed. */
-	free (fmaconf.centers);
-
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
 	/* Allocate the RHS vector, which will also store the solution. */
 	rhs = malloc (fmaconf.numbases * sizeof(complex float));
 	/* Allocate the local portion of the contrast storage. */
 	fmaconf.contrast = malloc (fmaconf.numbases * sizeof(complex float));
-	/* Allocate the permanent local portion of the center array. */
-	fmaconf.centers = malloc (3 * fmaconf.numbases * sizeof(float));
 	/* Allocate the observation array. */
 	field = malloc (obsmeas.count * sizeof(complex float));
-
-	/* Set up the global-to-local map. */
-	fmaconf.glob2loc = malloc (fmaconf.gnumbases * sizeof(int));
-	/* First clear the whole map. */
-	for (i = 0; i < fmaconf.gnumbases; ++i) fmaconf.glob2loc[i] = -1;
-	/* Now populate the local bases in the map. */
-	for (i = 0; i < fmaconf.numbases; ++i) fmaconf.glob2loc[fmaconf.bslist[i]] = i;
 
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the contrast for the local basis set. */
 	sprintf (fname, "%s.contrast", inproj);
 	getcontrast (fname, fmaconf.bslist, fmaconf.numbases);
+
+	/* Precompute the near-neighbor interactions. */
+	preimpedance ();
+	fprintf (stderr, "Finished precomputing near-neighbor interactions.\n");
 
 	/* Finish the ScaleME initialization. */
 	ScaleME_postconf ();
