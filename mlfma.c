@@ -20,7 +20,6 @@ static complex float genpat (int gi, float *cen, float *s) {
 	sr = s[0] * rv[0] + s[1] * rv[1] + s[2] * rv[2];
 
 	val = cexp (I * fmaconf.k0 * sc) * cexp (-I * fmaconf.k0 * sr);
-	val *= fmaconf.cellvol;
 
 	return val;
 }
@@ -31,7 +30,7 @@ void radpattern (int gi, float *cen, float *s, Complex *ans) {
 	complex float val;
 
 	/* The k0 term is due to the limit of the radiation pattern. */
-	val = fmaconf.k0 * genpat (gi, cen, s);
+	val = fmaconf.cellvol * fmaconf.k0 * genpat (gi, cen, s);
 
 	/* Copy the value into the solution. */
 	ans->re = creal (val);
@@ -64,8 +63,7 @@ void impedance (int gi, int gj, Complex *ans) {
 		bscenter (gj, src);
 
 		val = srcint (fmaconf.k0, src, obs, fmaconf.cell,
-				fmaconf.nsrcint, fmaconf.srcpts, fmaconf.srcwts,
-				fmaconf.nrcvint, fmaconf.rcvpts, fmaconf.rcvwts);
+				fmaconf.nqpts, fmaconf.qpts, fmaconf.qwts);
 		val *= fmaconf.k0 * fmaconf.k0;
 	}
 
@@ -149,15 +147,14 @@ int preimpedance () {
 				dist[2] = k * fmaconf.cell[2];
 				
 				fmaconf.gridints[idx] = srcint (fmaconf.k0, zero, dist, fmaconf.cell,
-						fmaconf.nsrcint, fmaconf.srcpts, fmaconf.srcwts,
-						fmaconf.nrcvint, fmaconf.rcvpts, fmaconf.rcvwts);
+						fmaconf.nqpts, fmaconf.qpts, fmaconf.qwts);
 				fmaconf.gridints[idx] *= fmaconf.k0 * fmaconf.k0;
 			}
 		}
 	}
 
 	/* Recompute the self interaction with high accuracy. */
-	fmaconf.gridints[0] = selfinthigh (fmaconf.k0, fmaconf.cell);
+	fmaconf.gridints[0] = selfint (fmaconf.k0, fmaconf.cell);
 
 	return totel;
 }

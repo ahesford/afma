@@ -31,8 +31,8 @@ static int augcrt (Complex *dst, Complex *src) {
 	int i;
 
 	for (i = 0; i < fmaconf.numbases; ++i) {
-		dst[i].re = fmaconf.cellvol * src[i].re - dst[i].re;
-		dst[i].im = fmaconf.cellvol * src[i].im - dst[i].im;
+		dst[i].re = src[i].re - dst[i].re;
+		dst[i].im = src[i].im - dst[i].im;
 	}
 
 	return fmaconf.numbases;

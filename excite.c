@@ -10,58 +10,36 @@
 
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
-/* Computes the RHS for a plane-wave in a given direction. */
-complex float planerhs (int gi, float *srcdir) {
-	complex float ans;
-	float ctr[3];
-
-	/* Find the center of the requested basis. */
-	bscenter (gi, ctr);
-
-	/* Use a single-point integration rule. */
-	ans = fsplane (fmaconf.k0, ctr, srcdir);
-	ans *= fmaconf.cellvol;
-
-	return ans;
-}
-
-/* Computes the RHS for a point source at the given location. */
-complex float pointrhs (int gi, float *srcloc) {
-	complex float ans;
-	float ctr[3];
-
-	bscenter (gi, ctr);
-	ans = rcvint (fsgreen, fmaconf.k0, srcloc, ctr, fmaconf.cell,
-			fmaconf.nrcvint, fmaconf.rcvpts, fmaconf.rcvwts);
-
-	return ans;
-}
-
 /* Computes the entire RHS vector. */
 int buildrhs (complex float *rhs, float *srcloc, int type) {
+	complex float (*grf) (float, float *, float *);
+	float ctr[3];
 	int i;
-	complex float (*rhsfunc) (int, float *);
 
-	if (type) rhsfunc = planerhs;
-	else rhsfunc = pointrhs;
+	if (type) grf = fsplane;
+	else grf = fsgreen;
 
-	for (i = 0; i < fmaconf.numbases; ++i)
-		rhs[i] = rhsfunc (fmaconf.bslist[i], srcloc);
+	for (i = 0; i < fmaconf.numbases; ++i) {
+		bscenter (fmaconf.bslist[i], ctr);
+		rhs[i] = grf (fmaconf.k0, ctr, srcloc);
+	}
 
 	return fmaconf.numbases;
 }
 
 int multirhs (complex float *rhs, measdesc *src, complex float *mag, int type) {
 	int i, j;
-	complex float (*rhsfunc) (int, float *);
+	float ctr[3];
+	complex float (*grf) (float, float *, float *);
 
-	if (type) rhsfunc = planerhs;
-	else rhsfunc = pointrhs;
+	if (type) grf = fsplane;
+	else grf = fsgreen;
 
 	for (i = 0; i < fmaconf.numbases; ++i) {
 		rhs[i] = 0;
+		bscenter (fmaconf.bslist[i], ctr);
 		for (j = 0; j < src->count; ++j)
-			rhs[i] += mag[j] * rhsfunc (fmaconf.bslist[i], src->locations + 3 * j);
+			rhs[i] += mag[j] * grf (fmaconf.k0, ctr, src->locations + 3 * j);
 	}
 
 	return fmaconf.numbases * src->count;
@@ -69,15 +47,17 @@ int multirhs (complex float *rhs, measdesc *src, complex float *mag, int type) {
 
 int precompgrf (measdesc *src, complex float *grf, int type) {
 	int i, j;
+	float ctr[3];
 	complex float *ptr = grf;
-	complex float (*rhsfunc) (int, float *);
+	complex float (*rhsfunc) (float, float *, float *);
 
-	if (type) rhsfunc = planerhs;
-	else rhsfunc = pointrhs;
+	if (type) rhsfunc = fsplane;
+	else rhsfunc = fsgreen;
 
 	for (i = 0; i < fmaconf.numbases; ++i) {
+		bscenter (fmaconf.bslist[i], ctr);
 		for (j = 0; j < src->count; ++j) {
-			*ptr = rhsfunc (fmaconf.bslist[i], src->locations + 3 * j);
+			*ptr = rhsfunc (fmaconf.k0, ctr, src->locations + 3 * j);
 			++ptr;
 		}
 	}

@@ -123,21 +123,14 @@ void getconfig (char *fname) {
 	/* Read the integration points for source and receiver. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%d %d", &(fmaconf.nsrcint), &(fmaconf.nrcvint));
+	sscanf (buf, "%d", &(fmaconf.nqpts));
 
 	/* Find the quadrature points for the source integration. */
-	fmaconf.srcpts = malloc (2 * fmaconf.nsrcint * sizeof(double));
-	fmaconf.srcwts = fmaconf.srcpts + fmaconf.nsrcint;
-	gaqd_ (&(fmaconf.nsrcint), fmaconf.srcpts, fmaconf.srcwts, NULL, NULL, &ierr);
-	for (ierr = 0; ierr < fmaconf.nsrcint; ++ierr)
-		fmaconf.srcpts[ierr] = cos (fmaconf.srcpts[ierr]);
-
-	/* Find the quadrature points for the receiver integration. */
-	fmaconf.rcvpts = malloc (2 * fmaconf.nrcvint * sizeof(double));
-	fmaconf.rcvwts = fmaconf.rcvpts + fmaconf.nrcvint;
-	gaqd_ (&(fmaconf.nrcvint), fmaconf.rcvpts, fmaconf.rcvwts, NULL, NULL, &ierr);
-	for (ierr = 0; ierr < fmaconf.nrcvint; ++ierr)
-		fmaconf.rcvpts[ierr] = cos (fmaconf.rcvpts[ierr]);
+	fmaconf.qpts = malloc (2 * fmaconf.nqpts * sizeof(double));
+	fmaconf.qwts = fmaconf.qpts + fmaconf.nqpts;
+	gaqd_ (&(fmaconf.nqpts), fmaconf.qpts, fmaconf.qwts, NULL, NULL, &ierr);
+	for (ierr = 0; ierr < fmaconf.nqpts; ++ierr)
+		fmaconf.qpts[ierr] = cos (fmaconf.qpts[ierr]);
 
 	/* Read the iterative solver configuration. */
 	skipcomments (fp);
