@@ -5,7 +5,7 @@
 #include <Complex.h> // This is provided by ScaleME.
 
 typedef struct {
-	float min[3], max[3], cell[3];
+	float min[3], max[3], cell[3], cellvol;
 	float precision, smallbox;
 	int nx, ny, nz, gnumbases, numbases;
 	int maxlev, numbuffer, interpord, toplev, sharedmax, nbors[3];

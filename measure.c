@@ -63,7 +63,7 @@ int directfield (complex float *currents, measdesc *obs, complex float *result) 
 
 	for (i = 0; i < obs->count; ++i) {
 		/* Scale by cell volume for one-point integration. */
-		buf[i] *= fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
+		buf[i] *= fmaconf.cellvol;
 		/* Include the factor of k0^2 in front of the integral. */
 		buf[i] *= fmaconf.k0 * fmaconf.k0;
 	}

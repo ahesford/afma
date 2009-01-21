@@ -20,7 +20,7 @@ complex float planerhs (int gi, float *srcdir) {
 
 	/* Use a single-point integration rule. */
 	ans = fsplane (fmaconf.k0, ctr, srcdir);
-	ans *= fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
+	ans *= fmaconf.cellvol;
 
 	return ans;
 }

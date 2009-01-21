@@ -88,6 +88,9 @@ void getconfig (char *fname) {
 	fmaconf.cell[1] = (fmaconf.max[1] - fmaconf.min[1]) / fmaconf.ny;
 	fmaconf.cell[2] = (fmaconf.max[2] - fmaconf.min[2]) / fmaconf.nz;
 
+	/* Precompute the cell volume for convenience. */
+	fmaconf.cellvol = fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
+
 	/* Set the wave number to 2 pi, since wavelength is the length unit. */
 	fmaconf.k0 = 2 * M_PI;
 
