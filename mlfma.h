@@ -12,6 +12,8 @@ typedef struct {
 	int *bslist;
 	float k0;
 	complex float *contrast;
+	float nbors[3];
+	complex float *gridints;
 } fmadesc;
 
 extern fmadesc fmaconf;
@@ -21,5 +23,11 @@ void rcvpattern (int, float *, float *, Complex *);
 
 void impedance (int, int, Complex *);
 void bscenter (int, float *);
+
+void bsindex (int, int *);
+
+void interaction (int, int, Complex *);
+
+int preimpedance ();
 
 #endif /* __MLFMA_H_ */

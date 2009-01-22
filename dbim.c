@@ -94,6 +94,9 @@ int main (int argc, char **argv) {
 	sprintf (fname, "%s.guess", inproj);
 	getcontrast (fname, fmaconf.bslist, fmaconf.numbases);
 
+	i = preimpedance ();
+	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
+
 	/* Finish the ScaleME initialization. */
 	ScaleME_postconf ();
 

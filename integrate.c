@@ -85,7 +85,7 @@ complex float selfint (float k, float *dc) {
 	ikr = I * k * r;
 
 	ans = (1.0 - ikr) * cexp (ikr) - 1.0;
-	ans /= (k * k);
+	ans *= dc[0] * dc[1] * dc[2];
 
 	return ans;
 }
