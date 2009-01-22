@@ -20,7 +20,6 @@ static complex float genpat (int gi, float *cen, float *s) {
 	sr = s[0] * rv[0] + s[1] * rv[1] + s[2] * rv[2];
 
 	val = cexp (I * fmaconf.k0 * sc) * cexp (-I * fmaconf.k0 * sr);
-	val *= fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
 
 	return val;
 }
@@ -32,6 +31,7 @@ void radpattern (int gi, float *cen, float *s, Complex *ans) {
 
 	/* The k0 term is due to the limit of the radiation pattern. */
 	val = fmaconf.k0 * genpat (gi, cen, s);
+	val *= fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
 
 	/* Copy the value into the solution. */
 	ans->re = creal (val);

@@ -29,13 +29,10 @@ static int compcrt (Complex *dst, Complex *src) {
 
 static int augcrt (Complex *dst, Complex *src) {
 	int i;
-	float vol;
-
-	vol = fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
 
 	for (i = 0; i < fmaconf.numbases; ++i) {
-		dst[i].re = vol * src[i].re - dst[i].re;
-		dst[i].im = vol * src[i].im - dst[i].im;
+		dst[i].re = src[i].re - dst[i].re;
+		dst[i].im = src[i].im - dst[i].im;
 	}
 
 	return fmaconf.numbases;

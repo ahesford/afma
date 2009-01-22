@@ -60,7 +60,7 @@ int frechadj (complex float *mag, complex float *fld, complex float *sol) {
 	float factor;
 
 	/* Compute the constant factor outside the adjoint. */
-	factor = fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
+	factor = fmaconf.k0 * fmaconf.k0;
 
 	for (j = 0; j < obsmeas.count; ++j)
 		mag[j] = conj(mag[j]);
