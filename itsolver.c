@@ -29,10 +29,13 @@ static int compcrt (Complex *dst, Complex *src) {
 
 static int augcrt (Complex *dst, Complex *src) {
 	int i;
+	float vol;
+
+	vol = fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
 
 	for (i = 0; i < fmaconf.numbases; ++i) {
-		dst[i].re = src[i].re - dst[i].re;
-		dst[i].im = src[i].im - dst[i].im;
+		dst[i].re = vol * src[i].re - dst[i].re;
+		dst[i].im = vol * src[i].im - dst[i].im;
 	}
 
 	return fmaconf.numbases;
@@ -55,11 +58,11 @@ int cgmres (complex float *rhs, complex float *sol, int silent) {
 	initcgmres_(icntl, cntl);
 
 	/* Only the root process should print convergence history. */
-	/* if (!myRank) icntl[2] = 6;
-	else icntl[2] = 0; */
+	if (!myRank && !silent) icntl[2] = 6;
+	else icntl[2] = 0;
 
 	/* None of the processes should make noise about GMRES. */
-	icntl[0] = icntl[1] = icntl[2] = 0;
+	if (silent) icntl[0] = icntl[1] = icntl[2] = 0;
 
 	/* Decide if a preconditioner should be used. */
 	if (solver.precond) icntl[3] = 1;
@@ -125,7 +128,7 @@ int cgmres (complex float *rhs, complex float *sol, int silent) {
 		}
 	} while (irc[0]);
 
-	if (info[0]) fprintf (stdout, "CGMRES: return value: %d\n", info[0]); 
+	if (!myRank && info[0]) fprintf (stdout, "CGMRES: return value: %d\n", info[0]); 
 
 	memcpy (sol, zwork, fmaconf.numbases * sizeof(complex float));
 	

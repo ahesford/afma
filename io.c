@@ -243,14 +243,18 @@ int prtcontrast (char *fname, complex float *currents) {
 
 int prtfield (char *fname, measdesc *obs, complex float *field) {
 	FILE *fp;
+	int size[2];
 
 	if (!(fp = fopen (fname, "w"))) {
 		fprintf (stderr, "ERROR: could not open field output.\n");
 		return 0;
 	}
 
+	size[0] = obs->nphi;
+	size[1] = obs->ntheta;
+
 	/* The locations are not stored. */
-	fwrite (&(obs->count), sizeof(int), 1, fp);
+	fwrite (size, sizeof(int), 2, fp);
 	fwrite (field, sizeof(complex float), obs->count, fp);
 
 	fclose (fp);
@@ -260,7 +264,7 @@ int prtfield (char *fname, measdesc *obs, complex float *field) {
 
 int getfield (char *fname, complex float *field, int len) {
 	FILE *fp;
-	int nmeas;
+	int nmeas, size[2];
 
 	if (!(fp = fopen (fname, "r"))) {
 		fprintf (stderr, "ERROR: could not open field input.\n");
@@ -268,7 +272,9 @@ int getfield (char *fname, complex float *field, int len) {
 	}
 
 	/* Read the number of recorded measurements. */
-	fread (&nmeas, sizeof(int), 1, fp);
+	fread (size, sizeof(int), 2, fp);
+
+	nmeas = size[0] * size[1];
 
 	if (nmeas != len)
 		fprintf (stderr, "ERROR: recorded and specified counts do not agree.\n");

@@ -64,7 +64,7 @@ int ScaleME_preconf (void) {
 	MPFMA_stdout = stdout;
 	MPFMA_stderr = stderr; 
 	
-	error = ScaleME_initSetUp (MPI_COMM_WORLD, impedance,
+	error = ScaleME_initSetUp (MPI_COMM_WORLD, interaction,
 			radpattern, rcvpattern, bscenter);
 
 	if (error) {
