@@ -94,10 +94,6 @@ int main (int argc, char **argv) {
 	sprintf (fname, "%s.guess", inproj);
 	getcontrast (fname, fmaconf.bslist, fmaconf.numbases);
 
-	/* Precompute the near-neighbor interactions. */
-	preimpedance ();
-	fprintf (stderr, "Finished precomputing near-neighbor interactions.\n");
-
 	/* Finish the ScaleME initialization. */
 	ScaleME_postconf ();
 

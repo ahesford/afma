@@ -9,11 +9,8 @@
 #include "mlfma.h"
 #include "itsolver.h"
 #include "measure.h"
-#include "integrate.h"
 
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
-
-void gaqd_ (int *, double *, double *, double *, double *, int *);
 
 void skipcomments (FILE *fp) {
 	fpos_t loc;
@@ -57,7 +54,6 @@ void getdbimcfg (char *fname, int *maxit, float *regparm, float *tol) {
 /* Read the configuration file and set parameters. */
 void getconfig (char *fname) {
 	FILE *fp;
-	int ierr;
 	char buf[1024];
 
 	if (!(fp = fopen (fname, "r"))) {
@@ -88,9 +84,6 @@ void getconfig (char *fname) {
 	fmaconf.cell[1] = (fmaconf.max[1] - fmaconf.min[1]) / fmaconf.ny;
 	fmaconf.cell[2] = (fmaconf.max[2] - fmaconf.min[2]) / fmaconf.nz;
 
-	/* Precompute the cell volume for convenience. */
-	fmaconf.cellvol = fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
-
 	/* Set the wave number to 2 pi, since wavelength is the length unit. */
 	fmaconf.k0 = 2 * M_PI;
 
@@ -119,18 +112,6 @@ void getconfig (char *fname) {
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%d", &(fmaconf.interpord));
-
-	/* Read the integration points for source and receiver. */
-	skipcomments (fp);
-	fgets (buf, 1024, fp);
-	sscanf (buf, "%d", &(fmaconf.nqpts));
-
-	/* Find the quadrature points for the source integration. */
-	fmaconf.qpts = malloc (2 * fmaconf.nqpts * sizeof(double));
-	fmaconf.qwts = fmaconf.qpts + fmaconf.nqpts;
-	gaqd_ (&(fmaconf.nqpts), fmaconf.qpts, fmaconf.qwts, NULL, NULL, &ierr);
-	for (ierr = 0; ierr < fmaconf.nqpts; ++ierr)
-		fmaconf.qpts[ierr] = cos (fmaconf.qpts[ierr]);
 
 	/* Read the iterative solver configuration. */
 	skipcomments (fp);
@@ -262,18 +243,14 @@ int prtcontrast (char *fname, complex float *currents) {
 
 int prtfield (char *fname, measdesc *obs, complex float *field) {
 	FILE *fp;
-	int size[2];
 
 	if (!(fp = fopen (fname, "w"))) {
 		fprintf (stderr, "ERROR: could not open field output.\n");
 		return 0;
 	}
 
-	size[0] = obs->nphi;
-	size[1] = obs->ntheta;
-
 	/* The locations are not stored. */
-	fwrite (size, sizeof(int), 2, fp);
+	fwrite (&(obs->count), sizeof(int), 1, fp);
 	fwrite (field, sizeof(complex float), obs->count, fp);
 
 	fclose (fp);
@@ -283,7 +260,7 @@ int prtfield (char *fname, measdesc *obs, complex float *field) {
 
 int getfield (char *fname, complex float *field, int len) {
 	FILE *fp;
-	int nmeas, size[2];
+	int nmeas;
 
 	if (!(fp = fopen (fname, "r"))) {
 		fprintf (stderr, "ERROR: could not open field input.\n");
@@ -291,8 +268,7 @@ int getfield (char *fname, complex float *field, int len) {
 	}
 
 	/* Read the number of recorded measurements. */
-	fread (size, sizeof(int), 2, fp);
-	nmeas = size[0] * size[1];
+	fread (&nmeas, sizeof(int), 1, fp);
 
 	if (nmeas != len)
 		fprintf (stderr, "ERROR: recorded and specified counts do not agree.\n");

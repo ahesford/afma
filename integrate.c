@@ -1,35 +1,43 @@
-#include <stdlib.h>
 #include <math.h>
 #include <complex.h>
 
 #include "fsgreen.h"
 #include "integrate.h"
 
-void gaqd_ (int *, double *, double *, double *, double *, int *);
+float pts[4] = { -OUTPT, -INPT, INPT, OUTPT };
+float wts[4] = { OUTWT, INWT, INWT, OUTWT };
 
-complex float radint (float k, float *cen, float *s, float *r,
-		float *dc, int npts, double *pts, double *wts) {
-	complex float ans = 0, val, csf;
+/* Four-point (per dimension) integration of the receiver. */
+complex float rcvint (igrandf green, float k, float *src, float *cen, float *dc) {
+	complex float ans = 0, val;
 	int i, j, l;
-	float rv[3], sc, sr;
+	float obs[3];
 
-	sc = s[0] * cen[0] + s[1] * cen[1] + s[2] * cen[2];
-	csf = cexp (I * k * sc);
-
-	for (i = 0; i < npts; ++i) {
-		rv[0] = r[0] + 0.5 * dc[0] * pts[i];
-		for (j = 0; j < npts; ++j) {
-			rv[1] = r[1] + 0.5 * dc[1] * pts[j];
-			for (l = 0; l < npts; ++l) {
-				rv[2] = r[2] + 0.5 * dc[2] * pts[l];
-				sr = s[0] * rv[0] + s[1] * rv[1] + s[2] * rv[2];
-				val = csf * cexp (-I * k * sr);
+	for (i = 0; i < NUMPTS; ++i) {
+		obs[0] = cen[0] + 0.5 * dc[0] * pts[i];
+		for (j = 0; j < NUMPTS; ++j) {
+			obs[1] = cen[1] + 0.5 * dc[1] * pts[j];
+			for (l = 0; l < NUMPTS; ++l) {
+				obs[2] = cen[2] + 0.5 * dc[2] * pts[l];
+				val = green (k, obs, src);
 				ans += wts[i] * wts[j] * wts[l] * val;
 			}
 		}
 	}
 
 	ans *= dc[0] * dc[1] * dc[2] / 8;
+	return ans;
+}
+
+/* One-point integration for the source, and four-point (per dimension)
+ * integration of the receiver. Seems to be accurate enough... */
+complex float fastint (float k, float *src, float *obs, float *dc) {
+	complex float ans;
+
+	/* Use four-point integration in the receiver box. */
+	ans = rcvint (fsgreen, k, src, obs, dc);
+	ans *= dc[0] * dc[1] * dc[2];
+
 	return ans;
 }
 
@@ -40,25 +48,24 @@ complex float oneptint (float k, float *src, float *obs, float *dc) {
 	vol = dc[0] * dc[1] * dc[2];
 
 	ans = fsgreen (k, src, obs);
-	ans *= vol;
+	ans *= vol * vol;
 
 	return vol;
 }
 
-/* N-point (per dimension) integration of both source and receiver. */
-complex float srcint (float k, float *src, float *obs, float *dc,
-		int nq, double *pts, double *wts) {
+/* Four-point (per dimension) integration of both source and receiver. */
+complex float srcint (float k, float *src, float *obs, float *dc) {
 	complex float ans = 0, val;
 	int i, j, l;
 	float srcpt[3];
 
-	for (i = 0; i < nq; ++i) {
+	for (i = 0; i < NUMPTS; ++i) {
 		srcpt[0] = src[0] + 0.5 * dc[0] * pts[i];
-		for (j = 0; j < nq; ++j) {
+		for (j = 0; j < NUMPTS; ++j) {
 			srcpt[1] = src[1] + 0.5 * dc[1] * pts[j];
-			for (l = 0; l < nq; ++l) {
+			for (l = 0; l < NUMPTS; ++l) {
 				srcpt[2] = src[2] + 0.5 * dc[2] * pts[l];
-				val = fsgreen (k, srcpt, obs);
+				val = rcvint (fsgreen, k, srcpt, obs, dc);
 				ans += wts[i] * wts[j] * wts[l] * val;
 			}
 		}
@@ -78,24 +85,7 @@ complex float selfint (float k, float *dc) {
 	ikr = I * k * r;
 
 	ans = (1.0 - ikr) * cexp (ikr) - 1.0;
-
-	return ans;
-}
-
-/* High-accuracy evaluation of the self-interaction term. */
-complex float selfinthigh (float k, float *dc) {
-	complex float ans;
-	float obspt[3] = { 0, 0, 0 };
-	int nq = 16, ierr;
-	double pts[16], wts[16];
-
-	/* Get the quadrature points for the self-integration term. */
-	gaqd_ (&nq, pts, wts, NULL, NULL, &ierr);
-	for (ierr = 0; ierr < nq; ++ierr)
-		pts[ierr] = cos (pts[ierr]);
-
-	ans = srcint (k, obspt, obspt, dc, nq, pts, wts);
-	ans *= k * k;
+	ans /= (k * k);
 
 	return ans;
 }

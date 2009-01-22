@@ -19,34 +19,6 @@
 
 void usage (char *);
 
-void prtzmat () {
-	FILE *zout;
-	Complex *crt, *sol;
-	int i, j;
-
-	/* zout = fopen ("new.debug.zmat", "w"); */
-	zout = stderr;
-
-	crt = malloc (2 * fmaconf.numbases * sizeof(Complex));
-	sol = crt + fmaconf.numbases;
-
-	for (i = 0; i < fmaconf.numbases; ++i) {
-		for (j = 0; j < fmaconf.numbases; ++j) crt[j].re = crt[j].im = 0;
-		crt[i].re = 1; 
-		
-		ScaleME_applyParFMA (REGULAR, crt, sol);
-
-		for (j = 0; j < fmaconf.numbases; ++j)
-			fprintf (zout, "%d %d %g %g\n", fmaconf.bslist[j] + 1, fmaconf.bslist[i] + 1, sol[j].re, sol[j].im);
-
-		fflush (zout);
-	}
-
-	/* fclose (zout); */
-
-	free (crt);
-}
-
 void usage (char *name) {
 	fprintf (stderr, "Usage: %s [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
@@ -116,10 +88,6 @@ int main (int argc, char **argv) {
 	/* Read the contrast for the local basis set. */
 	sprintf (fname, "%s.contrast", inproj);
 	getcontrast (fname, fmaconf.bslist, fmaconf.numbases);
-
-	/* Precompute the near-neighbor interactions. */
-	preimpedance ();
-	fprintf (stderr, "Finished precomputing near-neighbor interactions.\n");
 
 	/* Finish the ScaleME initialization. */
 	ScaleME_postconf ();

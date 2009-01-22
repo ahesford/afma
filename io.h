@@ -8,7 +8,6 @@
 void skipcomments (FILE *);
 void getdbimcfg (char *, int *, float *, float *);
 void getconfig (char *);
-void getcenters (char *, int, int);
 void getcontrast (char *, int *, int);
 
 int prtcontrast (char *, complex float *);

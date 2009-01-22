@@ -5,14 +5,13 @@
 #include <Complex.h> // This is provided by ScaleME.
 
 typedef struct {
-	float min[3], max[3], cell[3], cellvol;
+	float min[3], max[3], cell[3];
 	float precision, smallbox;
 	int nx, ny, nz, gnumbases, numbases;
-	int maxlev, numbuffer, interpord, toplev, sharedmax, nbors[3];
-	int *bslist, nqpts;
+	int maxlev, numbuffer, interpord, toplev, sharedmax;
+	int *bslist;
 	float k0;
-	complex float *contrast, *gridints;
-	double *qpts, *qwts;
+	complex float *contrast;
 } fmadesc;
 
 extern fmadesc fmaconf;
@@ -21,11 +20,6 @@ void radpattern (int, float *, float *, Complex *);
 void rcvpattern (int, float *, float *, Complex *);
 
 void impedance (int, int, Complex *);
-
 void bscenter (int, float *);
-void bsindex (int, int *);
-
-void interaction (int, int, Complex *);
-int preimpedance ();
 
 #endif /* __MLFMA_H_ */

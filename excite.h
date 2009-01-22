@@ -8,7 +8,5 @@ complex float planerhs (int, float *);
 complex float pointrhs (int, float *);
 int buildrhs (complex float *, float *, int);
 int multirhs (complex float *, measdesc *, complex float *, int);
-int precompgrf (measdesc *, complex float *, int);
-int precomprhs (complex float *, measdesc *, complex float *, complex float *);
 
 #endif /* __EXCITE_H_ */
