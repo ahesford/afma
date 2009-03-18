@@ -104,7 +104,7 @@ int main (int argc, char **argv) {
 			fprintf (stderr, "Running simulation for source %d.\n", i + 1);
 		/* Build the right-hand side for the specified location. Use
 		 * point sources, rather than plane waves, for excitation. */
-		buildrhs (rhs, srcmeas.locations + 3 * i, 1);
+		buildrhs (rhs, srcmeas.locations + 3 * i);
 
 		sprintf (fname, "%s.%d.rhs", outproj, i);
 		prtcontrast (fname, rhs);

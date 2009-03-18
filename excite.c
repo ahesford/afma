@@ -11,53 +11,41 @@
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
 /* Computes the entire RHS vector. */
-int buildrhs (complex float *rhs, float *srcloc, int type) {
+int buildrhs (complex float *rhs, float *srcloc) {
 	int i;
 	float ctr[3];
-	complex float (*rhsfunc) (float, float *, float *);
-
-	if (type) rhsfunc = fsplane;
-	else rhsfunc = fsgreen;
 
 	for (i = 0; i < fmaconf.numbases; ++i) {
 		bscenter (fmaconf.bslist[i], ctr);
-		rhs[i] = rhsfunc (fmaconf.k0, ctr, srcloc);
+		rhs[i] = fsgreen (fmaconf.k0, ctr, srcloc);
 	}
 
 	return fmaconf.numbases;
 }
 
-int multirhs (complex float *rhs, measdesc *src, complex float *mag, int type) {
+int multirhs (complex float *rhs, measdesc *src, complex float *mag) {
 	int i, j;
 	float ctr[3];
-	complex float (*rhsfunc) (float, float *, float *);
-
-	if (type) rhsfunc = fsplane;
-	else rhsfunc = fsgreen;
 
 	for (i = 0; i < fmaconf.numbases; ++i) {
 		rhs[i] = 0;
 		bscenter (fmaconf.bslist[i], ctr);
 		for (j = 0; j < src->count; ++j)
-			rhs[i] += mag[j] * rhsfunc (fmaconf.k0, ctr, src->locations + 3 * j);
+			rhs[i] += mag[j] * fsgreen (fmaconf.k0, ctr, src->locations + 3 * j);
 	}
 
 	return fmaconf.numbases * src->count;
 }
 
-int precompgrf (measdesc *src, complex float *grf, int type) {
+int precompgrf (measdesc *src, complex float *grf) {
 	int i, j;
 	complex float *ptr = grf;
 	float ctr[3];
-	complex float (*rhsfunc) (float, float *, float *);
-
-	if (type) rhsfunc = fsplane;
-	else rhsfunc = fsgreen;
 
 	for (i = 0; i < fmaconf.numbases; ++i) {
 		bscenter (fmaconf.bslist[i], ctr);
 		for (j = 0; j < src->count; ++j) {
-			*ptr = rhsfunc (fmaconf.k0, ctr, src->locations + 3 * j);
+			*ptr = fsgreen (fmaconf.k0, ctr, src->locations + 3 * j);
 			++ptr;
 		}
 	}

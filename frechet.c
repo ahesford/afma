@@ -19,7 +19,7 @@ complex float *bldfrechbuf (int size) {
 	zwcrt = zwork + size;
 
 	rcvgrf = malloc (fmaconf.numbases * obsmeas.count * sizeof(complex float));
-	precompgrf (&obsmeas, rcvgrf, 1);
+	precompgrf (&obsmeas, rcvgrf);
 
 	return zwork;
 }
@@ -57,10 +57,6 @@ int frechet (complex float *crt, complex float *fld, complex float *sol) {
 
 int frechadj (complex float *mag, complex float *fld, complex float *sol) {
 	int j;
-	float factor;
-
-	/* Compute the constant factor outside the adjoint. */
-	factor = fmaconf.k0 * fmaconf.k0;
 
 	for (j = 0; j < obsmeas.count; ++j)
 		mag[j] = conj(mag[j]);
@@ -74,7 +70,7 @@ int frechadj (complex float *mag, complex float *fld, complex float *sol) {
 
 	/* Augment the solution for this transmitter. */
 	for (j = 0; j < fmaconf.numbases; ++j)
-		sol[j] += factor * conj (zwork[j] * fld[j]);
+		sol[j] += conj (zwork[j] * fld[j]);
 
 	for (j = 0; j < obsmeas.count; ++j)
 		mag[j] = conj(mag[j]);

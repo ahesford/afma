@@ -19,6 +19,7 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	int i, j;
 	float *thetas, dtheta;
 	Complex *fields = (Complex *)result;
+	complex float fact;
 
 	thetas = malloc (obs->ntheta * sizeof(float));
 
@@ -37,7 +38,10 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	 * However, the actual integral needs (k^2 / 4 pi), so we need the
 	 * extra factors in the field. */
 	j = obs->ntheta * obs->nphi;
-	for (i = 0; i < j; ++i) result[i] *= fmaconf.k0 / (4 * M_PI);
+
+	/* Scale the pattern to produce actual measurements on the desired sphere. */
+	fact = fmaconf.k0 * cexp (I * fmaconf.k0 * obs->radius) / (4 * M_PI * obs->radius);
+	for (i = 0; i < j; ++i) result[i] *= fact;
 
 	free (thetas);
 	return 1;
