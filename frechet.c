@@ -57,6 +57,8 @@ int frechet (complex float *crt, complex float *fld, complex float *sol) {
 
 int frechadj (complex float *mag, complex float *fld, complex float *sol) {
 	int j;
+	double factor = fmaconf.k0 * fmaconf.k0
+		* fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
 
 	for (j = 0; j < obsmeas.count; ++j)
 		mag[j] = conj(mag[j]);
@@ -70,7 +72,7 @@ int frechadj (complex float *mag, complex float *fld, complex float *sol) {
 
 	/* Augment the solution for this transmitter. */
 	for (j = 0; j < fmaconf.numbases; ++j)
-		sol[j] += conj (zwork[j] * fld[j]);
+		sol[j] += factor * conj (zwork[j] * fld[j]);
 
 	for (j = 0; j < obsmeas.count; ++j)
 		mag[j] = conj(mag[j]);

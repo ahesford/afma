@@ -11,7 +11,8 @@ void getconfig (char *);
 void getcontrast (char *, int *, int);
 
 int prtcontrast (char *, complex float *);
-int prtfield (char *, measdesc *, complex float *);
-int getfield (char *, complex float *, int);
+int prtfldhdr (char *, measdesc *, measdesc *);
+int appendfld (char *, measdesc *, complex float *);
+int getfields (char *, complex float *, int, float *);
 
 #endif /* __IO_H_ */

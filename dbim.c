@@ -104,18 +104,9 @@ int main (int argc, char **argv) {
 	field = malloc (2 * nmeas * sizeof(complex float));
 	error = field + nmeas;
 
-	/* Read the measurements. */
-	fldptr = field;
-	erninc = 0;
-	for (i = 0; i < srcmeas.count; ++i) {
-		sprintf (fname, "%s.%d.field", inproj, i);
-		getfield (fname, fldptr, obsmeas.count);
-		for (j = 0; j < obsmeas.count; ++j) {
-			lerr = cabs (fldptr[j]);
-			erninc += lerr * lerr;
-		}
-		fldptr += obsmeas.count;
-	}
+	/* Read the measurements and compute their norm. */
+	sprintf (fname, "%s.field", inproj);
+	getfields (fname, field, nmeas, &erninc);
 
 	bldfrechbuf (fmaconf.numbases);
 

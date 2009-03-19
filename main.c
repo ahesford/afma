@@ -20,9 +20,10 @@
 void usage (char *);
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-o <output prefix>] -i <input prefix>\n", name);
+	fprintf (stderr, "Usage: %s [-d] [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
+	fprintf (stderr, "\t-d: Debug mode (prints RHS and induced currents)\n");
 }
 
 int main (int argc, char **argv) {
@@ -31,6 +32,7 @@ int main (int argc, char **argv) {
 	complex float *rhs, *field;
 	clock_t tstart, tend;
 	double cputime;
+	int debug = 0;
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -42,13 +44,16 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:d")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
 			break;
 		case 'o':
 			outproj = optarg;
+			break;
+		case 'd':
+			debug = 1;
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -99,6 +104,9 @@ int main (int argc, char **argv) {
 
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
 
+	sprintf (fname, "%s.field", outproj);
+	prtfldhdr (fname, &srcmeas, &obsmeas);
+
 	for (i = 0; i < srcmeas.count; ++i) {
 		if (!mpirank)
 			fprintf (stderr, "Running simulation for source %d.\n", i + 1);
@@ -106,8 +114,10 @@ int main (int argc, char **argv) {
 		 * point sources, rather than plane waves, for excitation. */
 		buildrhs (rhs, srcmeas.locations + 3 * i);
 
-		sprintf (fname, "%s.%d.rhs", outproj, i);
-		prtcontrast (fname, rhs);
+		if (debug) {
+			sprintf (fname, "%s.%d.rhs", outproj, i);
+			prtcontrast (fname, rhs);
+		}
 
 		tstart = clock ();
 		/* Run the iterative solver. The solution is stored in the RHS. */
@@ -117,8 +127,10 @@ int main (int argc, char **argv) {
 
 		if (!mpirank) fprintf (stderr, "CPU time for CGMRES: %f\n", cputime);
 
-		sprintf (fname, "%s.%d.currents", outproj, i);
-		prtcontrast (fname, rhs);
+		if (debug) {
+			sprintf (fname, "%s.%d.currents", outproj, i);
+			prtcontrast (fname, rhs);
+		}
 
 		/* Convert total field into contrast current. */
 		for (j = 0; j < fmaconf.numbases; ++j)
@@ -126,9 +138,10 @@ int main (int argc, char **argv) {
 
 		farfield (rhs, &obsmeas, field);
 
+		/* Append the field for the current transmitter. */
 		if (!mpirank) {
-			sprintf (fname, "%s.%d.field", outproj, i);
-			prtfield (fname, &obsmeas, field);
+			sprintf (fname, "%s.field", outproj);
+			appendfld (fname, &obsmeas, field);
 		}
 	}
 

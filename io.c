@@ -241,7 +241,8 @@ int prtcontrast (char *fname, complex float *currents) {
 	return fmaconf.gnumbases;
 }
 
-int prtfield (char *fname, measdesc *obs, complex float *field) {
+/* Print the header for the overall field matrix. */
+int prtfldhdr (char *fname, measdesc *src, measdesc *obs) {
 	FILE *fp;
 	int size[2];
 
@@ -250,11 +251,25 @@ int prtfield (char *fname, measdesc *obs, complex float *field) {
 		return 0;
 	}
 
-	size[0] = obs->nphi;
-	size[1] = obs->ntheta;
+	size[0] = obs->count;
+	size[1] = src->count;
 
-	/* The locations are not stored. */
 	fwrite (size, sizeof(int), 2, fp);
+
+	fclose (fp);
+
+	return size[0] * size[1];
+}
+
+/* Append the provided field to the specified field file. */
+int appendfld (char *fname, measdesc *obs, complex float *field) {
+	FILE *fp;
+
+	if (!(fp = fopen (fname, "a"))) {
+		fprintf (stderr, "ERROR: could not append field output.\n");
+		return 0;
+	}
+
 	fwrite (field, sizeof(complex float), obs->count, fp);
 
 	fclose (fp);
@@ -262,9 +277,11 @@ int prtfield (char *fname, measdesc *obs, complex float *field) {
 	return obs->count;
 }
 
-int getfield (char *fname, complex float *field, int len) {
+int getfields (char *fname, complex float *field, int len, float *nrm) {
 	FILE *fp;
-	int nmeas, size[2];
+	complex float *fldptr;
+	int nmeas, size[2], i, j;
+	float lerr;
 
 	if (!(fp = fopen (fname, "r"))) {
 		fprintf (stderr, "ERROR: could not open field input.\n");
@@ -276,11 +293,27 @@ int getfield (char *fname, complex float *field, int len) {
 
 	nmeas = size[0] * size[1];
 
-	if (nmeas != len)
-		fprintf (stderr, "ERROR: recorded and specified counts do not agree.\n");
+	/* The initial norm of the matrix is zero, if it is desired. */
+	if (nrm) *nrm = 0;
 
-	/* Read the observations. */
-	fread (field, sizeof(complex float), MIN(len,nmeas), fp);
+	/* If the specified size doesn't match the recorded size, fail. */
+	if (nmeas != len) {
+		fprintf (stderr, "ERROR: recorded and specified counts do not agree.\n");
+		return 0;
+	}
+
+	/* Read each column of the matrix and compute the norm. */
+	for (fldptr = field, i = 0; i < size[1]; ++i) {
+		fread (fldptr, sizeof(complex float), size[0], fp);
+		if (nrm) {
+			for (j = 0; j < size[0]; ++j) {
+				lerr = cabs (fldptr[j]);
+				*nrm += lerr * lerr;
+			}
+		}
+		fldptr += size[0];
+	}
+
 	fclose (fp);
 
 	return len;
