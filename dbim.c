@@ -170,7 +170,7 @@ int main (int argc, char **argv) {
 		for (j = 0; j < fmaconf.numbases; ++j)
 			fmaconf.contrast[j] += currents[j]; 
 		
-		sprintf (fname, "%s.inverse.%d", outproj, i);
+		sprintf (fname, "%s.inverse.%03d", outproj, i);
 		prtcontrast (fname, fmaconf.contrast);
 
 		/* Scale the DBIM regularization parameter, if appropriate. */
