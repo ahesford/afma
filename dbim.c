@@ -31,7 +31,7 @@ int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i, j, k, nmeas, dbimit;
 	complex float *rhs, *rn, *currents, *field, *error, *errptr, *fldptr;
-	float errnorm, tolerance, lerr, regparm[3], cgnorm, erninc;
+	float errnorm, tolerance, lerr, regparm[4], cgnorm, erninc;
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -115,8 +115,6 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
 
 	for (i = 0; i < dbimit; ++i) {
-		if (!mpirank) fprintf (stderr, "DBIM iteration %d.\n", i);
-
 		errptr = error;
 		fldptr = field;
 		errnorm = 0;
@@ -157,14 +155,14 @@ int main (int argc, char **argv) {
 		errnorm = sqrt (errnorm  / erninc);
 
 		if (!mpirank)
-			fprintf (stderr, "DBIM relative error: %f, iteration %d.\n", errnorm, i);
+			fprintf (stderr, "DBIM relative error: %g, iteration %d.\n", errnorm, i - 1);
 		if (errnorm < tolerance) break;
 
 		/* Solve the system with CG for least-squares. */
-		cgnorm = cgls (rn, currents, regparm[0]);
+		cgnorm = cgls (rn, currents, regparm[0], solver.maxit, solver.epscg);
 
 		if (!mpirank)
-			fprintf (stderr, "CG relative error: %f, iteration %d.\n", cgnorm, i);
+			fprintf (stderr, "CG relative error: %g, iteration %d.\n", cgnorm, i);
 
 		/* Update the background. */
 		for (j = 0; j < fmaconf.numbases; ++j)
@@ -174,7 +172,11 @@ int main (int argc, char **argv) {
 		prtcontrast (fname, fmaconf.contrast);
 
 		/* Scale the DBIM regularization parameter, if appropriate. */
-		if (regparm[0] > regparm[1]) regparm[0] *= regparm[2];
+		if (!((i + 1) % (int)(regparm[3])) && regparm[0] > regparm[1]) {
+			regparm[0] *= regparm[2];
+			if (!mpirank)
+				fprintf (stderr, "Regularization parameter: %g\n", regparm[0]);
+		}
 	}
 
 	ScaleME_finalizeParHostFMA ();

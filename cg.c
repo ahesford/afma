@@ -5,7 +5,6 @@
 
 #include <mpi.h>
 
-#include "itsolver.h"
 #include "frechet.h"
 #include "measure.h"
 #include "excite.h"
@@ -13,7 +12,8 @@
 #include "cg.h"
 
 /* Least-squares solution using CG. The residual must be precomputed. */
-float cgls (complex float *rn, complex float *sol, float regparm) {
+float cgls (complex float *rn, complex float *sol,
+		float regparm, int iter, float tol) {
 	int i, j, k;
 	complex float *ifld, *pn, *scat, *adjcrt;
 	float rnorm, pnorm, lrnorm, alpha, beta, rninc;
@@ -37,7 +37,7 @@ float cgls (complex float *rn, complex float *sol, float regparm) {
 	MPI_Allreduce (&lrnorm, &rnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 	pnorm = (rninc = rnorm);
 
-	for (j = 0; j < solver.maxit; ++j) {
+	for (j = 0; j < iter; ++j) {
 		memset (adjcrt, 0, fmaconf.numbases * sizeof(complex float));
 		alpha = 0;
 		for (i = 0; i < srcmeas.count; ++i) {
@@ -77,7 +77,7 @@ float cgls (complex float *rn, complex float *sol, float regparm) {
 			pn[i] = rn[i] + beta * pn[i];
 		}
 
-		if (sqrt(rnorm / rninc) < solver.epscg) break;
+		if (sqrt(rnorm / rninc) < tol) break;
 	}
 
 	free (ifld);
@@ -86,7 +86,8 @@ float cgls (complex float *rn, complex float *sol, float regparm) {
 	return sqrt(rnorm / rninc);
 }
 
-float cgmn (complex float *rhs, complex float *sol, float regparm) {
+float cgmn (complex float *rhs, complex float *sol,
+		float regparm, int iter, float tol) {
 	int i, j, nmeas;
 	complex float *ifld, *mptr, *rn, *pn, *scat, *adjcrt, *asol;
 	float rnorm, pnorm, lrnorm, alpha, beta, rninc;
@@ -112,7 +113,7 @@ float cgmn (complex float *rhs, complex float *sol, float regparm) {
 
 	pnorm = (rninc = rnorm);
 
-	for (j = 0; j < solver.maxit; ++j) {
+	for (j = 0; j < iter; ++j) {
 		alpha = 0;
 		memset (adjcrt, 0, fmaconf.numbases * sizeof(complex float));
 		for (i = 0, mptr = pn; i < srcmeas.count; ++i) {
@@ -163,7 +164,7 @@ float cgmn (complex float *rhs, complex float *sol, float regparm) {
 			pn[i] = rn[i] + beta * pn[i];
 		}
 
-		if (sqrt(rnorm / rninc) < solver.epscg) break;
+		if (sqrt(rnorm / rninc) < tol) break;
 	}
 
 	memset (sol, 0, fmaconf.numbases * sizeof(complex float));

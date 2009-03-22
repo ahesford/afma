@@ -38,10 +38,13 @@ void getdbimcfg (char *fname, int *maxit, float *regparm, float *tol) {
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%d", maxit);
 
-	/* Read the regularization bounds and step. */
+	/* Read the regularization bounds, step and skip. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %f", regparm, regparm + 1, regparm + 2);
+	/* The skip defaults to 1, if none is provided. */
+	if (sscanf (buf, "%f %f %f %f", regparm, regparm + 1,
+				regparm + 2, regparm + 3) < 4)
+		regparm[3] = 1;
 
 	/* Read the DBIM tolerance. */
 	skipcomments (fp);
@@ -182,6 +185,9 @@ void getcontrast (char *fname, int *bslist, int nbs) {
 	FILE *fp;
 	int size[3], i, offset;
 	long spos;
+
+	/* Zero out the contrast in case nothing can be read. */
+	memset (fmaconf.contrast, 0, nbs * sizeof(complex float));
 
 	if (!(fp = fopen (fname, "r"))) {
 		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
