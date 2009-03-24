@@ -9,8 +9,6 @@ typedef struct {
 	float prange[2], trange[2], *locations;
 } measdesc;
 
-extern measdesc srcmeas, obsmeas;
-
 int farfield (complex float *, measdesc *, complex float *);
 int directfield (complex float *, measdesc *, complex float *);
 int buildlocs (measdesc *);

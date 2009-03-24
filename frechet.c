@@ -14,12 +14,12 @@
 
 complex float *zwork, *zwcrt, *rcvgrf;
 
-complex float *bldfrechbuf (int size) {
+complex float *bldfrechbuf (int size, measdesc *obs) {
 	zwork = malloc (2 * size * sizeof(complex float));
 	zwcrt = zwork + size;
 
-	rcvgrf = malloc (fmaconf.numbases * obsmeas.count * sizeof(complex float));
-	precompgrf (&obsmeas, rcvgrf);
+	rcvgrf = malloc (fmaconf.numbases * obs->count * sizeof(complex float));
+	precompgrf (obs, rcvgrf);
 
 	return zwork;
 }
@@ -30,7 +30,8 @@ void delfrechbuf (void) {
 }
 
 /* Computes a contribution to the Frechet derivative for one transmitter. */
-int frechet (complex float *crt, complex float *fld, complex float *sol) {
+int frechet (complex float *crt, complex float *fld,
+		complex float *sol, measdesc *obs, solveparm *slv) {
 	int j;
 
 	/* Given the test vector and field distribution, compute the currents. */
@@ -42,39 +43,40 @@ int frechet (complex float *crt, complex float *fld, complex float *sol) {
 	ScaleME_applyParFMA (REGULAR, zwcrt, zwork);
 
 	/* Compute the Frechet derivative field. */
-	cgmres (zwork, zwork, 1);
+	cgmres (zwork, zwork, 1, slv);
 
 	/* Convert this into a current distribution. */
 	for (j = 0; j < fmaconf.numbases; ++j)
 		zwork[j] = fmaconf.contrast[j] * zwork[j] + zwcrt[j];
 
 	/* Compute the measured scattered field. */
-	farfield (zwork, &obsmeas, sol);
-	MPI_Bcast (sol, 2 * obsmeas.count, MPI_FLOAT, 0, MPI_COMM_WORLD);
+	farfield (zwork, obs, sol);
+	MPI_Bcast (sol, 2 * obs->count, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
-	return obsmeas.count;
+	return obs->count;
 }
 
-int frechadj (complex float *mag, complex float *fld, complex float *sol) {
+int frechadj (complex float *mag, complex float *fld,
+		complex float *sol, measdesc *obs, solveparm *slv) {
 	int j;
 	double factor = fmaconf.k0 * fmaconf.k0
 		* fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
 
-	for (j = 0; j < obsmeas.count; ++j)
+	for (j = 0; j < obs->count; ++j)
 		mag[j] = conj(mag[j]);
 
 	/* Compute the RHS for the provided magnitude distribution.
 	 * For now, the slow, direct calculation routine will be used. */
-	precomprhs (zwork, &obsmeas, mag, rcvgrf);
+	precomprhs (zwork, obs, mag, rcvgrf);
 
 	/* Compute the adjoint Frechet derivative field. */
-	cgmres (zwork, zwork, 1);
+	cgmres (zwork, zwork, 1, slv);
 
 	/* Augment the solution for this transmitter. */
 	for (j = 0; j < fmaconf.numbases; ++j)
 		sol[j] += factor * conj (zwork[j] * fld[j]);
 
-	for (j = 0; j < obsmeas.count; ++j)
+	for (j = 0; j < obs->count; ++j)
 		mag[j] = conj(mag[j]);
 
 	return fmaconf.numbases;

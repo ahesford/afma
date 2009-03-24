@@ -34,6 +34,9 @@ int main (int argc, char **argv) {
 	double cputime;
 	int debug = 0;
 
+	measdesc obsmeas, srcmeas;
+	solveparm solver;
+
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
 	MPI_Comm_size (MPI_COMM_WORLD, &mpisize);
@@ -72,7 +75,7 @@ int main (int argc, char **argv) {
 
 	/* Read the basic configuration. */
 	sprintf (fname, "%s.input", inproj);
-	getconfig (fname);
+	getconfig (fname, &solver, NULL, &srcmeas, &obsmeas);
 
 	/* Convert the source range format to an explicit location list. */
 	buildlocs (&srcmeas);
@@ -121,7 +124,7 @@ int main (int argc, char **argv) {
 
 		tstart = clock ();
 		/* Run the iterative solver. The solution is stored in the RHS. */
-		cgmres (rhs, rhs, 0);
+		cgmres (rhs, rhs, 0, &solver);
 		tend = clock ();
 		cputime = (double) (tend - tstart) / CLOCKS_PER_SEC;
 

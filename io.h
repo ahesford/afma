@@ -3,11 +3,13 @@
 
 #include <stdio.h>
 #include <complex.h>
+
+#include "itsolver.h"
 #include "measure.h"
 
 void skipcomments (FILE *);
 void getdbimcfg (char *, int *, float *, float *);
-void getconfig (char *);
+void getconfig (char *, solveparm *, solveparm *, measdesc *, measdesc *);
 void getcontrast (char *, int *, int);
 
 int prtcontrast (char *, complex float *);

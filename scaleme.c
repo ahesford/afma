@@ -77,8 +77,6 @@ int ScaleME_preconf (void) {
 }
 
 int ScaleME_postconf (void) {
-	long mem = 0;
-
 	if (ScaleME_completeSetUp()) {
 		fprintf(stdout, "ERROR: ScaleME setup routine failed.\n");
 		goto error_handle;
@@ -87,13 +85,6 @@ int ScaleME_postconf (void) {
 	if (ScaleME_initParHostDataStructs()) {
 		fprintf(stdout, "ERROR: ScaleME parallel host init failed.\n");
 		goto error_handle;
-	}
-
-	if (solver.precond) {
-		if (ScaleME_initParBP (&mem)) {
-			fprintf (stdout, "ERROR: ScaleME BD preconditioner failed.\n");
-			goto error_handle;
-		}
 	}
 
 	return 0;

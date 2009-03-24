@@ -13,8 +13,6 @@
 
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
-measdesc srcmeas, obsmeas;
-
 int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	int i, j;
 	float *thetas, dtheta;

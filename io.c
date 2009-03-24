@@ -55,7 +55,8 @@ void getdbimcfg (char *fname, int *maxit, float *regparm, float *tol) {
 }
 
 /* Read the configuration file and set parameters. */
-void getconfig (char *fname) {
+void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
+		measdesc *src, measdesc *obs) {
 	FILE *fp;
 	char buf[1024];
 
@@ -116,66 +117,64 @@ void getconfig (char *fname) {
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%d", &(fmaconf.interpord));
 
-	/* Read the iterative solver configuration. */
+	/* Read the high-accuracy iterative solver configuration. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%d %d", &(solver.maxit), &(solver.restart));
+	sscanf (buf, "%d %d %f", &(hislv->maxit),
+			&(hislv->restart), &(hislv->epscg));
 
-	/* Read the iterative solver preconditioner setting. */
+	/* Read the low-accuracy iterative solver configuration, if desired. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%d", &(solver.precond));
-
-	/* Read the iterative solver tolerance. */
-	skipcomments (fp);
-	fgets (buf, 1024, fp);
-	sscanf (buf, "%f", &(solver.epscg));
+	if (loslv)
+		sscanf (buf, "%d %d %f", &(loslv->maxit),
+				&(loslv->restart), &(loslv->epscg));
 
 	/* Read the source radius. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f", &(srcmeas.radius));
+	sscanf (buf, "%f", &(src->radius));
 
 	/* Read the source theta values. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %d", srcmeas.trange, srcmeas.trange + 1, &(srcmeas.ntheta));
+	sscanf (buf, "%f %f %d", src->trange, src->trange + 1, &(src->ntheta));
 
 	/* Convert the degree values to radians. */
-	srcmeas.trange[0] *= M_PI / 180;
-	srcmeas.trange[1] *= M_PI / 180;
+	src->trange[0] *= M_PI / 180;
+	src->trange[1] *= M_PI / 180;
 
 	/* Read the source phi values. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %d", srcmeas.prange, srcmeas.prange + 1, &(srcmeas.nphi));
+	sscanf (buf, "%f %f %d", src->prange, src->prange + 1, &(src->nphi));
 
 	/* Convert the degree values to radians. */
-	srcmeas.prange[0] *= M_PI / 180;
-	srcmeas.prange[1] *= M_PI / 180;
+	src->prange[0] *= M_PI / 180;
+	src->prange[1] *= M_PI / 180;
 
 	/* Read the observer radius. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f", &(obsmeas.radius));
+	sscanf (buf, "%f", &(obs->radius));
 
 	/* Read the observer theta values. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %d", obsmeas.trange, obsmeas.trange + 1, &(obsmeas.ntheta));
+	sscanf (buf, "%f %f %d", obs->trange, obs->trange + 1, &(obs->ntheta));
 
 	/* Convert the degree values to radians. */
-	obsmeas.trange[0] *= M_PI / 180;
-	obsmeas.trange[1] *= M_PI / 180;
+	obs->trange[0] *= M_PI / 180;
+	obs->trange[1] *= M_PI / 180;
 
 	/* Read the observer phi values. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %d", obsmeas.prange, obsmeas.prange + 1, &(obsmeas.nphi));
+	sscanf (buf, "%f %f %d", obs->prange, obs->prange + 1, &(obs->nphi));
 
 	/* Convert the degree values to radians. */
-	obsmeas.prange[0] *= M_PI / 180;
-	obsmeas.prange[1] *= M_PI / 180;
+	obs->prange[0] *= M_PI / 180;
+	obs->prange[1] *= M_PI / 180;
 
 	fclose (fp);
 }

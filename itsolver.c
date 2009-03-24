@@ -11,8 +11,6 @@
 #include "mlfma.h"
 #include "itsolver.h"
 
-solveparm solver;
-
 static int compcrt (Complex *dst, Complex *src) {
 	int i;
 	complex float val, buf;
@@ -38,7 +36,7 @@ static int augcrt (Complex *dst, Complex *src) {
 	return fmaconf.numbases;
 }
 
-int cgmres (complex float *rhs, complex float *sol, int silent) {
+int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
 	int icntl[7], irc[5], lwork, info[3], i, myRank;
 	float rinfo[2], cntl[5], ldot[2], gdot[2];
 	Complex *zwork, *solbuf, *tx, *ty, *tz, lzdot;
@@ -46,8 +44,8 @@ int cgmres (complex float *rhs, complex float *sol, int silent) {
 	MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 
 	/* Allocate memory for work array. */
-	lwork = solver.restart * solver.restart +
-		solver.restart * (fmaconf.numbases + 5) + 5 * fmaconf.numbases + 1;
+	lwork = slv->restart * slv->restart +
+		slv->restart * (fmaconf.numbases + 5) + 5 * fmaconf.numbases + 1;
 	zwork = calloc (lwork, sizeof(Complex));
 	solbuf = malloc (fmaconf.numbases * sizeof(Complex));
 
@@ -61,29 +59,28 @@ int cgmres (complex float *rhs, complex float *sol, int silent) {
 	/* None of the processes should make noise about GMRES. */
 	if (silent) icntl[0] = icntl[1] = icntl[2] = 0;
 
-	/* Decide if a preconditioner should be used. */
-	if (solver.precond) icntl[3] = 1;
-	else icntl[3] = 0;
+	/* A preconditioner will not be used. */
+	icntl[3] = 0;
 
 	icntl[4] = 0; /* Use MGS for orthogonalization. */
 	icntl[5] = 1; /* Use an initial guess: the incident field. */
-	icntl[6] = solver.maxit; /* Set the maximum interation count. */
+	icntl[6] = slv->maxit; /* Set the maximum interation count. */
 
-	cntl[0] = solver.epscg;
+	cntl[0] = slv->epscg;
 
-	/* copy the initial guess: use the RHS. */
+	/* Copy the initial guess: use the RHS. */
 	memcpy (zwork, rhs, fmaconf.numbases * sizeof(complex float));
-	/* Copy the unpreconditioned RHS. */
+	/* Copy the RHS. */
 	memcpy (zwork + fmaconf.numbases, rhs, fmaconf.numbases * sizeof(complex float));
 
 	do {
 		drivecgmres_(&(fmaconf.gnumbases), &(fmaconf.numbases),
-				&(solver.restart), &lwork, zwork, irc,
+				&(slv->restart), &lwork, zwork, irc,
 				icntl, cntl, info, rinfo);
 		if (!(info[0]) && !(irc[0])) break;
 
 		switch (irc[0]) {
-		case EXIT: case RIGHT_PRECOND: break;
+		case EXIT: case RIGHT_PRECOND: case LEFT_PRECOND: break;
 		case MATVEC:
 			   /* fortran indices start from 1 */
 			   tx = zwork+irc[1] - 1;
@@ -91,18 +88,6 @@ int cgmres (complex float *rhs, complex float *sol, int silent) {
 			   compcrt (solbuf, tx);
 			   ScaleME_applyParFMA(REGULAR, solbuf, ty);
 			   augcrt (ty, tx);
-			   break;
-		case LEFT_PRECOND:
-			   tx = zwork+irc[1] - 1;
-			   ty = zwork+irc[3] - 1;
-
-			   /* No preconditioner is desired */
-			   if (!solver.precond) {
-				   memcpy (ty, tx, fmaconf.numbases * sizeof(Complex));
-				   break;
-			   }
-
-			   ScaleME_applyParBP (0, tx, ty);
 			   break;
 		case DOT_PROD:
 			   ty = zwork + irc[2] - 1;

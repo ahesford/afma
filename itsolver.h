@@ -4,12 +4,10 @@
 #include <Complex.h> /* ScaleME complex include */
 
 typedef struct {
-  int restart, maxit, precond;
+  int restart, maxit;
   float epscg;
 } solveparm;
 
-extern solveparm solver;
-
-int cgmres (complex float *, complex float *, int);
+int cgmres (complex float *, complex float *, int, solveparm *);
 
 #endif /* __ITSOLVER_H_ */
