@@ -32,14 +32,14 @@ void usage (char *name) {
 float dbimerr (complex float *rn, complex float *field,
 	solveparm *hislv, solveparm *loslv, measdesc *src, measdesc *obs) {
 	complex float *rhs, *crt, *err, *fldptr;
-	float errnorm = 0, lerr;
+	float errnorm = 0, lerr, errd = 0;
 	int j, k;
 
 	err = malloc (obs->count * sizeof(complex float));
 	rhs = malloc (2 * fmaconf.numbases * sizeof(complex float));
 	crt = rhs + fmaconf.numbases;
 
-	memset (rn, 0, fmaconf.numbases * sizeof(complex float));
+	if (rn) memset (rn, 0, fmaconf.numbases * sizeof(complex float));
 	
 	for (j = 0, fldptr = field; j < src->count; ++j, fldptr += obs->count) {
 		/* Build the right-hand side for the specified location. Use
@@ -65,25 +65,27 @@ float dbimerr (complex float *rn, complex float *field,
 			err[k] = fldptr[k] - err[k];
 			lerr = cabs(err[k]);
 			errnorm += lerr * lerr;
+			lerr = cabs(fldptr[k]);
+			errd += lerr * lerr;
 		}
 		
 		/* Evaluate the adjoint Frechet derivative. */
-		frechadj (err, rhs, rn, obs, loslv);
+		if (rn) frechadj (err, rhs, rn, obs, loslv);
 	}
 
 	free (rhs);
 	free (err);
 
-	return errnorm;
+	return sqrt(errnorm / errd);
 }
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, j, k, nmeas, dbimit;
-	complex float *rn, *crt, *field;
+	int mpirank, mpisize, i, j, nmeas, dbimit, q;
+	complex float *rn, *crt, *field, *fldptr;
 	float errnorm, tolerance, regparm[4], cgnorm, erninc;
-	solveparm hislv, loslv, *slv;
-	measdesc obsmeas, srcmeas;
+	solveparm hislv, loslv;
+	measdesc obsmeas, srcmeas, ssrc;
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -164,24 +166,21 @@ int main (int argc, char **argv) {
 
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
 
-	/* Start a two-pass DBIM, with easier tolerances in the first pass. */
-	for (k = 0, slv = &loslv; k < 2; ++k, slv = &hislv) {
-		if (!mpirank)
-			fprintf (stderr, "DBIM pass %d (%d iterations)\n", k + 1, dbimit);
-		
-		for (i = 0; i < dbimit; ++i) {
-			errnorm = dbimerr (rn, field, &hislv, slv, &srcmeas, &obsmeas);
-			errnorm = sqrt (errnorm / erninc);
-			
-			if (!mpirank)
-				fprintf (stderr, "DBIM relative error: %g, iteration %d.\n", errnorm, i);
-			if (errnorm < tolerance) break;
+	/* One source per iteration. */
+	ssrc.count = 1;
+
+	/* Start a two-pass DBIM, with leapfrogging and low tolerances first. */
+	if (!mpirank) fprintf (stderr, "First DBIM pass (%d iterations)\n", dbimit);
+	for (i = 0; i < dbimit; ++i) {
+		for (q = 0, fldptr = field; q < srcmeas.count; ++q, fldptr += obsmeas.count) {
+			ssrc.locations = srcmeas.locations + 3 * q;
+			errnorm = dbimerr (rn, fldptr, &hislv, &loslv, &ssrc, &obsmeas);
 			
 			/* Solve the system with CG for least-squares. */
-			cgnorm = cgls (rn, crt, slv, &srcmeas, &obsmeas, regparm[0]);
+			cgnorm = cgls (rn, crt, &loslv, &ssrc, &obsmeas, regparm[0]);
 			
 			if (!mpirank)
-				fprintf (stderr, "CG relative error: %g, iteration %d.\n", cgnorm, i);
+				fprintf (stderr, "DBIM: %g, CG: %g (%d/%d).\n", errnorm, cgnorm, i, q);
 			
 			/* Update the background. */
 			for (j = 0; j < fmaconf.numbases; ++j)
@@ -189,20 +188,42 @@ int main (int argc, char **argv) {
 			
 			sprintf (fname, "%s.inverse.%03d", outproj, i);
 			prtcontrast (fname, fmaconf.contrast);
-			
-			/* Scale the DBIM regularization parameter, if appropriate. */
-			if (!((i + 1) % (int)(regparm[3])) && regparm[0] > regparm[1]) {
-				regparm[0] *= regparm[2];
-				if (!mpirank)
-					fprintf (stderr, "Regularization parameter: %g\n", regparm[0]);
-			}
 		}
+		
+		if (!mpirank) fprintf (stderr, "Reassess DBIM error.\n");
+		errnorm = dbimerr (NULL, field, &hislv, &loslv, &srcmeas, &obsmeas);
+		
+		if (!mpirank)
+			fprintf (stderr, "DBIM relative error: %g, iteration %d.\n", errnorm, i);
+		if (errnorm < tolerance) break;
+		
+		/* Scale the DBIM regularization parameter, if appropriate. */
+		if (!((i + 1) % (int)(regparm[3])) && regparm[0] > regparm[1]) {
+			regparm[0] *= regparm[2];
+			if (!mpirank)
+				fprintf (stderr, "Regularization parameter: %g\n", regparm[0]);
+		}
+	}
 
-		/* Minimize the regularization parameter. */
-		regparm[0] = regparm[1];
+	/* Two more iterations at high accuracy, without leapfrogging. */
+	if (i < dbimit) ++i;
 
-		/* Two more high-accuracy DBIM iterations. */
-		dbimit = 2;
+	if (!mpirank) fprintf (stderr, "Second DBIM pass\n");
+	for (dbimit = i + 2; i < dbimit; ++i) {
+		errnorm = dbimerr (rn, field, &hislv, &hislv, &srcmeas, &obsmeas);
+
+		/* Solve the system with CG for least-squares. */
+		/* Use the lowest desired regularization parameter. */
+		cgnorm = cgls (rn, crt, &hislv, &srcmeas, &obsmeas, regparm[1]);
+		
+		if (!mpirank)
+			fprintf (stderr, "DBIM: %g, CG: %g (%d).\n", errnorm, cgnorm, i);
+
+		for (j = 0; j < fmaconf.numbases; ++j)
+			fmaconf.contrast[j] += crt[j];
+
+		sprintf (fname, "%s.inverse.%03d", outproj, i);
+		prtcontrast (fname, fmaconf.contrast);
 	}
 
 	ScaleME_finalizeParHostFMA ();
