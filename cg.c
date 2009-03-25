@@ -16,7 +16,7 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 		measdesc *src, measdesc *obs, float regparm) {
 	int i, j, k;
 	complex float *ifld, *pn, *scat, *adjcrt;
-	float rnorm, pnorm, lrnorm, alpha, beta, rninc;
+	float rnorm, pnorm, lrnorm, lpnorm, alpha, beta, rninc;
 
 	ifld = malloc (3 * fmaconf.numbases * sizeof(complex float));
 	pn = ifld + fmaconf.numbases;
@@ -71,11 +71,18 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 
 		beta = rnorm / beta;
 
+		pnorm = lpnorm = 0;
+
 		/* Update the solution and the search vector. */
-		for (i = 0; i < fmaconf.numbases; ++i) {
+		for (i = 0, lpnorm = 0; i < fmaconf.numbases; ++i) {
 			sol[i] += alpha * pn[i];
 			pn[i] = rn[i] + beta * pn[i];
+			pnorm = cabs(pn[i]);
+			lpnorm += pnorm * pnorm;
 		}
+
+		/* Reduce the new search norm. */
+		MPI_Allreduce (&lpnorm, &pnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
 		if (sqrt(rnorm / rninc) < slv->epscg) break;
 	}
@@ -116,19 +123,16 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 	for (j = 0; j < slv->maxit; ++j) {
 		alpha = 0;
 		memset (adjcrt, 0, fmaconf.numbases * sizeof(complex float));
-		for (i = 0, mptr = pn; i < src->count; ++i) {
+		for (i = 0, mptr = pn; i < src->count; ++i, mptr += obs->count) {
 			/* Build the incident field. */
 			buildrhs (ifld, src->locations + 3 * i);
 			/* Solve for the internal field. */
 			cgmres (ifld, ifld, 1, slv);
 			/* Compute the adjoint Frechet derivative. */
 			frechadj (mptr, ifld, adjcrt, obs, slv);
-			/* Augment the pointer. */
-			mptr += obs->count;
 		}
 
-		lrnorm = 0;
-		for (i = 0; i < fmaconf.numbases; ++i) { 
+		for (i = 0, lrnorm = 0; i < fmaconf.numbases; ++i) { 
 			alpha = cabs (adjcrt[i]);
 			lrnorm += alpha * alpha;
 		}
@@ -138,15 +142,13 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 		alpha  = rnorm / (alpha + regparm * pnorm);
 		beta = rnorm;
 
-		for (i = 0, mptr = scat; i < src->count; ++i) {
+		for (i = 0, mptr = scat; i < src->count; ++i, mptr += obs->count) {
 			/* Build the incident field. */
 			buildrhs (ifld, src->locations + 3 * i);
 			/* Solve for the internal field. */
 			cgmres (ifld, ifld, 1, slv);
 			/* Compute the adjoint Frechet derivative. */
 			frechet (adjcrt, ifld, mptr, obs, slv);
-			/* Augment the pointer. */
-			mptr += obs->count;
 		}
 
 		/* Update the residual. */
@@ -159,9 +161,11 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 		beta = rnorm / beta;
 
 		/* Update the solution and the search vector. */
-		for (i = 0; i < nmeas; ++i) {
+		for (i = 0, pnorm = 0; i < nmeas; ++i) {
 			asol[i] += alpha * pn[i];
 			pn[i] = rn[i] + beta * pn[i];
+			lrnorm = cabs(pn[i]);
+			pnorm += lrnorm * lrnorm;
 		}
 
 		if (sqrt(rnorm / rninc) < slv->epscg) break;
@@ -169,17 +173,13 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 
 	memset (sol, 0, fmaconf.numbases * sizeof(complex float));
 	/* Compute the adjoint acting on the RHS. */
-	for (i = 0, mptr = asol; i < src->count; ++i) {
+	for (i = 0, mptr = asol; i < src->count; ++i, mptr += obs->count) {
 		/* Build the incident field. */
 		buildrhs (ifld, src->locations + 3 * i);
 		/* Solve for the internal field. */
 		cgmres (ifld, ifld, 1, slv);
-
 		/* The contribution to the adjoint Frechet derivative. */
 		frechadj (mptr, ifld, sol, obs, slv);
-
-		/* Augment the RHS pointer. */
-		mptr += obs->count;
 	}
 
 	free (ifld);
