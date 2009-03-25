@@ -152,6 +152,9 @@ int main (int argc, char **argv) {
 
 	free (rhs);
 	free (field);
+	free (fmaconf.contrast);
+	free (srcmeas.locations);
+	free (obsmeas.locations);
 
 	MPI_Barrier (MPI_COMM_WORLD);
 	MPI_Finalize ();
