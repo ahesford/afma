@@ -20,7 +20,7 @@
 #include "cg.h"
 
 void usage (char *);
-float dbimerr (complex float *, complex float *,
+float dbimerr (complex float *, complex float *, complex float *,
 		solveparm *, solveparm *, measdesc *, measdesc *);
 
 void usage (char *name) {
@@ -29,13 +29,15 @@ void usage (char *name) {
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
 }
 
-float dbimerr (complex float *rn, complex float *field,
+float dbimerr (complex float *error, complex float *rn, complex float *field,
 	solveparm *hislv, solveparm *loslv, measdesc *src, measdesc *obs) {
 	complex float *rhs, *crt, *err, *fldptr;
 	float errnorm = 0, lerr, errd = 0;
 	int j, k;
 
-	err = malloc (obs->count * sizeof(complex float));
+	if (!error) err = malloc (obs->count * sizeof(complex float));
+	else err = error;
+
 	rhs = malloc (2 * fmaconf.numbases * sizeof(complex float));
 	crt = rhs + fmaconf.numbases;
 
@@ -71,10 +73,12 @@ float dbimerr (complex float *rn, complex float *field,
 		
 		/* Evaluate the adjoint Frechet derivative. */
 		if (rn) frechadj (err, rhs, rn, obs, loslv);
+		/* Save this error column, if storage is available. */
+		if (error) err += obs->count;
 	}
 
 	free (rhs);
-	free (err);
+	if (!error && err) free (err);
 
 	return sqrt(errnorm / errd);
 }
@@ -82,7 +86,7 @@ float dbimerr (complex float *rn, complex float *field,
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i, j, nmeas, dbimit, q;
-	complex float *rn, *crt, *field, *fldptr;
+	complex float *rn, *crt, *field, *fldptr, *error;
 	float errnorm, tolerance, regparm[4], cgnorm, erninc;
 	solveparm hislv, loslv;
 	measdesc obsmeas, srcmeas, ssrc;
@@ -169,15 +173,18 @@ int main (int argc, char **argv) {
 	/* One source per iteration. */
 	ssrc.count = 1;
 
+	/* The error storage vector for a single transmitter. */
+	error = malloc (obsmeas.count * sizeof(complex float));
+
 	/* Start a two-pass DBIM, with leapfrogging and low tolerances first. */
 	if (!mpirank) fprintf (stderr, "First DBIM pass (%d iterations)\n", dbimit);
 	for (i = 0; i < dbimit; ++i) {
 		for (q = 0, fldptr = field; q < srcmeas.count; ++q, fldptr += obsmeas.count) {
 			ssrc.locations = srcmeas.locations + 3 * q;
-			errnorm = dbimerr (rn, fldptr, &hislv, &loslv, &ssrc, &obsmeas);
+			errnorm = dbimerr (error, NULL, fldptr, &hislv, &loslv, &ssrc, &obsmeas);
 			
-			/* Solve the system with CG for least-squares. */
-			cgnorm = cgls (rn, crt, &loslv, &ssrc, &obsmeas, regparm[0]);
+			/* Solve the system with CG for minimum norm. */
+			cgnorm = cgmn (error, crt, &loslv, &ssrc, &obsmeas, regparm[0]);
 			
 			if (!mpirank)
 				fprintf (stderr, "DBIM: %g, CG: %g (%d/%d).\n", errnorm, cgnorm, i, q);
@@ -191,7 +198,7 @@ int main (int argc, char **argv) {
 		}
 		
 		if (!mpirank) fprintf (stderr, "Reassess DBIM error.\n");
-		errnorm = dbimerr (NULL, field, &hislv, &loslv, &srcmeas, &obsmeas);
+		errnorm = dbimerr (NULL, NULL, field, &hislv, &loslv, &srcmeas, &obsmeas);
 		
 		if (!mpirank)
 			fprintf (stderr, "DBIM relative error: %g, iteration %d.\n", errnorm, i);
@@ -210,7 +217,7 @@ int main (int argc, char **argv) {
 
 	if (!mpirank) fprintf (stderr, "Second DBIM pass\n");
 	for (dbimit = i + 2; i < dbimit; ++i) {
-		errnorm = dbimerr (rn, field, &hislv, &hislv, &srcmeas, &obsmeas);
+		errnorm = dbimerr (NULL, rn, field, &hislv, &hislv, &srcmeas, &obsmeas);
 
 		/* Solve the system with CG for least-squares. */
 		/* Use the lowest desired regularization parameter. */
@@ -229,7 +236,11 @@ int main (int argc, char **argv) {
 	ScaleME_finalizeParHostFMA ();
 
 	free (fmaconf.contrast);
+	free (fmaconf.gridints);
 	free (field);
+	free (error);
+	free (srcmeas.locations);
+	free (obsmeas.locations);
 	delfrechbuf ();
 
 	MPI_Barrier (MPI_COMM_WORLD);
