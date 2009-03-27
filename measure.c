@@ -14,12 +14,19 @@
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
 int farfield (complex float *currents, measdesc *obs, complex float *result) {
-	int i, j;
+	int i, mpirank;
 	float *thetas, dtheta;
-	Complex *fields = (Complex *)result;
+	Complex *fields = NULL, *crts;
 	complex float fact;
 
+	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
+
+	/* The theta samples. */
 	thetas = malloc (obs->ntheta * sizeof(float));
+
+	/* Conversion between intrinsic types and ScaleME types. */
+	crts = malloc (fmaconf.numbases * sizeof(Complex)); 
+	if (!mpirank) fields = malloc (obs->count * sizeof(Complex));
 
 	dtheta = (obs->trange[1] - obs->trange[0]);
 	dtheta /= MAX(obs->ntheta - 1, 1);
@@ -27,48 +34,66 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	for (i = 0; i < obs->ntheta; ++i)
 		thetas[i] = obs->trange[0] + i * dtheta;
 
+	for (i = 0; i < fmaconf.numbases; ++i) {
+		crts[i].re = creal(currents[i]);
+		crts[i].im = cimag(currents[i]);
+	}
+
 	/* The result must be a pointer to the pointer. */
 	if (ScaleME_evlRootFarFld_PI (6, obs->ntheta, obs->nphi, thetas,
-				obs->prange, (Complex *)currents, &fields))
+				obs->prange, crts, &fields))
 		return 0;
 
-	/* The far-field pattern already has a factor of k in the front.
-	 * However, the actual integral needs (k^2 / 4 pi), so we need the
-	 * extra factors in the field. */
-	j = obs->ntheta * obs->nphi;
+	if (!mpirank) {
+		/* The far-field pattern already has a factor of k in the
+		 * front. However, the actual integral needs (k^2 / 4 pi), so
+		 * we need the extra factors in the field. Also scale the
+		 * pattern to produce actual measurements on the desired
+		 * sphere. */
+		fact = fmaconf.k0 * cexp (I * fmaconf.k0 * obs->radius) / (4 * M_PI * obs->radius);
+		for (i = 0; i < obs->count; ++i)
+			result[i] = fact * (fields[i].re + I * fields[i].im);
+	}
 
-	/* Scale the pattern to produce actual measurements on the desired sphere. */
-	fact = fmaconf.k0 * cexp (I * fmaconf.k0 * obs->radius) / (4 * M_PI * obs->radius);
-	for (i = 0; i < j; ++i) result[i] *= fact;
+	/* Distribute the solution to all processors. */
+	MPI_Bcast (result, 2 * obs->count, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
 	free (thetas);
+	free (crts);
+	if (!mpirank) free (fields);
 	return 1;
 }
 
-int directfield (complex float *currents, measdesc *obs, complex float *result) {
-	int i, j, gi;
-	complex float val, *buf;
-	float cen[3];
+int directfield (complex float *currents, measdesc *obs,
+		complex float *result, complex float *grf) {
+	int i, j;
+	complex float val, *buf, *gptr;
+	float cen[3], fact;
 
-	buf = malloc (obs->count * sizeof(complex float));
-	memset (buf, 0, obs->count * sizeof(complex float));
+	buf = calloc (obs->count, sizeof(complex float));
 
-	/* Compute the fields radiated by the local fields. */
-	for (j = 0; j < fmaconf.numbases; ++j) {
-		gi = fmaconf.bslist[j];
-		bscenter (gi, cen);
-		for (i = 0; i < obs->count; ++i) {
-			val = fsgreen (fmaconf.k0, cen, obs->locations + 3 * i);
-			buf[i] += val * currents[j];
+	/* The integration factor. */
+	fact = fmaconf.k0 * fmaconf.k0 
+		* fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
+
+	if (!grf) {
+		/* Compute the fields radiated by the local fields. */
+		for (j = 0; j < fmaconf.numbases; ++j) {
+			bscenter (fmaconf.bslist[j], cen);
+			for (i = 0; i < obs->count; ++i) {
+				val = fsgreen (fmaconf.k0, cen, obs->locations + 3 * i);
+				buf[i] += fact * val * currents[j];
+			}
+		}
+	} else {
+		/* The Green's function has already been precomputed. */
+		for (j = 0, gptr = grf; j < fmaconf.numbases; ++j) {
+			for (i = 0; i < obs->count; ++i, ++gptr) {
+				buf[i] += fact * currents[j] * (*gptr);
+			}
 		}
 	}
 
-	for (i = 0; i < obs->count; ++i) {
-		/* Scale by cell volume for one-point integration. */
-		buf[i] *= fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
-		/* Include the factor of k0^2 in front of the integral. */
-		buf[i] *= fmaconf.k0 * fmaconf.k0;
-	}
 
 	/* Collect the solution across all processors. */
 	MPI_Allreduce (buf, result, 2 * obs->count, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);

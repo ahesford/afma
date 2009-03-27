@@ -139,7 +139,7 @@ int main (int argc, char **argv) {
 		for (j = 0; j < fmaconf.numbases; ++j)
 			rhs[j] *= fmaconf.contrast[j];
 
-		farfield (rhs, &obsmeas, field);
+		directfield (rhs, &obsmeas, field, NULL);
 
 		/* Append the field for the current transmitter. */
 		if (!mpirank) {

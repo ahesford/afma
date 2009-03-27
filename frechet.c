@@ -50,8 +50,7 @@ int frechet (complex float *crt, complex float *fld,
 		zwork[j] = fmaconf.contrast[j] * zwork[j] + zwcrt[j];
 
 	/* Compute the measured scattered field. */
-	farfield (zwork, obs, sol);
-	MPI_Bcast (sol, 2 * obs->count, MPI_FLOAT, 0, MPI_COMM_WORLD);
+	directfield (zwork, obs, sol, rcvgrf);
 
 	return obs->count;
 }

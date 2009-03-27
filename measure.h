@@ -10,7 +10,7 @@ typedef struct {
 } measdesc;
 
 int farfield (complex float *, measdesc *, complex float *);
-int directfield (complex float *, measdesc *, complex float *);
+int directfield (complex float *, measdesc *, complex float *, complex float *);
 int buildlocs (measdesc *);
 
 #endif /* __MEASURE_H_ */

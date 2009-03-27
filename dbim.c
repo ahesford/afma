@@ -19,6 +19,8 @@
 #include "io.h"
 #include "cg.h"
 
+extern complex float *rcvgrf;
+
 void usage (char *);
 float dbimerr (complex float *, complex float *, complex float *,
 		solveparm *, solveparm *, measdesc *, measdesc *);
@@ -59,8 +61,7 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 		MPI_Barrier (MPI_COMM_WORLD);
 		
 		/* Evaluate the scattered field. */
-		farfield (crt, obs, err);
-		MPI_Bcast (err, 2 * obs->count, MPI_FLOAT, 0, MPI_COMM_WORLD);
+		directfield (crt, obs, err, rcvgrf);
 		
 		/* Compute the error vector. */
 		for (k = 0; k < obs->count; ++k) {
