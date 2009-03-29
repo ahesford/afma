@@ -26,9 +26,10 @@ float dbimerr (complex float *, complex float *, complex float *,
 		solveparm *, solveparm *, measdesc *, measdesc *);
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-o <output prefix>] -i <input prefix>\n", name);
+	fprintf (stderr, "Usage: %s [-l] [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
+	fprintf (stderr, "\t-l: Disable default leapfrog (Kaczmarz-like) iterations\n");
 }
 
 float dbimerr (complex float *error, complex float *rn, complex float *field,
@@ -86,9 +87,9 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, j, nmeas, dbimit, q;
+	int mpirank, mpisize, i, j, nmeas, dbimit, q, lfrog = 1;
 	complex float *rn, *crt, *field, *fldptr, *error;
-	float errnorm, tolerance, regparm[4], cgnorm, erninc;
+	float errnorm = 0, tolerance, regparm[4], cgnorm, erninc;
 	solveparm hislv, loslv;
 	measdesc obsmeas, srcmeas, ssrc;
 
@@ -100,13 +101,16 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:l")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
 			break;
 		case 'o':
 			outproj = optarg;
+			break;
+		case 'l':
+			lfrog = 0;
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -177,18 +181,35 @@ int main (int argc, char **argv) {
 	/* The error storage vector for a single transmitter. */
 	error = malloc (obsmeas.count * sizeof(complex float));
 
-	/* Start a two-pass DBIM, with leapfrogging and low tolerances first. */
+	/* Start a two-pass DBIM with low tolerances first. */
 	if (!mpirank) fprintf (stderr, "First DBIM pass (%d iterations)\n", dbimit);
 	for (i = 0; i < dbimit; ++i) {
-		for (q = 0, fldptr = field; q < srcmeas.count; ++q, fldptr += obsmeas.count) {
-			ssrc.locations = srcmeas.locations + 3 * q;
-			errnorm = dbimerr (error, NULL, fldptr, &hislv, &loslv, &ssrc, &obsmeas);
+		if (lfrog) {
+			/* Use the leapfrogging (Kaczmarz-like) method. */
+			for (q = 0, fldptr = field; q < srcmeas.count; ++q, fldptr += obsmeas.count) {
+				ssrc.locations = srcmeas.locations + 3 * q;
+				errnorm = dbimerr (error, NULL, fldptr, &hislv, &loslv, &ssrc, &obsmeas);
+				
+				/* Solve the system with CG for minimum norm. */
+				cgnorm = cgmn (error, crt, &loslv, &ssrc, &obsmeas, regparm[0]);
+				
+				if (!mpirank)
+					fprintf (stderr, "DBIM: %g, CG: %g (%d/%d).\n", errnorm, cgnorm, i, q);
+				
+				/* Update the background. */
+				for (j = 0; j < fmaconf.numbases; ++j)
+					fmaconf.contrast[j] += crt[j];
+				
+				sprintf (fname, "%s.inverse.%03d", outproj, i);
+				prtcontrast (fname, fmaconf.contrast);
+			}
 			
-			/* Solve the system with CG for minimum norm. */
-			cgnorm = cgmn (error, crt, &loslv, &ssrc, &obsmeas, regparm[0]);
-			
-			if (!mpirank)
-				fprintf (stderr, "DBIM: %g, CG: %g (%d/%d).\n", errnorm, cgnorm, i, q);
+			if (!mpirank) fprintf (stderr, "Reassess DBIM error.\n");
+			errnorm = dbimerr (NULL, NULL, field, &hislv, &loslv, &srcmeas, &obsmeas);
+		} else {
+			errnorm = dbimerr (NULL, rn, field, &hislv, &loslv, &srcmeas, &obsmeas);
+			/* Solve the system with CG for least squares. */
+			cgnorm = cgls (rn, crt, &loslv, &srcmeas, &obsmeas, regparm[0]);
 			
 			/* Update the background. */
 			for (j = 0; j < fmaconf.numbases; ++j)
@@ -197,9 +218,6 @@ int main (int argc, char **argv) {
 			sprintf (fname, "%s.inverse.%03d", outproj, i);
 			prtcontrast (fname, fmaconf.contrast);
 		}
-		
-		if (!mpirank) fprintf (stderr, "Reassess DBIM error.\n");
-		errnorm = dbimerr (NULL, NULL, field, &hislv, &loslv, &srcmeas, &obsmeas);
 		
 		if (!mpirank)
 			fprintf (stderr, "DBIM relative error: %g, iteration %d.\n", errnorm, i);
