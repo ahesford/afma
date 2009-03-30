@@ -231,16 +231,28 @@ int main (int argc, char **argv) {
 		}
 	}
 
+	free (error);
+	error = NULL;
+
 	/* Two more iterations at high accuracy, without leapfrogging. */
 	if (i < dbimit) ++i;
 
+	/* If the number of measurements is less than the number of pixels,
+	 * use the minimum-norm conjugate gradient. */
+	if (nmeas < fmaconf.gnumbases) error = malloc (nmeas * sizeof(complex float));
+
 	if (!mpirank) fprintf (stderr, "Second DBIM pass\n");
 	for (dbimit = i + 2; i < dbimit; ++i) {
-		errnorm = dbimerr (NULL, rn, field, &hislv, &hislv, &srcmeas, &obsmeas);
-
-		/* Solve the system with CG for least-squares. */
-		/* Use the lowest desired regularization parameter. */
-		cgnorm = cgls (rn, crt, &hislv, &srcmeas, &obsmeas, regparm[1]);
+		errnorm = cgnorm = 0;
+		if (nmeas < fmaconf.gnumbases) {
+			/* Find the minimum-norm solution. */
+			errnorm = dbimerr (error, NULL, field, &hislv, &hislv, &srcmeas, &obsmeas);
+			cgnorm = cgmn (error, crt, &hislv, &srcmeas, &obsmeas, regparm[1]);
+		} else {
+			/* Find the least-squares solution. */
+			errnorm = dbimerr (NULL, rn, field, &hislv, &hislv, &srcmeas, &obsmeas);
+			cgnorm = cgls (rn, crt, &hislv, &srcmeas, &obsmeas, regparm[1]);
+		}
 		
 		if (!mpirank)
 			fprintf (stderr, "DBIM: %g, CG: %g (%d).\n", errnorm, cgnorm, i);
@@ -257,7 +269,7 @@ int main (int argc, char **argv) {
 	free (fmaconf.contrast);
 	free (fmaconf.gridints);
 	free (field);
-	free (error);
+	if (error) free (error);
 	free (srcmeas.locations);
 	free (obsmeas.locations);
 	delfrechbuf ();
