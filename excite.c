@@ -17,7 +17,7 @@ int buildrhs (complex float *rhs, float *srcloc) {
 
 	for (i = 0; i < fmaconf.numbases; ++i) {
 		bscenter (fmaconf.bslist[i], ctr);
-		rhs[i] = fsgreen (fmaconf.k0, ctr, srcloc);
+		rhs[i] = fsplane (fmaconf.k0, ctr, srcloc);
 	}
 
 	return fmaconf.numbases;
@@ -31,7 +31,7 @@ int multirhs (complex float *rhs, measdesc *src, complex float *mag) {
 		rhs[i] = 0;
 		bscenter (fmaconf.bslist[i], ctr);
 		for (j = 0; j < src->count; ++j)
-			rhs[i] += mag[j] * fsgreen (fmaconf.k0, ctr, src->locations + 3 * j);
+			rhs[i] += mag[j] * fsplane (fmaconf.k0, ctr, src->locations + 3 * j);
 	}
 
 	return fmaconf.numbases * src->count;
@@ -45,7 +45,7 @@ int precompgrf (measdesc *src, complex float *grf) {
 	for (i = 0; i < fmaconf.numbases; ++i) {
 		bscenter (fmaconf.bslist[i], ctr);
 		for (j = 0; j < src->count; ++j) {
-			*ptr = fsgreen (fmaconf.k0, ctr, src->locations + 3 * j);
+			*ptr = fsplane (fmaconf.k0, ctr, src->locations + 3 * j);
 			++ptr;
 		}
 	}

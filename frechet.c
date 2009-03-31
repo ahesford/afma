@@ -50,7 +50,7 @@ int frechet (complex float *crt, complex float *fld,
 		zwork[j] = fmaconf.contrast[j] * zwork[j] + zwcrt[j];
 
 	/* Compute the measured scattered field. */
-	directfield (zwork, obs, sol, rcvgrf);
+	farfield (zwork, obs, sol);
 
 	return obs->count;
 }

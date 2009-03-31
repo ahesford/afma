@@ -62,7 +62,7 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 		MPI_Barrier (MPI_COMM_WORLD);
 		
 		/* Evaluate the scattered field. */
-		directfield (crt, obs, err, rcvgrf);
+		farfield (crt, obs, err);
 		
 		/* Compute the error vector. */
 		for (k = 0; k < obs->count; ++k) {
