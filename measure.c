@@ -119,10 +119,10 @@ int buildlocs (measdesc *desc) {
 	for (i = 0, k = 0; i < desc->ntheta; ++i) {
 		phi = desc->prange[0];
 		for (j = 0; j < desc->nphi; ++j, ++k) {
-			rst = obs->radius * sin (theta);
+			rst = desc->radius * sin (theta);
 			desc->locations[3 * k] = rst * cos (phi);
 			desc->locations[3 * k + 1] = rst * sin (phi);
-			desc->locations[3 * k + 2] = obs->radius * cos (theta);
+			desc->locations[3 * k + 2] = desc->radius * cos (theta);
 			phi += dphi;
 		}
 		theta += dtheta;
