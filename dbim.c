@@ -87,9 +87,9 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, j, nmeas, dbimit, q, lfrog = 1;
+	int mpirank, mpisize, i, j, nmeas, dbimit[2], q, lfrog = 1;
 	complex float *rn, *crt, *field, *fldptr, *error;
-	float errnorm = 0, tolerance, regparm[4], cgnorm, erninc;
+	float errnorm = 0, tolerance[2], regparm[4], cgnorm, erninc;
 	solveparm hislv, loslv;
 	measdesc obsmeas, srcmeas, ssrc;
 
@@ -133,7 +133,7 @@ int main (int argc, char **argv) {
 
 	/* Read the DBIM-specific configuration. */
 	sprintf (fname, "%s.dbimin", inproj);
-	getdbimcfg (fname, &dbimit, regparm, &tolerance);
+	getdbimcfg (fname, dbimit, regparm, tolerance);
 
 	/* Convert the source range format to an explicit location list. */
 	buildlocs (&srcmeas);
@@ -182,8 +182,8 @@ int main (int argc, char **argv) {
 	error = malloc (obsmeas.count * sizeof(complex float));
 
 	/* Start a two-pass DBIM with low tolerances first. */
-	if (!mpirank) fprintf (stderr, "First DBIM pass (%d iterations)\n", dbimit);
-	for (i = 0; i < dbimit; ++i) {
+	if (!mpirank) fprintf (stderr, "First DBIM pass (%d iterations)\n", dbimit[0]);
+	for (i = 0; i < dbimit[0]; ++i) {
 		if (lfrog) {
 			/* Use the leapfrogging (Kaczmarz-like) method. */
 			for (q = 0, fldptr = field; q < srcmeas.count; ++q, fldptr += obsmeas.count) {
@@ -221,7 +221,7 @@ int main (int argc, char **argv) {
 		
 		if (!mpirank)
 			fprintf (stderr, "DBIM relative error: %g, iteration %d.\n", errnorm, i);
-		if (errnorm < tolerance) break;
+		if (errnorm < tolerance[0]) break;
 		
 		/* Scale the DBIM regularization parameter, if appropriate. */
 		if (!((i + 1) % (int)(regparm[3])) && regparm[0] > regparm[1]) {
@@ -234,15 +234,15 @@ int main (int argc, char **argv) {
 	free (error);
 	error = NULL;
 
-	/* Two more iterations at high accuracy, without leapfrogging. */
-	if (i < dbimit) ++i;
+	/* More iterations at high accuracy, without leapfrogging. */
+	if (i < dbimit[0]) ++i;
 
 	/* If the number of measurements is less than the number of pixels,
 	 * use the minimum-norm conjugate gradient. */
 	if (nmeas < fmaconf.gnumbases) error = malloc (nmeas * sizeof(complex float));
 
-	if (!mpirank) fprintf (stderr, "Second DBIM pass\n");
-	for (dbimit = i + 2; i < dbimit; ++i) {
+	if (!mpirank) fprintf (stderr, "Second DBIM pass (%d iterations)\n", dbimit[1]);
+	for (dbimit[1] += i; i < dbimit[1]; ++i) {
 		errnorm = cgnorm = 0;
 		if (nmeas < fmaconf.gnumbases) {
 			/* Find the minimum-norm solution. */
@@ -254,14 +254,15 @@ int main (int argc, char **argv) {
 			cgnorm = cgls (rn, crt, &hislv, &srcmeas, &obsmeas, regparm[1]);
 		}
 		
-		if (!mpirank)
-			fprintf (stderr, "DBIM: %g, CG: %g (%d).\n", errnorm, cgnorm, i);
-
 		for (j = 0; j < fmaconf.numbases; ++j)
 			fmaconf.contrast[j] += crt[j];
 
 		sprintf (fname, "%s.inverse.%03d", outproj, i);
 		prtcontrast (fname, fmaconf.contrast);
+
+		if (!mpirank)
+			fprintf (stderr, "DBIM: %g, CG: %g (%d).\n", errnorm, cgnorm, i);
+		if (errnorm < tolerance[1]) break;
 	}
 
 	ScaleME_finalizeParHostFMA ();

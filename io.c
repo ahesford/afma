@@ -36,7 +36,7 @@ void getdbimcfg (char *fname, int *maxit, float *regparm, float *tol) {
 	/* Read the number of DBIM iterations. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%d", maxit);
+	if (sscanf (buf, "%d %d", maxit, maxit + 1) < 2) maxit[1] = maxit[0];
 
 	/* Read the regularization bounds, step and skip. */
 	skipcomments (fp);
@@ -49,7 +49,7 @@ void getdbimcfg (char *fname, int *maxit, float *regparm, float *tol) {
 	/* Read the DBIM tolerance. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f", tol);
+	if (sscanf (buf, "%f %f", tol, tol + 1) < 2) tol[1] = tol[2] / 10;
 
 	fclose (fp);
 }
