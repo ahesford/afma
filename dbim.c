@@ -200,7 +200,7 @@ int main (int argc, char **argv) {
 				for (j = 0; j < fmaconf.numbases; ++j)
 					fmaconf.contrast[j] += crt[j];
 				
-				sprintf (fname, "%s.inverse.%03d", outproj, i);
+				sprintf (fname, "%s.inverse.t%03d", outproj, q);
 				prtcontrast (fname, fmaconf.contrast);
 			}
 			
@@ -214,10 +214,10 @@ int main (int argc, char **argv) {
 			/* Update the background. */
 			for (j = 0; j < fmaconf.numbases; ++j)
 				fmaconf.contrast[j] += crt[j];
-			
-			sprintf (fname, "%s.inverse.%03d", outproj, i);
-			prtcontrast (fname, fmaconf.contrast);
 		}
+		
+		sprintf (fname, "%s.inverse.%03d", outproj, i);
+		prtcontrast (fname, fmaconf.contrast);
 		
 		if (!mpirank)
 			fprintf (stderr, "DBIM relative error: %g, iteration %d.\n", errnorm, i);
