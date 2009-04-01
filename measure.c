@@ -47,10 +47,8 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	if (!mpirank) {
 		/* The far-field pattern already has a factor of k in the
 		 * front. However, the actual integral needs (k^2 / 4 pi), so
-		 * we need the extra factors in the field. Also scale the
-		 * pattern to produce actual measurements on the desired
-		 * sphere. */
-		fact = fmaconf.k0 * cexp (I * fmaconf.k0 * obs->radius) / (4 * M_PI * obs->radius);
+		 * we need the extra factors in the field. */
+		fact = fmaconf.k0 / (4 * M_PI);
 		for (i = 0; i < obs->count; ++i)
 			result[i] = fact * (fields[i].re + I * fields[i].im);
 	}
@@ -121,11 +119,10 @@ int buildlocs (measdesc *desc) {
 	for (i = 0, k = 0; i < desc->ntheta; ++i) {
 		phi = desc->prange[0];
 		for (j = 0; j < desc->nphi; ++j, ++k) {
-			/* Don't use the radius with plane-waves. */
-			rst = sin (theta);
+			rst = obs->radius * sin (theta);
 			desc->locations[3 * k] = rst * cos (phi);
 			desc->locations[3 * k + 1] = rst * sin (phi);
-			desc->locations[3 * k + 2] = cos (theta);
+			desc->locations[3 * k + 2] = obs->radius * cos (theta);
 			phi += dphi;
 		}
 		theta += dtheta;
