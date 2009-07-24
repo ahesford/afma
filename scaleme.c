@@ -47,7 +47,6 @@ int ScaleME_preconf (void) {
 	ScaleME_setMAC (fmaconf.numbuffer);
 	ScaleME_setInterpOrder (fmaconf.interpord);
 
-	ScaleME_sqSetPreSorted (1);
 	ScaleME_setTopComputeLevel (fmaconf.toplev);
 	ScaleME_useSharedMemoryModel (fmaconf.sharedmax);
 
@@ -63,8 +62,11 @@ int ScaleME_preconf (void) {
 	/* open the std files */
 	MPFMA_stdout = stdout;
 	MPFMA_stderr = stderr; 
+
+	/* Use the external near-field interactions. */
+	ScaleME_setBlockDirInterFunc (blockinteract);
 	
-	error = ScaleME_initSetUp (MPI_COMM_WORLD, interaction,
+	error = ScaleME_initSetUp (MPI_COMM_WORLD, NULL,
 			radpattern, rcvpattern, bscenter);
 
 	if (error) {

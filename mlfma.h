@@ -29,5 +29,6 @@ void bsindex (int, int *);
 void interaction (int, int, Complex *);
 
 int preimpedance ();
+void blockinteract (int, int, int *, int *, complex float *, complex float *);
 
 #endif /* __MLFMA_H_ */

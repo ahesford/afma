@@ -155,3 +155,33 @@ int preimpedance () {
 
 	return totel;
 }
+
+/* Evaluate at a group of observers the fields due to a group of sources. */
+void blockinteract (int nsrc, int nobs, int *srclist, int *obslist,
+		complex float *srcfld, complex float *obsfld) {
+	int i, j, src[3], obs[3], dist[3], idx;
+
+	for (i = 0; i < nobs; ++i) {
+		/* Find the observer index. */
+		bsindex (obslist[i], obs);
+
+		for (j = 0; j < nsrc; ++j) {
+			/* Find the source index. */
+			bsindex (srclist[j], src);
+
+			/* Compute the grid distance between source and observer. */
+			dist[0] = abs(src[0] - obs[0]);
+			dist[1] = abs(src[1] - obs[1]);
+			dist[2] = abs(src[2] - obs[2]);
+			
+			/* Find the linear index for the interaction. */
+			idx = dist[2] + dist[1] * fmaconf.nbors[2]
+				+ dist[0] * fmaconf.nbors[2] * fmaconf.nbors[1];
+
+			/* Augment the observer field with this contribution. */
+			obsfld[i] += srcfld[j] * fmaconf.gridints[idx];
+		}
+	}
+
+	return;
+}
