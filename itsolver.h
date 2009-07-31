@@ -1,7 +1,7 @@
 #ifndef __ITSOLVER_H_
 #define __ITSOLVER_H_
 
-#include <Complex.h> /* ScaleME complex include */
+#include <complex.h>
 
 typedef struct {
   int restart, maxit;

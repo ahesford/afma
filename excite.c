@@ -2,6 +2,8 @@
 #include <math.h>
 #include <complex.h>
 
+#include "ScaleME.h"
+
 #include "mlfma.h"
 #include "integrate.h"
 #include "fsgreen.h"

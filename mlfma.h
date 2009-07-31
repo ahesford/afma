@@ -1,8 +1,7 @@
 #ifndef __MLFMA_H_
 #define __MLFMA_H_
 
-#include <complex.h> // This is provided with GCC.
-#include <Complex.h> // This is provided by ScaleME.
+#include <complex.h>
 
 typedef struct {
 	float min[3], max[3], cell[3];
@@ -18,17 +17,17 @@ typedef struct {
 
 extern fmadesc fmaconf;
 
-void radpattern (int, float *, float *, Complex *);
-void rcvpattern (int, float *, float *, Complex *);
+void radpattern (int, float *, float *, void *);
+void rcvpattern (int, float *, float *, void *);
 
-void impedance (int, int, Complex *);
+void impedance (int, int, void *);
 void bscenter (int, float *);
 
 void bsindex (int, int *);
 
-void interaction (int, int, Complex *);
+void interaction (int, int, void *);
 
 int preimpedance ();
-void blockinteract (int, int, int *, int *, complex float *, complex float *);
+void blockinteract (int, int, int *, int *, void *, void *);
 
 #endif /* __MLFMA_H_ */

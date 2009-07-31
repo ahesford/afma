@@ -3,8 +3,7 @@
 
 #include <mpi.h>
 
-#include <Complex.h>
-#include <ScaleME.h>
+#include "ScaleME.h"
 
 #include "mlfma.h"
 #include "itsolver.h"

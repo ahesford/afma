@@ -4,8 +4,8 @@
 
 #include <mpi.h>
 
-#include <Complex.h> // ScaleME-provided complex include. */
-#include <ScaleME.h>
+#include "ScaleME.h"
+#include "Complex.h" // ScaleME-provided complex include. */
 
 #include "measure.h"
 #include "mlfma.h"
@@ -16,17 +16,16 @@
 int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	int i, mpirank;
 	float *thetas, dtheta;
-	Complex *fields = NULL, *crts;
-	complex float fact;
+	complex float *fields = NULL, fact;
+	Complex *fieldstct;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
 
 	/* The theta samples. */
 	thetas = malloc (obs->ntheta * sizeof(float));
 
-	/* Conversion between intrinsic types and ScaleME types. */
-	crts = malloc (fmaconf.numbases * sizeof(Complex)); 
-	if (!mpirank) fields = malloc (obs->count * sizeof(Complex));
+	if (!mpirank) fields = malloc (obs->count * sizeof(complex float));
+	fieldstct = (Complex *)fields;
 
 	dtheta = (obs->trange[1] - obs->trange[0]);
 	dtheta /= MAX(obs->ntheta - 1, 1);
@@ -34,14 +33,9 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	for (i = 0; i < obs->ntheta; ++i)
 		thetas[i] = obs->trange[0] + i * dtheta;
 
-	for (i = 0; i < fmaconf.numbases; ++i) {
-		crts[i].re = creal(currents[i]);
-		crts[i].im = cimag(currents[i]);
-	}
-
 	/* The result must be a pointer to the pointer. */
 	if (ScaleME_evlRootFarFld_PI (6, obs->ntheta, obs->nphi, thetas,
-				obs->prange, crts, &fields))
+				obs->prange, (Complex *)currents, &fieldstct))
 		return 0;
 
 	if (!mpirank) {
@@ -49,15 +43,13 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 		 * front. However, the actual integral needs (k^2 / 4 pi), so
 		 * we need the extra factors in the field. */
 		fact = fmaconf.k0 / (4 * M_PI);
-		for (i = 0; i < obs->count; ++i)
-			result[i] = fact * (fields[i].re + I * fields[i].im);
+		for (i = 0; i < obs->count; ++i) result[i] = fact * fields[i];
 	}
 
 	/* Distribute the solution to all processors. */
 	MPI_Bcast (result, 2 * obs->count, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
 	free (thetas);
-	free (crts);
 	if (!mpirank) free (fields);
 	return 1;
 }

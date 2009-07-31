@@ -4,50 +4,42 @@
 #include <mpi.h>
 
 /* These headers are provided by ScaleME. */
-#include <Complex.h>
-#include <ScaleME.h>
-#include <gmres.h>
+#include "ScaleME.h"
+#include "gmres.h"
 
 #include "mlfma.h"
 #include "itsolver.h"
 
-static int compcrt (Complex *dst, Complex *src) {
+static int compcrt (complex float *dst, complex float *src) {
 	int i;
-	complex float val, buf;
 
-	for (i = 0; i < fmaconf.numbases; ++i) {
-		buf = src[i].re + I * src[i].im;
-		val = buf * fmaconf.contrast[i];
-		dst[i].re = creal (val);
-		dst[i].im = cimag (val);
-	}
+	for (i = 0; i < fmaconf.numbases; ++i)
+		dst[i] = src[i] * fmaconf.contrast[i];
 
 	return fmaconf.numbases;
 }
 
-static int augcrt (Complex *dst, Complex *src) {
+static int augcrt (complex float *dst, complex float *src) {
 	int i;
 
-	for (i = 0; i < fmaconf.numbases; ++i) {
-		dst[i].re = src[i].re - dst[i].re;
-		dst[i].im = src[i].im - dst[i].im;
-	}
+	for (i = 0; i < fmaconf.numbases; ++i)
+		dst[i] = src[i] - dst[i];
 
 	return fmaconf.numbases;
 }
 
 int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
 	int icntl[7], irc[5], lwork, info[3], i, myRank;
-	float rinfo[2], cntl[5], ldot[2], gdot[2];
-	Complex *zwork, *solbuf, *tx, *ty, *tz, lzdot;
+	float rinfo[2], cntl[5];
+	complex float *zwork, *solbuf, *tx, *ty, *tz, lzdot;
 
 	MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 
 	/* Allocate memory for work array. */
 	lwork = slv->restart * slv->restart +
 		slv->restart * (fmaconf.numbases + 5) + 5 * fmaconf.numbases + 1;
-	zwork = calloc (lwork, sizeof(Complex));
-	solbuf = malloc (fmaconf.numbases * sizeof(Complex));
+	zwork = calloc (lwork, sizeof(complex float));
+	solbuf = malloc (fmaconf.numbases * sizeof(complex float));
 
 	/* Initialize the parameters. */
 	initcgmres_(icntl, cntl);
@@ -86,7 +78,7 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 			   tx = zwork+irc[1] - 1;
 			   ty = zwork+irc[3] - 1;
 			   compcrt (solbuf, tx);
-			   ScaleME_applyParFMA(REGULAR, solbuf, ty);
+			   ScaleME_applyParFMA(REGULAR, (Complex *)solbuf, (Complex *)ty);
 			   augcrt (ty, tx);
 			   break;
 		case DOT_PROD:
@@ -97,12 +89,7 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 				   /* compute the local dot product first */
 				   cblas_cdotc_sub (fmaconf.numbases, tx, 1, ty, 1, &lzdot);
 				   /* now do a global reduce to get the final answer */
-				   ldot[0] = lzdot.re;
-				   ldot[1] = lzdot.im;
-				   gdot[0] = gdot[1] = 0.0;
-				   MPI_Allreduce(ldot, gdot, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-				   tz->re = gdot[0];
-				   tz->im = gdot[1];
+				   MPI_Allreduce(&lzdot, tz, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 				   ++tz;
 				   tx += fmaconf.numbases;
 			   }

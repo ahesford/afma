@@ -7,8 +7,7 @@
 
 #include <mpi.h>
 
-#include <ScaleME.h> // ScaleME-provided header
-#include <Complex.h> // ScaleME complex header
+#include "ScaleME.h"
 
 #include "itsolver.h"
 #include "measure.h"

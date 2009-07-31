@@ -4,7 +4,7 @@ LD=/usr/local/bin/mpif90
 
 SCALEME_ROOT= $(HOME)/software/scaleme
 
-OPTFLAGS= -O -march=native -mtune=native
+OPTFLAGS= -O3 -march=native -mtune=native
 CINCDIR= -I$(SCALEME_ROOT)/include
 LIBDIR= -L$(SCALEME_ROOT)/fma2
 

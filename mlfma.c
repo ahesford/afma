@@ -1,8 +1,9 @@
+#include <stdio.h>
 #include <stdlib.h>
-#include <complex.h> // This is provided by GCC.
+#include <complex.h>
 #include <math.h>
 
-#include <Complex.h> // This is provided by ScaleME.
+#include "ScaleME.h"
 
 #include "fsgreen.h"
 #include "integrate.h"
@@ -26,7 +27,7 @@ static complex float genpat (int gi, float *cen, float *s) {
 
 /* Compute the radiation pattern of a square cell. The formulation assumes
  * the Green's function does not have a 4 pi term in the denominator. */
-void radpattern (int gi, float *cen, float *s, Complex *ans) {
+void radpattern (int gi, float *cen, float *s, void *ans) {
 	complex float val;
 
 	/* The k0 term is due to the limit of the radiation pattern. */
@@ -34,12 +35,11 @@ void radpattern (int gi, float *cen, float *s, Complex *ans) {
 	val *= fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
 
 	/* Copy the value into the solution. */
-	ans->re = creal (val);
-	ans->im = cimag (val);
+	*((complex float *)ans) = val;
 }
 
 /* The receiving pattern is the conjugate of the radiation pattern. */
-void rcvpattern (int gi, float *cen, float *s, Complex *ans) {
+void rcvpattern (int gi, float *cen, float *s, void *ans) {
 	complex float val;
 
 	val = conj (genpat (gi, cen, s));
@@ -47,12 +47,11 @@ void rcvpattern (int gi, float *cen, float *s, Complex *ans) {
 	 * because it was neglected in radiation pattern construction. */
 	val *= fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
 
-	ans->re = creal (val);
-	ans->im = cimag (val);
+	*((complex float *)ans) = val;
 }
 
 /* Direct interactions between two global basis indices. */
-void impedance (int gi, int gj, Complex *ans) {
+void impedance (int gi, int gj, void *ans) {
 	float src[3], obs[3];
 	complex float val;
 
@@ -68,8 +67,7 @@ void impedance (int gi, int gj, Complex *ans) {
 	}
 
 	/* Copy the value into the solution. */
-	ans->re = creal (val);
-	ans->im = cimag (val);
+	*((complex float *)ans) = val;
 	return;
 }
 
@@ -90,7 +88,7 @@ void bsindex (int gi, int *idx) {
 	idx[2] = gi / (fmaconf.nx * fmaconf.ny);
 }
 
-void interaction (int gi, int gj, Complex *ans) {
+void interaction (int gi, int gj, void *ans) {
 	int idx, dist[3], obs[3], src[3];
 
 	bsindex (gj, src);
@@ -112,8 +110,7 @@ void interaction (int gi, int gj, Complex *ans) {
 		+ dist[0] * fmaconf.nbors[2] * fmaconf.nbors[1];
 
 	/* Copy the value into the solution. */
-	ans->re = creal (fmaconf.gridints[idx]);
-	ans->im = cimag (fmaconf.gridints[idx]);
+	*((complex float *)ans) = fmaconf.gridints[idx];
 
 	return;
 }
@@ -157,9 +154,13 @@ int preimpedance () {
 }
 
 /* Evaluate at a group of observers the fields due to a group of sources. */
-void blockinteract (int nsrc, int nobs, int *srclist, int *obslist,
-		complex float *srcfld, complex float *obsfld) {
+void blockinteract (int nsrc, int nobs, int *srclist,
+		int *obslist, void *vsrc, void *vobs) {
 	int i, j, src[3], obs[3], dist[3], idx;
+	complex float *srcfld, *obsfld;
+
+	srcfld = (complex float *)vsrc;
+	obsfld = (complex float *)vobs;
 
 	for (i = 0; i < nobs; ++i) {
 		/* Find the observer index. */
