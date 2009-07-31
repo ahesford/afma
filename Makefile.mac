@@ -1,10 +1,10 @@
-CC=mpicc
-FF=mpif90
-LD=mpif90
+CC=/usr/local/bin/mpicc
+FF=/usr/local/bin/mpif90
+LD=/usr/local/bin/mpif90
 
 SCALEME_ROOT= $(HOME)/software/scaleme
 
-OPTFLAGS= -O -march=nocona -mtune=nocona -g
+OPTFLAGS= -O -march=native -mtune=native
 CINCDIR= -I$(SCALEME_ROOT)/include
 LIBDIR= -L$(SCALEME_ROOT)/fma2
 

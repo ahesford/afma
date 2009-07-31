@@ -95,7 +95,7 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 			   tz = zwork + irc[3] - 1;
 			   for (i = 0; i < irc[4]; ++i) {
 				   /* compute the local dot product first */
-				   lzdot = Cdotc(fmaconf.numbases, tx, ty);
+				   cblas_cdotc_sub (fmaconf.numbases, tx, 1, ty, 1, &lzdot);
 				   /* now do a global reduce to get the final answer */
 				   ldot[0] = lzdot.re;
 				   ldot[1] = lzdot.im;
