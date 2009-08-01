@@ -156,33 +156,43 @@ int preimpedance () {
 /* Evaluate at a group of observers the fields due to a group of sources. */
 void blockinteract (int nsrc, int nobs, int *srclist,
 		int *obslist, void *vsrc, void *vobs) {
-	int i, j, src[3], obs[3], dist[3], idx;
-	complex float *srcfld, *obsfld;
+	int i, j, *src, *srcptr, obs[3], dist[3], idx;
+	complex float *srcfld, *csrc, *cobs;
 
-	srcfld = (complex float *)vsrc;
-	obsfld = (complex float *)vobs;
+	/* Convert the void types to complex floats. */
+	csrc = (complex float *)vsrc;
+	cobs = (complex float *)vobs;
 
-	for (i = 0; i < nobs; ++i) {
+	src = malloc (3 * nsrc * sizeof(int));
+
+	/* Precompute the source indices. */
+	for (i = 0; i < nsrc; ++i) bsindex (srclist[i], src + 3 * i);
+
+	for (i = 0; i < nobs; ++i, ++cobs) {
 		/* Find the observer index. */
 		bsindex (obslist[i], obs);
 
-		for (j = 0; j < nsrc; ++j) {
-			/* Find the source index. */
-			bsindex (srclist[j], src);
+		/* Point to the starting source. */
+		srcptr = src;
+		srcfld = csrc;
 
+		for (j = 0; j < nsrc; ++j, srcptr += 3) {
 			/* Compute the grid distance between source and observer. */
-			dist[0] = abs(src[0] - obs[0]);
-			dist[1] = abs(src[1] - obs[1]);
-			dist[2] = abs(src[2] - obs[2]);
+			dist[0] = abs(srcptr[0] - obs[0]);
+			dist[1] = abs(srcptr[1] - obs[1]);
+			dist[2] = abs(srcptr[2] - obs[2]);
 			
 			/* Find the linear index for the interaction. */
 			idx = dist[2] + dist[1] * fmaconf.nbors[2]
 				+ dist[0] * fmaconf.nbors[2] * fmaconf.nbors[1];
 
-			/* Augment the observer field with this contribution. */
-			obsfld[i] += srcfld[j] * fmaconf.gridints[idx];
+			/* Augment the observer field with this contribution.
+			 * Also shift the pointers for the next iteration. */
+			*cobs += *(srcfld++) * fmaconf.gridints[idx];
 		}
 	}
+
+	free (src);
 
 	return;
 }
