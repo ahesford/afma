@@ -3,6 +3,10 @@
 
 #include <mpi.h>
 
+#ifdef _MACOSX
+#include <Accelerate/Accelerate.h>
+#endif
+
 /* These headers are provided by ScaleME. */
 #include "ScaleME.h"
 #include "gmres.h"
@@ -29,7 +33,7 @@ static int augcrt (complex float *dst, complex float *src) {
 }
 
 int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
-	int icntl[7], irc[5], lwork, info[3], i, myRank;
+	int icntl[8], irc[5], lwork, info[3], i, myRank;
 	float rinfo[2], cntl[5];
 	complex float *zwork, *solbuf, *tx, *ty, *tz, lzdot;
 
@@ -37,7 +41,7 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 
 	/* Allocate memory for work array. */
 	lwork = slv->restart * slv->restart +
-		slv->restart * (fmaconf.numbases + 5) + 5 * fmaconf.numbases + 1;
+		slv->restart * (fmaconf.numbases + 5) + 5 * fmaconf.numbases + 2;
 	zwork = calloc (lwork, sizeof(complex float));
 	solbuf = malloc (fmaconf.numbases * sizeof(complex float));
 

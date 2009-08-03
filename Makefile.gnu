@@ -8,14 +8,14 @@ OPTFLAGS= -O2 -march=opteron -mtune=opteron
 CINCDIR= -I$(SCALEME_ROOT)/include
 LIBDIR= -L$(SCALEME_ROOT)/fma2 -L/usr/local/lib
 
-LIBS= -lScaleME2 -lalapack_r -lptf77blas -lptcblas -latlas_r
+LIBS= -lScaleME2 -l../gmres -lalapack_r -lptf77blas -lptcblas -latlas_r
 
 CFLAGS= $(OPTFLAGS) -Wall
 FFLAGS= $(OPTFLAGS) -Wall
 LFLAGS= $(OPTFLAGS)
 
 OBJS= fsgreen.o integrate.o mlfma.o scaleme.o itsolver.o excite.o io.o \
-      measure.o frechet.o cg.o cgmres.o
+      measure.o frechet.o cg.o
 
 all: adbim afma
 	@echo "Combined build."
