@@ -6,7 +6,7 @@ SCALEME_ROOT= $(HOME)/software/scaleme
 
 OPTFLAGS= -O3 -xP -parallel
 CINCDIR= -I$(SCALEME_ROOT)/include
-LIBDIR= -L$(SCALEME_ROOT)/fma2 -L/usr/local/lib
+LIBDIR= -L$(SCALEME_ROOT)/fma2 -L/usr/local/lib -L../gmres
 
 LIBS= -lScaleME2 -lgmres -llapack-icc -lblas-icc -lm
 

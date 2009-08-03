@@ -6,9 +6,9 @@ SCALEME_ROOT= $(HOME)/software/scaleme
 
 OPTFLAGS= -O2 -march=opteron -mtune=opteron
 CINCDIR= -I$(SCALEME_ROOT)/include
-LIBDIR= -L$(SCALEME_ROOT)/fma2 -L/usr/local/lib
+LIBDIR= -L$(SCALEME_ROOT)/fma2 -L/usr/local/lib -L../gmres
 
-LIBS= -lScaleME2 -l../gmres -lalapack_r -lptf77blas -lptcblas -latlas_r
+LIBS= -lScaleME2 -lgmres -lalapack_r -lptf77blas -lptcblas -latlas_r
 
 CFLAGS= $(OPTFLAGS) -Wall
 FFLAGS= $(OPTFLAGS) -Wall
