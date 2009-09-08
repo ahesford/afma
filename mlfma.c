@@ -71,23 +71,6 @@ void impedance (int gi, int gj, void *ans) {
 	return;
 }
 
-/* Find the center of the basis function referred to by the global index. */
-void bscenter (int gi, float *cen) {
-	int idx[3];
-
-	bsindex (gi, idx);
-
-	cen[0] = fmaconf.min[0] + ((float)idx[0] + 0.5) * fmaconf.cell[0];
-	cen[1] = fmaconf.min[1] + ((float)idx[1] + 0.5) * fmaconf.cell[1];
-	cen[2] = fmaconf.min[2] + ((float)idx[2] + 0.5) * fmaconf.cell[2];
-}
-
-void bsindex (int gi, int *idx) {
-	idx[0] = gi % fmaconf.nx;
-	idx[1] = (gi / fmaconf.nx) % fmaconf.ny;
-	idx[2] = gi / (fmaconf.nx * fmaconf.ny);
-}
-
 void interaction (int gi, int gj, void *ans) {
 	int idx, dist[3], obs[3], src[3];
 

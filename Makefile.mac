@@ -1,10 +1,10 @@
-CC=/usr/local/bin/mpicc
-FF=/usr/local/bin/mpif90
-LD=/usr/local/bin/mpif90
+CC=mpicc
+FF=mpif90
+LD=mpif90
 
 SCALEME_ROOT= $(HOME)/software/scaleme
 
-OPTFLAGS= -O3 -march=native -mtune=native
+OPTFLAGS= -O3 -march=nocona -mtune=nocona
 CINCDIR= -I$(SCALEME_ROOT)/include
 LIBDIR= -L$(SCALEME_ROOT)/fma2 -L../gmres
 
@@ -14,27 +14,46 @@ CFLAGS= $(OPTFLAGS) -Wall -D_MACOSX
 FFLAGS= $(OPTFLAGS) -Wall -D_MACOSX
 LFLAGS= $(OPTFLAGS)
 
-OBJS= fsgreen.o integrate.o mlfma.o scaleme.o itsolver.o \
+OBJS64= fsgreen.o integrate.o mlfma.o scaleme.o itsolver.o \
 	excite.o io.o measure.o frechet.o cg.o
 
-all: adbim afma
-	@echo "Combined build."
+OBJS32= $(OBJS64:.o=.o32)
 
-adbim: $(OBJS) dbim.o
-	@echo "Building acoustic DBIM."
-	$(LD) $(LFLAGS) -o $@ dbim.o $(OBJS) $(LIBDIR) $(LIBS)
+all: adbim64 afma64 adbim32 afma32
+	@echo "Combined build (32 and 64 bits)."
+	lipo -create adbim64 adbim32 -output adbim
+	lipo -create afma64 afma32 -output afma
 
-afma: $(OBJS) main.o
-	@echo "Building acoustic MLFMA."
-	$(LD) $(LFLAGS) -o $@ main.o $(OBJS) $(LIBDIR) $(LIBS)
+adbim64: $(OBJS64) dbim.o
+	@echo "Building acoustic DBIM (64 bits)."
+	$(LD) $(LFLAGS) -m64 -o $@ dbim.o $(OBJS64) $(LIBDIR) $(LIBS)
+
+afma64: $(OBJS64) main.o
+	@echo "Building acoustic MLFMA (64 bits)."
+	$(LD) $(LFLAGS) -m64 -o $@ main.o $(OBJS64) $(LIBDIR) $(LIBS)
+
+adbim32: $(OBJS32) dbim.o32
+	@echo "Building acoustic DBIM (32 bits)."
+	$(LD) $(LFLAGS) -m32 -o $@ dbim.o32 $(OBJS32) $(LIBDIR) $(LIBS)
+
+afma32: $(OBJS32) main.o32
+	@echo "Building acoustic MLFMA (32 bits)."
+	$(LD) $(LFLAGS) -m32 -o $@ main.o32 $(OBJS32) $(LIBDIR) $(LIBS)
 
 clean:
-	rm -f $(OBJS) main.o dbim.o adbim afma *.core core
+	rm -f $(OBJS64) $(OBJS32) main.o main.o32 dbim.o dbim.o32 \
+	adbim afma adbim32 afma32 adbim64 afma64 *.core core
 
-.SUFFIXES: .o .f .c
+.SUFFIXES: .o .o32 .f .c
 
 .f.o:
-	$(FF) $(FFLAGS) -o $@ -c $<
+	$(FF) $(FFLAGS) -m64 -o $@ -c $<
 
 .c.o:
-	$(CC) $(CFLAGS) $(CINCDIR) -o $@ -c $<
+	$(CC) $(CFLAGS) -m64 $(CINCDIR) -o $@ -c $<
+
+.f.o32:
+	$(FF) $(FFLAGS) -m32 -o $@ -c $<
+
+.c.o32:
+	$(CC) $(CFLAGS) -m32 $(CINCDIR) -o $@ -c $<
