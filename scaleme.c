@@ -50,9 +50,6 @@ int ScaleME_preconf (void) {
 	ScaleME_setTopComputeLevel (fmaconf.toplev);
 	ScaleME_useSharedMemoryModel (fmaconf.sharedmax);
 
-	/* Disk storage is not allowed. */
-	ScaleME_useDiskStorage (NULL, 0);
-	
 	if (fmaconf.smallbox > 0)
 		ScaleME_setSmallestBoxSize(fmaconf.smallbox);
 	
