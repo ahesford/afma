@@ -4,7 +4,7 @@ LD=mpif90
 
 SCALEME_ROOT= $(HOME)/software/scaleme
 
-OPTFLAGS= -O3 -march=nocona -mtune=nocona
+OPTFLAGS= -O3 -march=core2 -mtune=core2
 CINCDIR= -I$(SCALEME_ROOT)/include
 LIBDIR= -L$(SCALEME_ROOT)/fma2 -L../gmres
 

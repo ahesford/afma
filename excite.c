@@ -69,25 +69,3 @@ int precomprhs (complex float *rhs, measdesc *src, complex float *mag, complex f
 
 	return fmaconf.numbases * src->count;
 }
-
-int farexcite (complex float *excit, measdesc *obs, complex float *currents) {
-	int i;
-	float *thetas, dtheta;
-	Complex *fields = (Complex *)excit;
-
-	thetas = malloc (obs->ntheta * sizeof(float));
-
-	dtheta = (obs->trange[1] - obs->trange[0]);
-	dtheta /= MAX(obs->ntheta - 1, 1);
-
-	for (i = 0; i < obs->ntheta; ++i)
-		thetas[i] = obs->trange[0] + i * dtheta;
-
-	/* The result must be a pointer to the pointer. */
-	if (ScaleME_setRootFarFld_PI (6, obs->ntheta, obs->nphi, thetas,
-				obs->prange, (Complex *)currents, &fields))
-		return 0;
-
-	free (thetas);
-	return 1;
-}
