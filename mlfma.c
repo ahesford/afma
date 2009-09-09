@@ -9,6 +9,8 @@
 #include "integrate.h"
 #include "mlfma.h"
 
+#define UNSGN(x) ((x) > 0 ? (x) : -(x))
+
 fmadesc fmaconf;
 
 static complex float genpat (int gi, float *cen, float *s) {
@@ -161,13 +163,13 @@ void blockinteract (int nsrc, int nobs, int *srclist,
 
 		for (j = 0; j < nsrc; ++j, srcptr += 3) {
 			/* Compute the grid distance between source and observer. */
-			dist[0] = abs(srcptr[0] - obs[0]);
-			dist[1] = abs(srcptr[1] - obs[1]);
-			dist[2] = abs(srcptr[2] - obs[2]);
+			dist[0] = srcptr[0] - obs[0];
+			dist[1] = srcptr[1] - obs[1];
+			dist[2] = srcptr[2] - obs[2];
 			
 			/* Find the linear index for the interaction. */
-			idx = dist[2] + dist[1] * fmaconf.nbors[2]
-				+ dist[0] * fmaconf.nbors[2] * fmaconf.nbors[1];
+			idx = UNSGN(dist[2]) + UNSGN(dist[1]) * fmaconf.nbors[2]
+				+ UNSGN(dist[0]) * fmaconf.nbors[2] * fmaconf.nbors[1];
 
 			/* Augment the observer field with this contribution.
 			 * Also shift the pointers for the next iteration. */
