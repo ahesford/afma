@@ -2,13 +2,11 @@ CC=mpicc
 FF=mpif90
 LD=mpif90
 
-SCALEME_ROOT= $(HOME)/software/scaleme
 LIBS= -lScaleME2 -lgmres
+CINCDIR= -I../scaleme/include
+LIBDIR= -L../scaleme/fma2 -L../gmres
 
 include mk/$(shell uname -s).mk
-
-CINCDIR= -I$(SCALEME_ROOT)/include
-LIBDIR= -L$(SCALEME_ROOT)/fma2 -L../gmres
 
 CFLAGS= $(OPTFLAGS) -Wall
 FFLAGS= $(OPTFLAGS) -Wall
