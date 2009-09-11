@@ -15,29 +15,21 @@ LFLAGS= $(OPTFLAGS)
 OBJS= fsgreen.o integrate.o mlfma.o scaleme.o itsolver.o \
 	excite.o io.o measure.o frechet.o cg.o
 
-all: adbim64 afma64
+all: adbim afma
 
-afma64 adbim64: override CFLAGS += -m64
-afma64 adbim64: override FFLAGS += -m64
-afma64 adbim64: override LFLAGS += -m64
-
-afma32 adbim32: override CFLAGS += -m32
-afma32 adbim32: override FFLAGS += -m32
-afma32 adbim32: override LFLAGS += -m32
-
-afma64 afma32: main.o $(OBJS)
-	@echo "Building afma64."
+afma: main.o $(OBJS)
+	@echo "Building $@."
 	$(LD) $(LFLAGS) -o $@ $^ $(LIBDIR) $(LIBS)
 
-adbim64 adbim32: dbim.o $(OBJS)
-	@echo "Building adbim64."
+adbim: dbim.o $(OBJS)
+	@echo "Building $@."
 	$(LD) $(LFLAGS) -o $@ $^ $(LIBDIR) $(LIBS)
 
 clean:
 	rm -f $(OBJS) main.o dbim.o *.core core
 
 distclean: clean
-	rm -f afma afma32 afma64 adbim adbim32 adbim64
+	rm -f afma adbim
 
 .SUFFIXES: .o .f .c
 
