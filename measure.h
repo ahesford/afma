@@ -1,7 +1,7 @@
 #ifndef __MEASURE_H_
 #define __MEASURE_H_
 
-#include <Complex.h>
+#include <ScaleME_Complex.h>
 
 typedef struct {
 	int count, ntheta, nphi;

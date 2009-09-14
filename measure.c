@@ -5,7 +5,7 @@
 #include <mpi.h>
 
 #include "ScaleME.h"
-#include "Complex.h" // ScaleME-provided complex include. */
+#include "ScaleME_Complex.h"
 
 #include "measure.h"
 #include "mlfma.h"

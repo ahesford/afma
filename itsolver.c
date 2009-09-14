@@ -49,8 +49,8 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 	initcgmres_(icntl, cntl);
 
 	/* Only the root process should print convergence history. */
-	if (!myRank && !silent) icntl[2] = 6;
-	else icntl[2] = 0;
+	if (!myRank && !silent) icntl[0] = icntl[1] = icntl[2] = 6;
+	else icntl[1] = icntl[2] = 0;
 
 	/* None of the processes should make noise about GMRES. */
 	if (silent) icntl[0] = icntl[1] = icntl[2] = 0;
