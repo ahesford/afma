@@ -8,7 +8,7 @@ typedef struct {
 	float min[3], max[3], cell[3];
 	float precision, smallbox;
 	int nx, ny, nz, gnumbases, numbases;
-	int maxlev, numbuffer, interpord, toplev, sharedmax;
+	int maxlev, numbuffer, interpord, toplev;
 	int *bslist;
 	float k0;
 	complex float *contrast;

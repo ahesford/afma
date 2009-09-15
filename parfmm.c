@@ -1,5 +1,4 @@
 /* 21-jan-2006 hesford; incorporate initialization routines into fastant */
-/* 22-jun-2000 sanjay; added the shared memory model */
 /* 14-dec-1999 sanjay; made the following modifications:
 	1. removed ScaleME_setComLevel call.
 	2. replaced the call to ScaleME_initSeqHostFMA with
@@ -48,7 +47,6 @@ int ScaleME_preconf (void) {
 	ScaleME_setInterpOrder (fmaconf.interpord);
 
 	ScaleME_setTopComputeLevel (fmaconf.toplev);
-	ScaleME_useSharedMemoryModel (fmaconf.sharedmax);
 
 	if (fmaconf.smallbox > 0)
 		ScaleME_setSmallestBoxSize(fmaconf.smallbox);

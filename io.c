@@ -94,8 +94,7 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	/* Read the MLFMA level configuration. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%d %d %d", &(fmaconf.maxlev),
-			&(fmaconf.toplev), &(fmaconf.sharedmax));
+	sscanf (buf, "%d %d", &(fmaconf.maxlev), &(fmaconf.toplev));
 
 	/* Read the number of MLFMA buffer boxes. */
 	skipcomments (fp);
