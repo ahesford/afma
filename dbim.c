@@ -12,7 +12,7 @@
 #include "itsolver.h"
 #include "measure.h"
 #include "frechet.h"
-#include "scaleme.h"
+#include "parfmm.h"
 #include "excite.h"
 #include "mlfma.h"
 #include "io.h"

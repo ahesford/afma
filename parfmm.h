@@ -1,7 +1,7 @@
-#ifndef __SCALEME_H_
-#define __SCALEME_H_
+#ifndef __PARFMM_H_
+#define __PARFMM_H_
 
 /* initialisation and finalisation routines for ScaleME */
 int ScaleME_preconf (void);
 int ScaleME_postconf (void);
-#endif /* __SCALEME_H_ */
+#endif /* __PARFMM_H_ */

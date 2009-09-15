@@ -21,7 +21,7 @@ Copyright: Sanjay Velamparambil, Weng Cho Chew, University of Illinois.
 #include <mpi.h>
 
 #include <ScaleME.h> /* Provided by the ScaleME library. */
-#include "scaleme.h" /* The local ScaleME include, defining these functions. */
+#include "parfmm.h" /* The local ScaleME include, defining these functions. */
 
 #include "mlfma.h"
 #include "itsolver.h"
