@@ -1,6 +1,6 @@
 CC=mpicc
 FF=mpif90
-LD=mpif90
+LD=$(FF)
 
 LIBS= -lScaleME2 -lgmres
 CINCDIR= -I../scaleme/include
