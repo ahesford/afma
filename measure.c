@@ -5,7 +5,6 @@
 #include <mpi.h>
 
 #include "ScaleME.h"
-#include "ScaleME_Complex.h"
 
 #include "measure.h"
 #include "mlfma.h"
@@ -17,7 +16,6 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	int i, mpirank;
 	float *thetas, dtheta;
 	complex float *fields = NULL, fact;
-	Complex *fieldstct;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
 
@@ -25,7 +23,6 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	thetas = malloc (obs->ntheta * sizeof(float));
 
 	if (!mpirank) fields = malloc (obs->count * sizeof(complex float));
-	fieldstct = (Complex *)fields;
 
 	dtheta = (obs->trange[1] - obs->trange[0]);
 	dtheta /= MAX(obs->ntheta - 1, 1);
@@ -35,8 +32,7 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 
 	/* The result must be a pointer to the pointer. */
 	if (ScaleME_evlRootFarFld_PI (6, obs->ntheta, obs->nphi, thetas,
-				obs->prange, (Complex *)currents, &fieldstct))
-		return 0;
+				obs->prange, currents, &fields)) return 0;
 
 	if (!mpirank) {
 		/* The far-field pattern already has a factor of k in the

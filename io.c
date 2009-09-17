@@ -91,10 +91,13 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	/* Set the wave number to 2 pi, since wavelength is the length unit. */
 	fmaconf.k0 = 2 * M_PI;
 
-	/* Read the MLFMA level configuration. */
+	/* Read the MLFMA level and fast translation configuration. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%d %d", &(fmaconf.maxlev), &(fmaconf.toplev));
+	if (sscanf (buf, "%d %d %d %d %d", &(fmaconf.maxlev), 
+				&(fmaconf.toplev), &(fmaconf.fo2iterm),
+				&(fmaconf.fo2iord), &(fmaconf.fo2iosr)) < 5)
+		fmaconf.fo2iterm = fmaconf.fo2iord = fmaconf.fo2iosr = 0;
 
 	/* Read the number of MLFMA buffer boxes. */
 	skipcomments (fp);

@@ -84,7 +84,7 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 			   tx = zwork+irc[1] - 1;
 			   ty = zwork+irc[3] - 1;
 			   compcrt (solbuf, tx);
-			   ScaleME_applyParFMA((Complex *)solbuf, (Complex *)ty);
+			   ScaleME_applyParFMA(solbuf, ty);
 			   augcrt (ty, tx);
 			   break;
 		case DOT_PROD:

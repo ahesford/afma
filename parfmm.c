@@ -48,6 +48,9 @@ int ScaleME_preconf (void) {
 
 	ScaleME_setTopComputeLevel (fmaconf.toplev);
 
+	if (fmaconf.fo2iterm > 0)
+		ScaleME_selectFastO2I (fmaconf.fo2iterm, fmaconf.fo2iord, fmaconf.fo2iosr);
+
 	if (fmaconf.smallbox > 0)
 		ScaleME_setSmallestBoxSize(fmaconf.smallbox);
 	

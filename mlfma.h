@@ -9,6 +9,7 @@ typedef struct {
 	float precision, smallbox;
 	int nx, ny, nz, gnumbases, numbases;
 	int maxlev, numbuffer, interpord, toplev;
+	int fo2iterm, fo2iord, fo2iosr;
 	int *bslist;
 	float k0;
 	complex float *contrast;
