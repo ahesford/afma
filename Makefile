@@ -1,8 +1,8 @@
 CC=mpicc
 FF=mpif90
-LD=$(FF)
+LD=$(CC)
 
-LIBS= -lScaleME2 -lgmres
+LIBS= -lScaleME2 -lgmres -lgfortran -lm
 CINCDIR= -I../scaleme/include
 LIBDIR= -L../scaleme/fma2 -L../gmres
 
