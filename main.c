@@ -4,6 +4,7 @@
 #include <math.h>
 #include <unistd.h>
 #include <time.h>
+#include <sys/time.h>
 
 #include <mpi.h>
 
@@ -30,8 +31,9 @@ int main (int argc, char **argv) {
 	int mpirank, mpisize, i, j;
 	complex float *rhs, *field;
 	clock_t tstart, tend;
-	double cputime;
+	double cputime, wtime;
 	int debug = 0;
+	struct timeval wtstart, wtend;
 
 	measdesc obsmeas, srcmeas;
 	solveparm solver;
@@ -122,12 +124,19 @@ int main (int argc, char **argv) {
 		}
 
 		tstart = clock ();
+		gettimeofday (&wtstart, NULL);
 		/* Run the iterative solver. The solution is stored in the RHS. */
 		cgmres (rhs, rhs, 0, &solver);
+		gettimeofday (&wtend, NULL);
 		tend = clock ();
 		cputime = (double) (tend - tstart) / CLOCKS_PER_SEC;
+		wtime = wtend.tv_sec - wtstart.tv_sec
+			+ (double)(wtend.tv_usec - wtstart.tv_usec) * 1e-6;
 
-		if (!mpirank) fprintf (stderr, "CPU time for CGMRES: %f\n", cputime);
+		if (!mpirank) {
+			fprintf (stderr, "CPU time for CGMRES: %0.6g\n", cputime);
+			fprintf (stderr, "Wall time for CGMRES: %0.6g\n", wtime);
+		}
 
 		if (debug) {
 			sprintf (fname, "%s.%d.currents", outproj, i);
