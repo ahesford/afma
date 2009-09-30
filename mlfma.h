@@ -15,14 +15,11 @@ typedef struct {
 	complex float *contrast;
 	float nbors[3];
 	complex float *gridints;
+	int ntheta, nphi, nsamp;
+	float *thetas, *kvecs;
 } fmadesc;
 
 extern fmadesc fmaconf;
-
-void radpattern (int, float *, float *, void *);
-void rcvpattern (int, float *, float *, void *);
-
-void impedance (int, int, void *);
 
 static inline void bsindex (int gi, int *idx) {
 	idx[0] = gi % fmaconf.nx;
@@ -40,9 +37,12 @@ static inline void bscenter (int gi, float *cen) {
 	cen[2] = fmaconf.min[2] + ((float)idx[2] + 0.5) * fmaconf.cell[2];
 }
 
-void interaction (int, int, void *);
-
-int preimpedance ();
+void farpattern (void *, void *, int, int, float *);
+int fmmprecalc ();
 void blockinteract (int, int, int *, int *, void *, void *);
+
+/* initialisation and finalisation routines for ScaleME */
+int ScaleME_preconf (void);
+int ScaleME_postconf (void);
 
 #endif /* __MLFMA_H_ */

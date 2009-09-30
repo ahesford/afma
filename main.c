@@ -12,7 +12,6 @@
 
 #include "itsolver.h"
 #include "measure.h"
-#include "parfmm.h"
 #include "excite.h"
 #include "mlfma.h"
 #include "io.h"
@@ -98,7 +97,7 @@ int main (int argc, char **argv) {
 	sprintf (fname, "%s.contrast", inproj);
 	getcontrast (fname, fmaconf.bslist, fmaconf.numbases);
 
-	i = preimpedance ();
+	i = fmmprecalc ();
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
 
 	/* Finish the ScaleME initialization. */

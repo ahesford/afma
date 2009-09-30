@@ -12,8 +12,8 @@ CFLAGS= $(OPTFLAGS) -Wall
 FFLAGS= $(OPTFLAGS) -Wall
 LFLAGS= $(OPTFLAGS)
 
-OBJS= fsgreen.o integrate.o mlfma.o parfmm.o itsolver.o \
-	excite.o io.o measure.o frechet.o cg.o
+OBJS= fsgreen.o integrate.o mlfma.o itsolver.o \
+      excite.o io.o measure.o frechet.o cg.o
 
 all: adbim afma
 
