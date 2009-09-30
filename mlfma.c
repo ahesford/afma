@@ -36,16 +36,18 @@ void farpattern (void *vcrt, void *vpat, int gi, int sgn, float *cen) {
 		for (i = 0, s = fmaconf.kvecs; i < fmaconf.nsamp; ++i, s+= 3) {
 			sdcr = s[0] * (cen[0] - rv[0]) + s[1] * (cen[1] - rv[1])
 				+ s[2] * (cen[2] - rv[2]);
+			sdcr *= fmaconf.k0;
 			
-			pat[i] += *crt * fact * cexp (I * fmaconf.k0 * sdcr);
+			pat[i] += *crt * fact * (cos (sdcr) + I * sin (sdcr));
 		}
 	} else {
 		fact = fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
 		for (i = 0, s = fmaconf.kvecs; i < fmaconf.nsamp; ++i, s += 3) {
 			sdcr = s[0] * (rv[0] - cen[0]) + s[1] * (rv[1] - cen[1])
 				+ s[2] * (rv[2] - cen[2]);
+			sdcr *= fmaconf.k0;
 
-			*crt += I * pat[i] * fact * cexp (I * fmaconf.k0 * sdcr);
+			*crt += I * pat[i] * fact * (cos (sdcr) + I * sin (sdcr));
 		}
 	}
 }
