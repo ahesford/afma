@@ -22,10 +22,8 @@ fmadesc fmaconf;
 void farpattern (void *vcrt, void *vpat, int gi, int sgn, float *cen) {
 	float *s, sdcr, rv[3], fact;
 	complex float *crt = (complex float *)vcrt, *pat = *((complex float **)vpat);
+	complex float val;
 	int i;
-
-	/* Make sure the sign has unity magnitude. */
-	sgn = ((sgn >= 0) ? 1 : -1);
 
 	/* Find the basis center. */
 	bscenter (gi, rv);
@@ -33,21 +31,53 @@ void farpattern (void *vcrt, void *vpat, int gi, int sgn, float *cen) {
 	/* Compute the far-field pattern for the basis function. */
 	if (sgn > 0) {
 		fact = fmaconf.k0 * fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
-		for (i = 0, s = fmaconf.kvecs; i < fmaconf.nsamp; ++i, s+= 3) {
+		/* Samples can be conjugate-mirrored about the equator. */
+		for (i = 0; i < fmaconf.nsampst; ++i) {
+			s = fmaconf.kvecs + 3 * i;
 			sdcr = s[0] * (cen[0] - rv[0]) + s[1] * (cen[1] - rv[1])
 				+ s[2] * (cen[2] - rv[2]);
 			sdcr *= fmaconf.k0;
+
+			val = cos (sdcr) + I * sin (sdcr);
 			
-			pat[i] += *crt * fact * (cos (sdcr) + I * sin (sdcr));
+			pat[i] += *crt * fact * val;
+			pat[fmaconf.kvecmap[i]] += *crt * fact * conj (val);
+		}
+
+		/* Equatorial samples aren't mirrored and must be included here. */
+		for (i = fmaconf.nsampst; i < fmaconf.nsamp; ++i) {
+			s = fmaconf.kvecs + 3 * i;
+			sdcr = s[0] * (cen[0] - rv[0]) + s[1] * (cen[1] - rv[1])
+				+ s[2] * (cen[2] - rv[2]);
+			sdcr *= fmaconf.k0;
+
+			val = cos (sdcr) + I * sin (sdcr);
+			pat[i] += *crt * fact * val;
 		}
 	} else {
 		fact = fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
-		for (i = 0, s = fmaconf.kvecs; i < fmaconf.nsamp; ++i, s += 3) {
+		/* Samples can be conjugate-mirrored about the equator. */
+		for (i = 0; i < fmaconf.nsampst; ++i) {
+			s = fmaconf.kvecs + 3 * i;
 			sdcr = s[0] * (rv[0] - cen[0]) + s[1] * (rv[1] - cen[1])
 				+ s[2] * (rv[2] - cen[2]);
 			sdcr *= fmaconf.k0;
 
-			*crt += I * pat[i] * fact * (cos (sdcr) + I * sin (sdcr));
+			val = cos (sdcr) + I * sin (sdcr);
+
+			*crt += I * pat[i] * fact * val;
+			*crt += I * pat[fmaconf.kvecmap[i]] * fact * conj (val);
+		}
+
+		/* Include equatorial samples here. */
+		for (i = fmaconf.nsampst; i < fmaconf.nsamp; ++i) {
+			s = fmaconf.kvecs + 3 * i;
+			sdcr = s[0] * (rv[0] - cen[0]) + s[1] * (rv[1] - cen[1])
+				+ s[2] * (rv[2] - cen[2]);
+			sdcr *= fmaconf.k0;
+
+			val = cos (sdcr) + I * sin (sdcr);
+			*crt += I * pat[i] * fact * val;
 		}
 	}
 }
@@ -56,17 +86,29 @@ void farpattern (void *vcrt, void *vpat, int gi, int sgn, float *cen) {
  * the wave vector directions to be used for fast calculation of far-field patterns. */
 int fmmprecalc () {
 	float lbox[3], dist[3], zero[3] = { 0, 0, 0 }, *kptr, *thetas, phi, dphi, sn;
-	int i, j, k, idx, totel, nb1, ntheta, nphi;
+	int i, j, k, idx, totel, nb1, nphi2, ntheta, nthetast, nsamptot, nphi;
 
 	/* Get the finest level parameters. */
-	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, NULL, NULL);
+	ScaleME_getFinestLevelParams (&nsamptot, &ntheta, &nphi, NULL, NULL);
 
 	/* Allocate the theta array. */
 	thetas = malloc (ntheta * sizeof(float));
-	fmaconf.kvecs = malloc (3 * fmaconf.nsamp * sizeof(float));
 
 	/* Populate the theta array. */
-	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, thetas, NULL);
+	ScaleME_getFinestLevelParams (&nsamptot, &ntheta, &nphi, thetas, NULL);
+
+	/* The number of theta samples to store and mirror. */
+	nthetast = ntheta / 2;
+
+	/* The number of samples that will be mirrored. */
+	fmaconf.nsampst = 1 + (nthetast - 1) * nphi;
+	/* The total number of computed samples. */
+	fmaconf.nsamp = fmaconf.nsampst + (ntheta % 2) * nphi;
+
+	/* A map of the mirrored samples. */
+	fmaconf.kvecmap = malloc (fmaconf.nsampst * sizeof(int));
+	/* The wave vector directions. */
+	fmaconf.kvecs = malloc (3 * fmaconf.nsamp * sizeof(float));
 
 	/* The step in phi. */
 	dphi = 2 * M_PI / nphi;
@@ -76,20 +118,32 @@ int fmmprecalc () {
 	kptr[0] = kptr[1] = 0.0;
 	kptr[2] = -1.0;
 	kptr += 3;
+	nphi2 = nphi / 2;
+
+	fmaconf.kvecmap[0] = nsamptot - 1;
 
 	/* The intermediate values are next. */
-	for (i = 1; i < ntheta - 1; ++i) {
+	for (i = 1, k = 1; i < nthetast; ++i) {
+		idx = (ntheta - i - 2) * nphi + 1;
 		sn = sin (acos (thetas[i]));
-		for (j = 0, phi = 0; j < nphi; ++j, phi += dphi, kptr += 3) {
+		for (j = 0, phi = 0; j < nphi; ++j, ++k, phi += dphi, kptr += 3) {
+			fmaconf.kvecmap[k] = idx + (nphi2 + j) % nphi;
 			kptr[0] = sn * cos (phi);
 			kptr[1] = sn * sin (phi);
 			kptr[2] = thetas[i];
 		}
 	}
 
-	/* Now the north pole. */
-	kptr[0] = kptr[1] = 0.0;
-	kptr[2] = 1.0;
+	for (i = nthetast; i < nthetast + (ntheta % 2); ++i) {
+		sn = sin (acos (thetas[i]));
+		for (j = 0, phi = 0; j < nphi; ++j, ++k, phi += dphi, kptr += 3) {
+			kptr[0] = sn * cos (phi);
+			kptr[1] = sn * sin (phi);
+			kptr[2] = thetas[i];
+		}
+	}
+
+	free (thetas);
 
 	/* Find the smallest box size. */
 	ScaleME_getSmallestBoxSize (lbox);
@@ -121,8 +175,6 @@ int fmmprecalc () {
 
 	/* The self term uses the analytic approximation. */
 	fmaconf.gridints[0] = selfint (fmaconf.k0, fmaconf.cell);
-
-	free (thetas);
 
 	return totel;
 }

@@ -15,8 +15,8 @@ typedef struct {
 	complex float *contrast;
 	float nbors[3];
 	complex float *gridints;
-	int ntheta, nphi, nsamp;
-	float *thetas, *kvecs;
+	int nsamp, nsampst, *kvecmap;
+	float *kvecs;
 } fmadesc;
 
 extern fmadesc fmaconf;
