@@ -19,6 +19,7 @@
 static int compcrt (complex float *dst, complex float *src) {
 	int i;
 
+#pragma omp parallel for default(shared) private(i)
 	for (i = 0; i < fmaconf.numbases; ++i)
 		dst[i] = src[i] * fmaconf.contrast[i];
 
@@ -28,6 +29,7 @@ static int compcrt (complex float *dst, complex float *src) {
 static int augcrt (complex float *dst, complex float *src) {
 	int i;
 
+#pragma omp parallel for default(shared) private(i)
 	for (i = 0; i < fmaconf.numbases; ++i)
 		dst[i] = src[i] - dst[i];
 
@@ -37,7 +39,7 @@ static int augcrt (complex float *dst, complex float *src) {
 int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
 	int icntl[8], irc[5], lwork, info[3], i, myRank;
 	float rinfo[2], cntl[5];
-	complex float *zwork, *solbuf, *tx, *ty, *tz, lzdot;
+	complex float *zwork, *solbuf, *tx, *ty, *tz;
 
 	MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 
@@ -91,14 +93,14 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 			   ty = zwork + irc[2] - 1;
 			   tx = zwork + irc[1] - 1;
 			   tz = zwork + irc[3] - 1;
-			   for (i = 0; i < irc[4]; ++i) {
+
+#pragma omp parallel for default(shared) private(i)
+			   for (i = 0; i < irc[4]; ++i)
 				   /* compute the local dot product first */
-				   cblas_cdotc_sub (fmaconf.numbases, tx, 1, ty, 1, &lzdot);
-				   /* now do a global reduce to get the final answer */
-				   MPI_Allreduce(&lzdot, tz, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-				   ++tz;
-				   tx += fmaconf.numbases;
-			   }
+				   cblas_cdotc_sub (fmaconf.numbases, tx + i * fmaconf.numbases, 1, ty, 1, tz + i);
+			   
+			   /* now do a global reduce to get the final answer */
+			   MPI_Allreduce(MPI_IN_PLACE, tz, 2 * irc[4], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 			   break;
 		}
 	} while (irc[0]);
