@@ -39,7 +39,7 @@ int frechet (complex float *crt, complex float *fld,
 
 	/* Compute the RHS for the given current distribution.
 	 * Store it in the buffer space. */
-	ScaleME_applyParFMA (zwcrt, zwork);
+	ScaleME_applyParFMA (zwcrt, zwork, 0);
 
 	/* Compute the Frechet derivative field. */
 	cgmres (zwork, zwork, 1, slv);
