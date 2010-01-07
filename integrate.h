@@ -11,7 +11,7 @@
 
 #define NUMPTS 4
 
-complex float srcint (float, float *, float *, float *);
-complex float selfint (float, float *);
+complex float srcint (float, float *, float *, float);
+complex float selfint (float, float);
 
 #endif /* __INTEGRATE_H_ */

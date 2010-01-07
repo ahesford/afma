@@ -5,18 +5,17 @@
 #include "mlfma.h"
 
 typedef struct {
-	float min[3], max[3], cell[3];
+	float min[3], cen[3], cell, cellvol;
 	float precision, smallbox;
 	int nx, ny, nz, gnumbases, numbases;
-	int maxlev, numbuffer, interpord, toplev;
+	int bspbox, maxlev, numbuffer, interpord, toplev;
 	int fo2iterm, fo2iord, fo2iosr;
 	int *bslist;
 	float k0;
 	complex float *contrast;
 	float nbors[3];
-	complex float *gridints;
-	int nsamp, nsampst, *kvecmap;
-	float *kvecs;
+	complex float *gridints, **radpats;
+	int nsamp;
 } fmadesc;
 
 extern fmadesc fmaconf;
@@ -32,9 +31,9 @@ static inline void bscenter (int gi, float *cen) {
 
 	bsindex (gi, idx);
 
-	cen[0] = fmaconf.min[0] + ((float)idx[0] + 0.5) * fmaconf.cell[0];
-	cen[1] = fmaconf.min[1] + ((float)idx[1] + 0.5) * fmaconf.cell[1];
-	cen[2] = fmaconf.min[2] + ((float)idx[2] + 0.5) * fmaconf.cell[2];
+	cen[0] = fmaconf.min[0] + ((float)idx[0] + 0.5) * fmaconf.cell;
+	cen[1] = fmaconf.min[1] + ((float)idx[1] + 0.5) * fmaconf.cell;
+	cen[2] = fmaconf.min[2] + ((float)idx[2] + 0.5) * fmaconf.cell;
 }
 
 void farpattern (void *, void *, int, int, float *);

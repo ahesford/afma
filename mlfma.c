@@ -20,130 +20,105 @@ fmadesc fmaconf;
  * center, and stores the output in a provided vector. sgn is positive for
  * radiation pattern and negative for receiving pattern. */
 void farpattern (void *vcrt, void *vpat, int gi, int sgn, float *cen) {
-	float *s, sdcr, rv[3], fact;
-	complex float *crt = (complex float *)vcrt, *pat = *((complex float **)vpat);
-	complex float val;
-	int i;
+	float rv[3], fact, shift;
+	complex float *crt = (complex float *)vcrt,
+		*pat = *((complex float **)vpat), *ppat;
+	int i, j, k;
+
+	shift = 0.5 * ((float)fmaconf.bspbox - 1.0);
 
 	/* Find the basis center. */
 	bscenter (gi, rv);
 
+	/* Find the position relative to the parent. */
+	i = round((rv[0] - cen[0]) / fmaconf.cell + shift);
+	j = round((rv[1] - cen[1]) / fmaconf.cell + shift);
+	k = round((rv[2] - cen[2]) / fmaconf.cell + shift);
+
+	/* Pull out the relevant precomputed pattern. */
+	k += j * fmaconf.bspbox + i * fmaconf.bspbox * fmaconf.bspbox;
+	ppat = fmaconf.radpats[k];
+
 	/* Compute the far-field pattern for the basis function. */
-	if (sgn > 0) {
-		fact = fmaconf.k0 * fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
-		/* Samples can be conjugate-mirrored about the equator. */
-		for (i = 0; i < fmaconf.nsampst; ++i) {
-			s = fmaconf.kvecs + 3 * i;
-			sdcr = s[0] * (cen[0] - rv[0]) + s[1] * (cen[1] - rv[1])
-				+ s[2] * (cen[2] - rv[2]);
-			sdcr *= fmaconf.k0;
-
-			val = cos (sdcr) + I * sin (sdcr);
-			
-			pat[i] += *crt * fact * val;
-			pat[fmaconf.kvecmap[i]] += *crt * fact * conj (val);
-		}
-
-		/* Equatorial samples aren't mirrored and must be included here. */
-		for (i = fmaconf.nsampst; i < fmaconf.nsamp; ++i) {
-			s = fmaconf.kvecs + 3 * i;
-			sdcr = s[0] * (cen[0] - rv[0]) + s[1] * (cen[1] - rv[1])
-				+ s[2] * (cen[2] - rv[2]);
-			sdcr *= fmaconf.k0;
-
-			val = cos (sdcr) + I * sin (sdcr);
-			pat[i] += *crt * fact * val;
-		}
+	if (sgn >= 0) {
+		fact = fmaconf.k0 * fmaconf.cellvol;
+		for (i = 0; i < fmaconf.nsamp; ++i)
+			pat[i] += *crt * fact * conj(ppat[i]);
 	} else {
 		fact = fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
-		/* Samples can be conjugate-mirrored about the equator. */
-		for (i = 0; i < fmaconf.nsampst; ++i) {
-			s = fmaconf.kvecs + 3 * i;
-			sdcr = s[0] * (rv[0] - cen[0]) + s[1] * (rv[1] - cen[1])
-				+ s[2] * (rv[2] - cen[2]);
-			sdcr *= fmaconf.k0;
+		for (i = 0; i < fmaconf.nsamp; ++i)
+			*crt += I * pat[i] * fact * ppat[i];
+	}
+}
 
-			val = cos (sdcr) + I * sin (sdcr);
+/* Precompute the exponential radiation pattern for a point a distance rmc 
+ * from the center of the parent box. */
+int buildradpat (complex float *pat, float k, float *rmc,
+		float *thetas, int ntheta, int nphi) {
+	int i, j, nthsc = ntheta - 1;
+	float s[3], sdr, dphi = 2 * M_PI / nphi, sn, phi;
 
-			*crt += I * pat[i] * fact * val;
-			*crt += I * pat[fmaconf.kvecmap[i]] * fact * conj (val);
-		}
+	/* South pole first. */
+	sdr = -rmc[2];
+	*(pat++) = cexp (I * k * sdr);
 
-		/* Include equatorial samples here. */
-		for (i = fmaconf.nsampst; i < fmaconf.nsamp; ++i) {
-			s = fmaconf.kvecs + 3 * i;
-			sdcr = s[0] * (rv[0] - cen[0]) + s[1] * (rv[1] - cen[1])
-				+ s[2] * (rv[2] - cen[2]);
-			sdcr *= fmaconf.k0;
+	for (i = 1; i < nthsc; ++i) {
+		s[2] = thetas[i];
+		sn = sin (acos (thetas[i]));
 
-			val = cos (sdcr) + I * sin (sdcr);
-			*crt += I * pat[i] * fact * val;
+		for (j = 0, phi = 0; j < nphi; ++j, phi += dphi) {
+			s[0] = sn * cos (phi);
+			s[1] = sn * sin (phi);
+			sdr = s[0] * rmc[0] + s[1] * rmc[1] + s[2] * rmc[2];
+			*(pat++) = cexp (I * k * sdr);
 		}
 	}
+
+	/* North pole last. */
+	sdr = rmc[2];
+	*pat = cexp (I * k * sdr);
+
+	return ntheta;
 }
 
 /* Precomputes the near interactions for redundant calculations and sets up
  * the wave vector directions to be used for fast calculation of far-field patterns. */
 int fmmprecalc () {
-	float lbox[3], dist[3], zero[3] = { 0, 0, 0 }, *kptr, *thetas, phi, dphi, sn;
-	int i, j, k, idx, totel, nb1, nphi2, ntheta, nthetast, nsamptot, nphi;
+	float lbox[3], dist[3], zero[3] = { 0, 0, 0 }, *thetas, clen;
+	int i, j, k, idx, totel, nb1, ntheta, nphi, nchild;
+	complex float **pptr;
+
+	/* The number of children in a finest-level box. */
+	nchild = fmaconf.bspbox * fmaconf.bspbox * fmaconf.bspbox;
 
 	/* Get the finest level parameters. */
-	ScaleME_getFinestLevelParams (&nsamptot, &ntheta, &nphi, NULL, NULL);
-
+	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, NULL, NULL);
 	/* Allocate the theta array. */
 	thetas = malloc (ntheta * sizeof(float));
-
 	/* Populate the theta array. */
-	ScaleME_getFinestLevelParams (&nsamptot, &ntheta, &nphi, thetas, NULL);
+	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, thetas, NULL);
 
-	/* The number of theta samples to store and mirror. */
-	nthetast = ntheta / 2;
+	/* Allocate storage for the radiation patterns. */
+	fmaconf.radpats = malloc (nchild * sizeof(complex float));
+	fmaconf.radpats[0] = malloc (nchild * fmaconf.nsamp * sizeof(complex float));
+	for (i = 1; i < nchild; ++i)
+		fmaconf.radpats[i] = fmaconf.radpats[i - 1] + fmaconf.nsamp;
 
-	/* The number of samples that will be mirrored. */
-	fmaconf.nsampst = 1 + (nthetast - 1) * nphi;
-	/* The total number of computed samples. */
-	fmaconf.nsamp = fmaconf.nsampst + (ntheta % 2) * nphi;
+	/* Calculate the box center. */
+	clen = 0.5 * (float)fmaconf.bspbox;
 
-	/* A map of the mirrored samples. */
-	fmaconf.kvecmap = malloc (fmaconf.nsampst * sizeof(int));
-	/* The wave vector directions. */
-	fmaconf.kvecs = malloc (3 * fmaconf.nsamp * sizeof(float));
-
-	/* The step in phi. */
-	dphi = 2 * M_PI / nphi;
-
-	/* The south pole comes first. */
-	kptr = fmaconf.kvecs;
-	kptr[0] = kptr[1] = 0.0;
-	kptr[2] = -1.0;
-	kptr += 3;
-	nphi2 = nphi / 2;
-
-	fmaconf.kvecmap[0] = nsamptot - 1;
-
-	/* The intermediate values are next. */
-	for (i = 1, k = 1; i < nthetast; ++i) {
-		idx = (ntheta - i - 2) * nphi + 1;
-		sn = sin (acos (thetas[i]));
-		for (j = 0, phi = 0; j < nphi; ++j, ++k, phi += dphi, kptr += 3) {
-			fmaconf.kvecmap[k] = idx + (nphi2 + j) % nphi;
-			kptr[0] = sn * cos (phi);
-			kptr[1] = sn * sin (phi);
-			kptr[2] = thetas[i];
+	/* Compute radiation patterns for children bases. */
+	for (pptr = fmaconf.radpats, i = 0; i < fmaconf.bspbox; ++i) {
+		dist[0] = ((float)i + 0.5 - clen) * fmaconf.cell;
+		for (j = 0; j < fmaconf.bspbox; ++j) {
+			dist[1] = ((float)j + 0.5 - clen) * fmaconf.cell;
+			for (k = 0; k < fmaconf.bspbox; ++k, ++pptr) {
+				dist[2] = ((float)k + 0.5 - clen) * fmaconf.cell;
+				buildradpat (*pptr, fmaconf.k0, dist,
+						thetas, ntheta, nphi);
+			}
 		}
 	}
-
-	for (i = nthetast; i < nthetast + (ntheta % 2); ++i) {
-		sn = sin (acos (thetas[i]));
-		for (j = 0, phi = 0; j < nphi; ++j, ++k, phi += dphi, kptr += 3) {
-			kptr[0] = sn * cos (phi);
-			kptr[1] = sn * sin (phi);
-			kptr[2] = thetas[i];
-		}
-	}
-
-	free (thetas);
 
 	/* Find the smallest box size. */
 	ScaleME_getSmallestBoxSize (lbox);
@@ -151,9 +126,9 @@ int fmmprecalc () {
 	nb1 = fmaconf.numbuffer + 1;
 
 	/* Find the maximum number of near neighbors in each dimension. */
-	fmaconf.nbors[0] = (int) ((nb1 * lbox[0]) / fmaconf.cell[0]) + 1;
-	fmaconf.nbors[1] = (int) ((nb1 * lbox[1]) / fmaconf.cell[1]) + 1;
-	fmaconf.nbors[2] = (int) ((nb1 * lbox[2]) / fmaconf.cell[2]) + 1;
+	fmaconf.nbors[0] = (int) ((nb1 * lbox[0]) / fmaconf.cell) + 1;
+	fmaconf.nbors[1] = (int) ((nb1 * lbox[1]) / fmaconf.cell) + 1;
+	fmaconf.nbors[2] = (int) ((nb1 * lbox[2]) / fmaconf.cell) + 1;
 
 	totel = fmaconf.nbors[0] * fmaconf.nbors[1] * fmaconf.nbors[2];
 
@@ -161,11 +136,11 @@ int fmmprecalc () {
 
 	/* Compute the interactions. */
 	for (i = 0, idx = 0; i < fmaconf.nbors[0]; ++i) {
-		dist[0] = i * fmaconf.cell[0];
+		dist[0] = i * fmaconf.cell;
 		for (j = 0; j < fmaconf.nbors[1]; ++j) {
-			dist[1] = j * fmaconf.cell[1];
+			dist[1] = j * fmaconf.cell;
 			for (k = 0; k < fmaconf.nbors[2]; ++k, ++idx) {
-				dist[2] = k * fmaconf.cell[2];
+				dist[2] = k * fmaconf.cell;
 				
 				fmaconf.gridints[idx] = srcint (fmaconf.k0, zero, dist, fmaconf.cell);
 				fmaconf.gridints[idx] *= fmaconf.k0 * fmaconf.k0;
@@ -175,6 +150,8 @@ int fmmprecalc () {
 
 	/* The self term uses the analytic approximation. */
 	fmaconf.gridints[0] = selfint (fmaconf.k0, fmaconf.cell);
+
+	free (thetas);
 
 	return totel;
 }
@@ -226,6 +203,7 @@ void blockinteract (int nsrc, int nobs, int *srclist,
 /* initialisation and finalisation routines for ScaleME */
 int ScaleME_preconf (void) {
 	int error;
+	float len, cen[3];
 	
 	/* The problem and tree are both three-dimensional. */
 	ScaleME_setDimen (3);
@@ -251,6 +229,14 @@ int ScaleME_preconf (void) {
 
 	if (fmaconf.smallbox > 0)
 		ScaleME_setSmallestBoxSize(fmaconf.smallbox);
+
+	/* Set the root box length. */
+	len = (1 <<  fmaconf.maxlev) * fmaconf.bspbox * fmaconf.cell;
+	/* Position the root box properly. */
+	cen[0] = fmaconf.min[0] + 0.5 * len;
+	cen[1] = fmaconf.min[1] + 0.5 * len;
+	cen[2] = fmaconf.min[2] + 0.5 * len;
+	ScaleME_setRootBox (len, cen);
 	
 	/*  let all processes start the initialisation together */
 	MPI_Barrier(MPI_COMM_WORLD); 

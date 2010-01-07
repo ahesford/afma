@@ -59,8 +59,7 @@ int directfield (complex float *currents, measdesc *obs,
 	buf = calloc (obs->count, sizeof(complex float));
 
 	/* The integration factor. */
-	fact = fmaconf.k0 * fmaconf.k0 
-		* fmaconf.cell[0] * fmaconf.cell[1] * fmaconf.cell[2];
+	fact = fmaconf.k0 * fmaconf.k0 * fmaconf.cellvol;
 
 	if (!grf) {
 		/* Compute the fields radiated by the local fields. */

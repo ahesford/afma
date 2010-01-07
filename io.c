@@ -11,6 +11,7 @@
 #include "measure.h"
 
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
 void skipcomments (FILE *fp) {
 	fpos_t loc;
@@ -59,6 +60,7 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 		measdesc *src, measdesc *obs) {
 	FILE *fp;
 	char buf[1024];
+	int nmax;
 
 	if (!(fp = fopen (fname, "r"))) {
 		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
@@ -70,23 +72,22 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%d %d %d", &(fmaconf.nx), &(fmaconf.ny), &(fmaconf.nz));
 
+	nmax = MAX(fmaconf.nx,MAX(fmaconf.ny,fmaconf.nz));
+
 	/* Read the lower corner of the domain. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %f", fmaconf.min, fmaconf.min + 1, fmaconf.min + 2);
+	sscanf (buf, "%f %f %f %f", fmaconf.cen, fmaconf.cen + 1,
+			fmaconf.cen + 2, &(fmaconf.cell));
+
+	fmaconf.min[0] = fmaconf.cen[0] - 0.5 * (float)(fmaconf.nx) * fmaconf.cell;
+	fmaconf.min[1] = fmaconf.cen[1] - 0.5 * (float)(fmaconf.ny) * fmaconf.cell;
+	fmaconf.min[2] = fmaconf.cen[2] - 0.5 * (float)(fmaconf.nz) * fmaconf.cell;
+
+	fmaconf.cellvol = fmaconf.cell * fmaconf.cell * fmaconf.cell;
 
 	/* Set the global number of bases, for easy reference. */
 	fmaconf.gnumbases = fmaconf.nx * fmaconf.ny * fmaconf.nz;
-
-	/* Read the upper corner of the domain. */
-	skipcomments (fp);
-	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %f", fmaconf.max, fmaconf.max + 1, fmaconf.max + 2);
-
-	/* Compute the individual cell size. */
-	fmaconf.cell[0] = (fmaconf.max[0] - fmaconf.min[0]) / fmaconf.nx;
-	fmaconf.cell[1] = (fmaconf.max[1] - fmaconf.min[1]) / fmaconf.ny;
-	fmaconf.cell[2] = (fmaconf.max[2] - fmaconf.min[2]) / fmaconf.nz;
 
 	/* Set the wave number to 2 pi, since wavelength is the length unit. */
 	fmaconf.k0 = 2 * M_PI;
@@ -94,10 +95,13 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	/* Read the MLFMA level and fast translation configuration. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	if (sscanf (buf, "%d %d %d %d %d", &(fmaconf.maxlev), 
+	if (sscanf (buf, "%d %d %d %d %d", &(fmaconf.bspbox), 
 				&(fmaconf.toplev), &(fmaconf.fo2iterm),
 				&(fmaconf.fo2iord), &(fmaconf.fo2iosr)) < 5)
 		fmaconf.fo2iterm = fmaconf.fo2iord = fmaconf.fo2iosr = 0;
+
+	/* Compute the maximum FMM level for the desired finest level density. */
+	fmaconf.maxlev = (int)ceil(log2(ceil((double)nmax / (double)fmaconf.bspbox)));
 
 	/* Read the number of MLFMA buffer boxes. */
 	skipcomments (fp);
