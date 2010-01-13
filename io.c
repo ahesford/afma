@@ -113,11 +113,6 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%f", &(fmaconf.precision));
 
-	/* Read the MLFMA minimum box size. */
-	skipcomments (fp);
-	fgets (buf, 1024, fp);
-	sscanf (buf, "%f", &(fmaconf.smallbox));
-
 	/* Read the MLFMA interpolation order. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);

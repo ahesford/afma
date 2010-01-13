@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <complex.h>
 #include <math.h>
+
+#include <fftw3.h>
 
 #include <mpi.h>
 
@@ -13,6 +16,7 @@
 #include "mlfma.h"
 
 #define UNSGN(x) ((x) > 0 ? (x) : -(x))
+#define IDX(nx,i,j,k) ((k) + (nx) * ((j) + (nx) * (i)))
 
 fmadesc fmaconf;
 
@@ -84,8 +88,8 @@ int buildradpat (complex float *pat, float k, float *rmc,
 /* Precomputes the near interactions for redundant calculations and sets up
  * the wave vector directions to be used for fast calculation of far-field patterns. */
 int fmmprecalc () {
-	float lbox[3], dist[3], zero[3] = { 0, 0, 0 }, *thetas, clen;
-	int i, j, k, idx, totel, nb1, ntheta, nphi, nchild;
+	float dist[3], zero[3] = { 0, 0, 0 }, *thetas, clen;
+	int i, j, k, l, ip, jp, kp, totel, ntheta, nphi, nchild;
 	complex float **pptr;
 
 	/* The number of children in a finest-level box. */
@@ -120,82 +124,99 @@ int fmmprecalc () {
 		}
 	}
 
-	/* Find the smallest box size. */
-	ScaleME_getSmallestBoxSize (lbox);
-
-	nb1 = fmaconf.numbuffer + 1;
-
 	/* Find the maximum number of near neighbors in each dimension. */
-	fmaconf.nbors[0] = (int) ((nb1 * lbox[0]) / fmaconf.cell) + 1;
-	fmaconf.nbors[1] = (int) ((nb1 * lbox[1]) / fmaconf.cell) + 1;
-	fmaconf.nbors[2] = (int) ((nb1 * lbox[2]) / fmaconf.cell) + 1;
+	fmaconf.nbors = (2 * fmaconf.numbuffer + 1) * fmaconf.bspbox;
+	fmaconf.nborsex = 2 * fmaconf.nbors;
 
-	totel = fmaconf.nbors[0] * fmaconf.nbors[1] * fmaconf.nbors[2];
+	/* Build the expanded grid. */
+	totel = fmaconf.nborsex * fmaconf.nborsex * fmaconf.nborsex;
+	fmaconf.gridints = fftw_malloc (totel * sizeof (complex double));
 
-	fmaconf.gridints = malloc (totel * sizeof (complex float));
+	fmaconf.fplan = fftw_plan_dft_3d (fmaconf.nborsex, fmaconf.nborsex,
+			fmaconf.nborsex, fmaconf.gridints, fmaconf.gridints,
+			FFTW_FORWARD, FFTW_MEASURE);
+	fmaconf.bplan = fftw_plan_dft_3d (fmaconf.nborsex, fmaconf.nborsex,
+			fmaconf.nborsex, fmaconf.gridints, fmaconf.gridints,
+			FFTW_BACKWARD, FFTW_MEASURE);
 
 	/* Compute the interactions. */
-	for (i = 0, idx = 0; i < fmaconf.nbors[0]; ++i) {
-		dist[0] = i * fmaconf.cell;
-		for (j = 0; j < fmaconf.nbors[1]; ++j) {
-			dist[1] = j * fmaconf.cell;
-			for (k = 0; k < fmaconf.nbors[2]; ++k, ++idx) {
-				dist[2] = k * fmaconf.cell;
-				
-				fmaconf.gridints[idx] = srcint (fmaconf.k0, zero, dist, fmaconf.cell);
-				fmaconf.gridints[idx] *= fmaconf.k0 * fmaconf.k0;
-			}
-		}
+	for (l = 0; l < totel; ++l) {
+		k = l % fmaconf.nborsex;
+		j = (l / fmaconf.nborsex) % fmaconf.nborsex;
+		i = l / (fmaconf.nborsex * fmaconf.nborsex);
+
+		ip = (i < fmaconf.nbors) ? i : (fmaconf.nborsex - i);
+		jp = (j < fmaconf.nbors) ? j : (fmaconf.nborsex - j);
+		kp = (k < fmaconf.nbors) ? k : (fmaconf.nborsex - k);
+
+		dist[0] = (float)ip * fmaconf.cell;
+		dist[1] = (float)jp * fmaconf.cell;
+		dist[2] = (float)kp * fmaconf.cell;
+		
+		fmaconf.gridints[l] = srcint (fmaconf.k0, zero, dist, fmaconf.cell);
+		fmaconf.gridints[l] *= fmaconf.k0 * fmaconf.k0 / totel;
 	}
 
 	/* The self term uses the analytic approximation. */
-	fmaconf.gridints[0] = selfint (fmaconf.k0, fmaconf.cell);
+	fmaconf.gridints[0] = selfint (fmaconf.k0, fmaconf.cell) / totel;
+
+	/* Perform the Fourier transform of the Green's function. */
+	fftw_execute (fmaconf.fplan);
 
 	free (thetas);
 
-	return totel;
+	return fmaconf.nbors;
 }
 
 /* Evaluate at a group of observers the fields due to a group of sources. */
 void blockinteract (int nsrc, int nobs, int *srclist,
-		int *obslist, void *vsrc, void *vobs) {
-	int i, j, *src, *srcptr, obs[3], dist[3], idx;
-	complex float *srcfld, *csrc, *cobs;
+		int *obslist, void *vsrc, void *vobs, float *bc) {
+	int i, j, k, l, idx, totel;
+	complex float *csrc = (complex float *)vsrc, *cobs = (complex float *)vobs;
+	complex double *buf;
+	float cc[3], shift;
 
-	/* Convert the void types to complex floats. */
-	csrc = (complex float *)vsrc;
-	cobs = (complex float *)vobs;
+	/* Allocate and clear the buffer array. */
+	totel = fmaconf.nborsex * fmaconf.nborsex * fmaconf.nborsex;
+	buf = fftw_malloc (totel * sizeof(complex double));
+	memset (buf, 0, totel * sizeof(complex double));
 
-	src = malloc (3 * nsrc * sizeof(int));
+	/* An offset to compute the grid position. */
+	shift = 0.5 * (float)(fmaconf.nbors - 1);
 
-	/* Precompute the source indices. */
-	for (i = 0; i < nsrc; ++i) bsindex (srclist[i], src + 3 * i);
+	/* Populate the local grid. */
+	for (l = 0; l < nsrc; ++l) {
+		bscenter (srclist[l], cc);
+		i = round((cc[0] - bc[0]) / fmaconf.cell + shift);
+		j = round((cc[1] - bc[1]) / fmaconf.cell + shift);
+		k = round((cc[2] - bc[2]) / fmaconf.cell + shift);
+		idx = IDX(fmaconf.nborsex, i, j, k);
 
-	for (i = 0; i < nobs; ++i, ++cobs) {
-		/* Find the observer index. */
-		bsindex (obslist[i], obs);
-
-		/* Point to the starting source. */
-		srcptr = src;
-		srcfld = csrc;
-
-		for (j = 0; j < nsrc; ++j, srcptr += 3) {
-			/* Compute the grid distance between source and observer. */
-			dist[0] = srcptr[0] - obs[0];
-			dist[1] = srcptr[1] - obs[1];
-			dist[2] = srcptr[2] - obs[2];
-			
-			/* Find the linear index for the interaction. */
-			idx = UNSGN(dist[2]) + UNSGN(dist[1]) * fmaconf.nbors[2]
-				+ UNSGN(dist[0]) * fmaconf.nbors[2] * fmaconf.nbors[1];
-
-			/* Augment the observer field with this contribution.
-			 * Also shift the pointers for the next iteration. */
-			*cobs += *(srcfld++) * fmaconf.gridints[idx];
-		}
+		buf[idx] = csrc[l];
 	}
 
-	free (src);
+	/* Transform the local grid in place. */
+	fftw_execute_dft (fmaconf.fplan, buf, buf);
+
+	/* The convolution is now a multiplication. */
+	for (l = 0; l < totel; ++l) buf[l] *= fmaconf.gridints[l];
+
+	/* Inverse transform the grid in place. */
+	fftw_execute_dft (fmaconf.bplan, buf, buf);
+
+	/* Augment with output with the local convolution. */
+	for (l = 0; l < nobs; ++l) {
+		bscenter (obslist[l], cc);
+		i = round((cc[0] - bc[0]) / fmaconf.cell + shift);
+		j = round((cc[1] - bc[1]) / fmaconf.cell + shift);
+		k = round((cc[2] - bc[2]) / fmaconf.cell + shift);
+		idx = IDX(fmaconf.nborsex, i, j, k);
+
+		cobs[l] += buf[idx];
+	}
+
+	/* Free the buffer array. */
+	fftw_free (buf);
 
 	return;
 }
@@ -226,9 +247,6 @@ int ScaleME_preconf (void) {
 
 	if (fmaconf.fo2iterm > 0)
 		ScaleME_selectFastO2I (fmaconf.fo2iterm, fmaconf.fo2iord, fmaconf.fo2iosr);
-
-	if (fmaconf.smallbox > 0)
-		ScaleME_setSmallestBoxSize(fmaconf.smallbox);
 
 	/* Set the root box length. */
 	len = (1 <<  fmaconf.maxlev) * fmaconf.bspbox * fmaconf.cell;
