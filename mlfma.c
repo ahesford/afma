@@ -8,6 +8,10 @@
 
 #include <mpi.h>
 
+#ifdef _MACOSX
+#include <Accelerate/Accelerate.h>
+#endif
+
 #include "ScaleME.h"
 
 #include "fsgreen.h"
@@ -23,36 +27,67 @@ fmadesc fmaconf;
 /* Computes the far-field pattern for the specified basis with the specified
  * center, and stores the output in a provided vector. sgn is positive for
  * radiation pattern and negative for receiving pattern. */
-void farpattern (void *vcrt, void *vpat, int gi, int sgn, float *cen) {
-	float rv[3], fact, shift;
-	complex float *crt = (complex float *)vcrt,
-		*pat = *((complex float **)vpat), *ppat;
-	int i, j, k;
+void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn) {
+	float rv[3], shift;
+	complex float fact, beta, *buf, *crt = (complex float *)vcrt,
+		*pat = *((complex float **)vpat);
+	int i, j, k, l, totel;
 
-	shift = 0.5 * ((float)fmaconf.bspbox - 1.0);
+	/* Allocate a storage buffer. */
+	totel = fmaconf.bspbox * fmaconf.bspbox * fmaconf.bspbox;
+	buf = calloc (totel, sizeof(complex float));
 
-	/* Find the basis center. */
-	bscenter (gi, rv);
+	shift = 0.5 * (float)(fmaconf.bspbox - 1);
 
-	/* Find the position relative to the parent. */
-	i = round((rv[0] - cen[0]) / fmaconf.cell + shift);
-	j = round((rv[1] - cen[1]) / fmaconf.cell + shift);
-	k = round((rv[2] - cen[2]) / fmaconf.cell + shift);
-
-	/* Pull out the relevant precomputed pattern. */
-	k += j * fmaconf.bspbox + i * fmaconf.bspbox * fmaconf.bspbox;
-	ppat = fmaconf.radpats + k * fmaconf.nsamp;
-
-	/* Compute the far-field pattern for the basis function. */
 	if (sgn >= 0) {
+		/* Scalar factors for the matrix multiplication. */
 		fact = fmaconf.k0 * fmaconf.cellvol;
-		for (i = 0; i < fmaconf.nsamp; ++i)
-			pat[i] += *crt * fact * ppat[i];
+		beta = 1.0;
+
+		/* Compute the far-field pattern for the basis functions. */
+		for (l = 0; l < nbs; ++l) {
+			/* Find the basis center. */
+			bscenter (bsl[l], rv);
+			
+			/* Find the position relative to the parent. */
+			i = round((rv[0] - cen[0]) / fmaconf.cell + shift);
+			j = round((rv[1] - cen[1]) / fmaconf.cell + shift);
+			k = round((rv[2] - cen[2]) / fmaconf.cell + shift);
+
+			/* Augment the current vector. */
+			buf[IDX(fmaconf.bspbox,i,j,k)] = crt[l];
+		}
+
+		/* Perform the matrix-vector product. */
+		cblas_cgemv (CblasColMajor, CblasNoTrans, fmaconf.nsamp,
+				totel, &fact, fmaconf.radpats, fmaconf.nsamp,
+				buf, 1, &beta, pat, 1);
 	} else {
-		fact = fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
-		for (i = 0; i < fmaconf.nsamp; ++i)
-			*crt += I * pat[i] * fact * conj(ppat[i]);
+		/* Distribute the far-field patterns to the basis functions. */
+		/* Scalar factors for the matrix multiplication. */
+		fact = I * fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
+		beta = 0.0;
+
+		/* Perform the matrix-vector product. */
+		cblas_cgemv (CblasColMajor, CblasConjTrans, fmaconf.nsamp,
+				totel, &fact, fmaconf.radpats, fmaconf.nsamp,
+				pat, 1, &beta, buf, 1);
+
+		for (l = 0; l < nbs; ++l) {
+			/* Find the basis center. */
+			bscenter (bsl[l], rv);
+			
+			/* Find the position relative to the parent. */
+			i = round((rv[0] - cen[0]) / fmaconf.cell + shift);
+			j = round((rv[1] - cen[1]) / fmaconf.cell + shift);
+			k = round((rv[2] - cen[2]) / fmaconf.cell + shift);
+
+			/* Augment the current vector. */
+			crt[l] += buf[IDX(fmaconf.bspbox,i,j,k)];
+		}
 	}
+
+	free (buf);
 }
 
 /* Precompute the exponential radiation pattern for a point a distance rmc 

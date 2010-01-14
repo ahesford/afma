@@ -38,7 +38,7 @@ static inline void bscenter (int gi, float *cen) {
 	cen[2] = fmaconf.min[2] + ((float)idx[2] + 0.5) * fmaconf.cell;
 }
 
-void farpattern (void *, void *, int, int, float *);
+void farpattern (int, int *, void *, void *, float *, int);
 int fmmprecalc ();
 void blockinteract (int, int, int *, int *, void *, void *, float *);
 
