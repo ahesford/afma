@@ -41,17 +41,17 @@ void farpattern (void *vcrt, void *vpat, int gi, int sgn, float *cen) {
 
 	/* Pull out the relevant precomputed pattern. */
 	k += j * fmaconf.bspbox + i * fmaconf.bspbox * fmaconf.bspbox;
-	ppat = fmaconf.radpats[k];
+	ppat = fmaconf.radpats + k * fmaconf.nsamp;
 
 	/* Compute the far-field pattern for the basis function. */
 	if (sgn >= 0) {
 		fact = fmaconf.k0 * fmaconf.cellvol;
 		for (i = 0; i < fmaconf.nsamp; ++i)
-			pat[i] += *crt * fact * conj(ppat[i]);
+			pat[i] += *crt * fact * ppat[i];
 	} else {
 		fact = fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
 		for (i = 0; i < fmaconf.nsamp; ++i)
-			*crt += I * pat[i] * fact * ppat[i];
+			*crt += I * pat[i] * fact * conj(ppat[i]);
 	}
 }
 
@@ -64,7 +64,7 @@ int buildradpat (complex float *pat, float k, float *rmc,
 
 	/* South pole first. */
 	sdr = -rmc[2];
-	*(pat++) = cexp (I * k * sdr);
+	*(pat++) = cexp (-I * k * sdr);
 
 	for (i = 1; i < nthsc; ++i) {
 		s[2] = thetas[i];
@@ -74,13 +74,13 @@ int buildradpat (complex float *pat, float k, float *rmc,
 			s[0] = sn * cos (phi);
 			s[1] = sn * sin (phi);
 			sdr = s[0] * rmc[0] + s[1] * rmc[1] + s[2] * rmc[2];
-			*(pat++) = cexp (I * k * sdr);
+			*(pat++) = cexp (-I * k * sdr);
 		}
 	}
 
 	/* North pole last. */
 	sdr = rmc[2];
-	*pat = cexp (I * k * sdr);
+	*pat = cexp (-I * k * sdr);
 
 	return ntheta;
 }
@@ -88,12 +88,11 @@ int buildradpat (complex float *pat, float k, float *rmc,
 /* Precomputes the near interactions for redundant calculations and sets up
  * the wave vector directions to be used for fast calculation of far-field patterns. */
 int fmmprecalc () {
-	float dist[3], zero[3] = { 0, 0, 0 }, *thetas, clen;
-	int i, j, k, l, ip, jp, kp, totel, ntheta, nphi, nchild;
-	complex float **pptr;
+	float zero[3] = { 0, 0, 0 }, *thetas, clen;
+	int totel, ntheta, nphi;
 
 	/* The number of children in a finest-level box. */
-	nchild = fmaconf.bspbox * fmaconf.bspbox * fmaconf.bspbox;
+	totel = fmaconf.bspbox * fmaconf.bspbox * fmaconf.bspbox;
 
 	/* Get the finest level parameters. */
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, NULL, NULL);
@@ -103,26 +102,36 @@ int fmmprecalc () {
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, thetas, NULL);
 
 	/* Allocate storage for the radiation patterns. */
-	fmaconf.radpats = malloc (nchild * sizeof(complex float));
-	fmaconf.radpats[0] = malloc (nchild * fmaconf.nsamp * sizeof(complex float));
-	for (i = 1; i < nchild; ++i)
-		fmaconf.radpats[i] = fmaconf.radpats[i - 1] + fmaconf.nsamp;
+	fmaconf.radpats = malloc (totel * fmaconf.nsamp * sizeof(complex float));
 
 	/* Calculate the box center. */
 	clen = 0.5 * (float)fmaconf.bspbox;
 
-	/* Compute radiation patterns for children bases. */
-	for (pptr = fmaconf.radpats, i = 0; i < fmaconf.bspbox; ++i) {
+#pragma omp parallel default(shared)
+{
+	int i, j, k, l;
+	complex float *pptr;
+	float dist[3];
+
+#pragma omp for
+	for (l = 0; l < totel; ++l) {
+		/* The pointer to the relevant pattern. */
+		pptr = fmaconf.radpats + l * fmaconf.nsamp;
+
+		/* The basis index with respect to the parent box. */
+		k = l % fmaconf.bspbox;
+		j = (l / fmaconf.bspbox) % fmaconf.bspbox;
+		i = l / (fmaconf.bspbox * fmaconf.bspbox);
+
+		/* The distance from the basis to the box center. */
 		dist[0] = ((float)i + 0.5 - clen) * fmaconf.cell;
-		for (j = 0; j < fmaconf.bspbox; ++j) {
-			dist[1] = ((float)j + 0.5 - clen) * fmaconf.cell;
-			for (k = 0; k < fmaconf.bspbox; ++k, ++pptr) {
-				dist[2] = ((float)k + 0.5 - clen) * fmaconf.cell;
-				buildradpat (*pptr, fmaconf.k0, dist,
-						thetas, ntheta, nphi);
-			}
-		}
+		dist[1] = ((float)j + 0.5 - clen) * fmaconf.cell;
+		dist[2] = ((float)k + 0.5 - clen) * fmaconf.cell;
+
+		/* Construct the radiation pattern. */
+		buildradpat (pptr, fmaconf.k0, dist, thetas, ntheta, nphi);
 	}
+}
 
 	/* Find the maximum number of near neighbors in each dimension. */
 	fmaconf.nbors = (2 * fmaconf.numbuffer + 1) * fmaconf.bspbox;
@@ -139,7 +148,13 @@ int fmmprecalc () {
 			fmaconf.nborsex, fmaconf.gridints, fmaconf.gridints,
 			FFTW_BACKWARD, FFTW_MEASURE);
 
+#pragma omp parallel default(shared)
+{
+	int i, j, k, l, ip, jp, kp;
+	float dist[3];
+
 	/* Compute the interactions. */
+#pragma omp for
 	for (l = 0; l < totel; ++l) {
 		k = l % fmaconf.nborsex;
 		j = (l / fmaconf.nborsex) % fmaconf.nborsex;
@@ -156,6 +171,7 @@ int fmmprecalc () {
 		fmaconf.gridints[l] = srcint (fmaconf.k0, zero, dist, fmaconf.cell);
 		fmaconf.gridints[l] *= fmaconf.k0 * fmaconf.k0 / totel;
 	}
+}
 
 	/* The self term uses the analytic approximation. */
 	fmaconf.gridints[0] = selfint (fmaconf.k0, fmaconf.cell) / totel;
