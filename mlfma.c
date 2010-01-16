@@ -222,28 +222,36 @@ int fmmprecalc () {
 /* Evaluate at a group of observers the fields due to a group of sources. */
 void blockinteract (int nsrc, int nobs, int *srclist,
 		int *obslist, void *vsrc, void *vobs, float *bc) {
-	int i, j, k, l, idx, totel;
+	int l, totel, bsoff[3], idx[3];
 	complex float *csrc = (complex float *)vsrc, *cobs = (complex float *)vobs;
 	complex double *buf;
-	float cc[3], shift;
+	float fbox[3];
 
 	/* Allocate and clear the buffer array. */
 	totel = fmaconf.nborsex * fmaconf.nborsex * fmaconf.nborsex;
 	buf = fftw_malloc (totel * sizeof(complex double));
 	memset (buf, 0, totel * sizeof(complex double));
 
-	/* An offset to compute the grid position. */
-	shift = 0.5 * (float)(fmaconf.nbors - 1);
+	/* Calculate the box position. */
+	fbox[0] = (bc[0] - fmaconf.min[0]) / (fmaconf.cell * fmaconf.bspbox);
+	fbox[1] = (bc[1] - fmaconf.min[1]) / (fmaconf.cell * fmaconf.bspbox);
+	fbox[2] = (bc[2] - fmaconf.min[2]) / (fmaconf.cell * fmaconf.bspbox);
+
+	/* Now calculate an offset for the basis indices. */
+	bsoff[0] = ((int)(fbox[0]) - fmaconf.numbuffer) * fmaconf.bspbox;
+	bsoff[1] = ((int)(fbox[1]) - fmaconf.numbuffer) * fmaconf.bspbox;
+	bsoff[2] = ((int)(fbox[2]) - fmaconf.numbuffer) * fmaconf.bspbox;
 
 	/* Populate the local grid. */
 	for (l = 0; l < nsrc; ++l) {
-		bscenter (srclist[l], cc);
-		i = round((cc[0] - bc[0]) / fmaconf.cell + shift);
-		j = round((cc[1] - bc[1]) / fmaconf.cell + shift);
-		k = round((cc[2] - bc[2]) / fmaconf.cell + shift);
-		idx = IDX(fmaconf.nborsex, i, j, k);
+		bsindex (srclist[l], idx);
 
-		buf[idx] = csrc[l];
+		/* Convert the global grid position to a local position. */
+		idx[0] -= bsoff[0];
+		idx[1] -= bsoff[1];
+		idx[2] -= bsoff[2];
+
+		buf[IDX(fmaconf.nborsex,idx[0],idx[1],idx[2])] = csrc[l];
 	}
 
 	/* Transform the local grid in place. */
@@ -257,13 +265,14 @@ void blockinteract (int nsrc, int nobs, int *srclist,
 
 	/* Augment with output with the local convolution. */
 	for (l = 0; l < nobs; ++l) {
-		bscenter (obslist[l], cc);
-		i = round((cc[0] - bc[0]) / fmaconf.cell + shift);
-		j = round((cc[1] - bc[1]) / fmaconf.cell + shift);
-		k = round((cc[2] - bc[2]) / fmaconf.cell + shift);
-		idx = IDX(fmaconf.nborsex, i, j, k);
+		bsindex (obslist[l], idx);
 
-		cobs[l] += buf[idx];
+		/* Convert the global grid position to a local position. */
+		idx[0] -= bsoff[0];
+		idx[1] -= bsoff[1];
+		idx[2] -= bsoff[2];
+
+		cobs[l] += buf[IDX(fmaconf.nborsex,idx[0],idx[1],idx[2])];
 	}
 
 	/* Free the buffer array. */
