@@ -57,7 +57,7 @@ int frechet (complex float *crt, complex float *fld,
 int frechadj (complex float *mag, complex float *fld,
 		complex float *sol, measdesc *obs, solveparm *slv) {
 	int j;
-	double factor = fmaconf.k0 * fmaconf.k0 * fmaconf.cellvol;
+	float factor = fmaconf.k0 * fmaconf.k0 * fmaconf.cellvol;
 
 	for (j = 0; j < obs->count; ++j)
 		mag[j] = conj(mag[j]);

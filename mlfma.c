@@ -174,12 +174,12 @@ int fmmprecalc () {
 
 	/* Build the expanded grid. */
 	totel = fmaconf.nborsex * fmaconf.nborsex * fmaconf.nborsex;
-	fmaconf.gridints = fftw_malloc (totel * sizeof (complex double));
+	fmaconf.gridints = fftwf_malloc (totel * sizeof (complex float));
 
-	fmaconf.fplan = fftw_plan_dft_3d (fmaconf.nborsex, fmaconf.nborsex,
+	fmaconf.fplan = fftwf_plan_dft_3d (fmaconf.nborsex, fmaconf.nborsex,
 			fmaconf.nborsex, fmaconf.gridints, fmaconf.gridints,
 			FFTW_FORWARD, FFTW_MEASURE);
-	fmaconf.bplan = fftw_plan_dft_3d (fmaconf.nborsex, fmaconf.nborsex,
+	fmaconf.bplan = fftwf_plan_dft_3d (fmaconf.nborsex, fmaconf.nborsex,
 			fmaconf.nborsex, fmaconf.gridints, fmaconf.gridints,
 			FFTW_BACKWARD, FFTW_MEASURE);
 
@@ -212,7 +212,7 @@ int fmmprecalc () {
 	fmaconf.gridints[0] = selfint (fmaconf.k0, fmaconf.cell) / totel;
 
 	/* Perform the Fourier transform of the Green's function. */
-	fftw_execute (fmaconf.fplan);
+	fftwf_execute (fmaconf.fplan);
 
 	free (thetas);
 
@@ -224,13 +224,13 @@ void blockinteract (int nsrc, int nobs, int *srclist,
 		int *obslist, void *vsrc, void *vobs, float *bc) {
 	int l, totel, bsoff[3], idx[3];
 	complex float *csrc = (complex float *)vsrc, *cobs = (complex float *)vobs;
-	complex double *buf;
+	complex float *buf;
 	float fbox[3];
 
 	/* Allocate and clear the buffer array. */
 	totel = fmaconf.nborsex * fmaconf.nborsex * fmaconf.nborsex;
-	buf = fftw_malloc (totel * sizeof(complex double));
-	memset (buf, 0, totel * sizeof(complex double));
+	buf = fftwf_malloc (totel * sizeof(complex float));
+	memset (buf, 0, totel * sizeof(complex float));
 
 	/* Calculate the box position. */
 	fbox[0] = (bc[0] - fmaconf.min[0]) / (fmaconf.cell * fmaconf.bspbox);
@@ -255,13 +255,13 @@ void blockinteract (int nsrc, int nobs, int *srclist,
 	}
 
 	/* Transform the local grid in place. */
-	fftw_execute_dft (fmaconf.fplan, buf, buf);
+	fftwf_execute_dft (fmaconf.fplan, buf, buf);
 
 	/* The convolution is now a multiplication. */
 	for (l = 0; l < totel; ++l) buf[l] *= fmaconf.gridints[l];
 
 	/* Inverse transform the grid in place. */
-	fftw_execute_dft (fmaconf.bplan, buf, buf);
+	fftwf_execute_dft (fmaconf.bplan, buf, buf);
 
 	/* Augment with output with the local convolution. */
 	for (l = 0; l < nobs; ++l) {
@@ -276,7 +276,7 @@ void blockinteract (int nsrc, int nobs, int *srclist,
 	}
 
 	/* Free the buffer array. */
-	fftw_free (buf);
+	fftwf_free (buf);
 
 	return;
 }

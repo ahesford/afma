@@ -14,10 +14,9 @@ typedef struct {
 	int fo2iterm, fo2iord, fo2iosr;
 	int *bslist;
 	float k0;
-	complex float *contrast, *radpats;
-	complex double *gridints;
+	complex float *contrast, *radpats, *gridints;
 	int nsamp, nbors, nborsex;
-	fftw_plan fplan, bplan;
+	fftwf_plan fplan, bplan;
 } fmadesc;
 
 extern fmadesc fmaconf;
