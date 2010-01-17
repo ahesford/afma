@@ -10,6 +10,10 @@
 #include "itsolver.h"
 #include "measure.h"
 
+#ifdef _FREEBSD
+#define log2(a) (log(a) / log(2))
+#endif
+
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 

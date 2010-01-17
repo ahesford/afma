@@ -7,6 +7,10 @@
 
 #ifdef _MACOSX
 #include <Accelerate/Accelerate.h>
+#else
+#ifdef _FREEBSD
+#include <cblas.h>
+#endif
 #endif
 
 /* These headers are provided by ScaleME. */
