@@ -8,13 +8,15 @@
 
 #include <mpi.h>
 
+#include <omp.h>
+
 #ifdef _MACOSX
 #include <Accelerate/Accelerate.h>
-#else
+#endif /* _MACOSX */
+
 #ifdef _FREEBSD
 #include <cblas.h>
-#endif
-#endif
+#endif /* _FREEBSD */
 
 #include "ScaleME.h"
 
@@ -26,22 +28,38 @@
 #define UNSGN(x) ((x) > 0 ? (x) : -(x))
 #define IDX(nx,i,j,k) ((k) + (nx) * ((j) + (nx) * (i)))
 
+/* Define some no-op OpenMP functions if OpenMP is not used. */
+#ifndef _OPENMP
+int omp_get_max_threads () { return 1; }
+int omp_get_thread_num () { return 0; }
+#endif /* _OPENMP */
+
 fmadesc fmaconf;
+
+/* Some often-used buffers that shouldn't be continually reallocated. */
+complex float *patbuf, *dirbuf;
+int totbpbox, totbpnbr;
 
 /* Computes the far-field pattern for the specified basis with the specified
  * center, and stores the output in a provided vector. sgn is positive for
  * radiation pattern and negative for receiving pattern. */
 void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn) {
-	float rv[3], shift;
+	float fbox[3];
 	complex float fact, beta, *buf, *crt = (complex float *)vcrt,
 		*pat = *((complex float **)vpat);
-	int i, j, k, l, totel;
+	int l, idx[3], bsoff[3];
 
-	/* Allocate a storage buffer. */
-	totel = fmaconf.bspbox * fmaconf.bspbox * fmaconf.bspbox;
-	buf = calloc (totel, sizeof(complex float));
+	/* The buffer that will be used by this thread for this routine. */
+	buf = patbuf + omp_get_thread_num() * totbpbox;
+	memset (buf, 0, totbpbox * sizeof(complex float));
 
-	shift = 0.5 * (float)(fmaconf.bspbox - 1);
+	fbox[0] = (cen[0] - fmaconf.min[0]) / (fmaconf.cell * fmaconf.bspbox);
+	fbox[1] = (cen[1] - fmaconf.min[1]) / (fmaconf.cell * fmaconf.bspbox);
+	fbox[2] = (cen[2] - fmaconf.min[2]) / (fmaconf.cell * fmaconf.bspbox);
+
+	bsoff[0] = (int)(fbox[0]) * fmaconf.bspbox;
+	bsoff[1] = (int)(fbox[1]) * fmaconf.bspbox;
+	bsoff[2] = (int)(fbox[2]) * fmaconf.bspbox;
 
 	if (sgn >= 0) {
 		/* Scalar factors for the matrix multiplication. */
@@ -50,21 +68,21 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 
 		/* Compute the far-field pattern for the basis functions. */
 		for (l = 0; l < nbs; ++l) {
-			/* Find the basis center. */
-			bscenter (bsl[l], rv);
-			
-			/* Find the position relative to the parent. */
-			i = round((rv[0] - cen[0]) / fmaconf.cell + shift);
-			j = round((rv[1] - cen[1]) / fmaconf.cell + shift);
-			k = round((rv[2] - cen[2]) / fmaconf.cell + shift);
+			/* Find the basis grid position. */
+			bsindex (bsl[l], idx);
 
+			/* Shift to a local grid position. */
+			idx[0] -= bsoff[0];
+			idx[1] -= bsoff[1];
+			idx[2] -= bsoff[2];
+			
 			/* Augment the current vector. */
-			buf[IDX(fmaconf.bspbox,i,j,k)] = crt[l];
+			buf[IDX(fmaconf.bspbox,idx[0],idx[1],idx[2])] = crt[l];
 		}
 
 		/* Perform the matrix-vector product. */
 		cblas_cgemv (CblasColMajor, CblasNoTrans, fmaconf.nsamp,
-				totel, &fact, fmaconf.radpats, fmaconf.nsamp,
+				totbpbox, &fact, fmaconf.radpats, fmaconf.nsamp,
 				buf, 1, &beta, pat, 1);
 	} else {
 		/* Distribute the far-field patterns to the basis functions. */
@@ -74,24 +92,22 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 
 		/* Perform the matrix-vector product. */
 		cblas_cgemv (CblasColMajor, CblasConjTrans, fmaconf.nsamp,
-				totel, &fact, fmaconf.radpats, fmaconf.nsamp,
+				totbpbox, &fact, fmaconf.radpats, fmaconf.nsamp,
 				pat, 1, &beta, buf, 1);
 
 		for (l = 0; l < nbs; ++l) {
-			/* Find the basis center. */
-			bscenter (bsl[l], rv);
+			/* Find the basis grid position. */
+			bsindex (bsl[l], idx);
 			
-			/* Find the position relative to the parent. */
-			i = round((rv[0] - cen[0]) / fmaconf.cell + shift);
-			j = round((rv[1] - cen[1]) / fmaconf.cell + shift);
-			k = round((rv[2] - cen[2]) / fmaconf.cell + shift);
-
+			/* Shift to a local grid position. */
+			idx[0] -= bsoff[0];
+			idx[1] -= bsoff[1];
+			idx[2] -= bsoff[2];
+			
 			/* Augment the current vector. */
-			crt[l] += buf[IDX(fmaconf.bspbox,i,j,k)];
+			crt[l] += buf[IDX(fmaconf.bspbox,idx[0],idx[1],idx[2])];
 		}
 	}
-
-	free (buf);
 }
 
 /* Precompute the exponential radiation pattern for a point a distance rmc 
@@ -128,10 +144,10 @@ int buildradpat (complex float *pat, float k, float *rmc,
  * the wave vector directions to be used for fast calculation of far-field patterns. */
 int fmmprecalc () {
 	float zero[3] = { 0, 0, 0 }, *thetas, clen;
-	int totel, ntheta, nphi;
+	int ntheta, nphi;
 
 	/* The number of children in a finest-level box. */
-	totel = fmaconf.bspbox * fmaconf.bspbox * fmaconf.bspbox;
+	totbpbox = fmaconf.bspbox * fmaconf.bspbox * fmaconf.bspbox;
 
 	/* Get the finest level parameters. */
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, NULL, NULL);
@@ -141,7 +157,9 @@ int fmmprecalc () {
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, thetas, NULL);
 
 	/* Allocate storage for the radiation patterns. */
-	fmaconf.radpats = malloc (totel * fmaconf.nsamp * sizeof(complex float));
+	fmaconf.radpats = malloc (totbpbox * fmaconf.nsamp * sizeof(complex float));
+	/* Allocate the buffer used by the callback. */
+	patbuf = malloc (totbpbox * omp_get_max_threads() * sizeof(complex float));
 
 	/* Calculate the box center. */
 	clen = 0.5 * (float)fmaconf.bspbox;
@@ -153,7 +171,7 @@ int fmmprecalc () {
 	float dist[3];
 
 #pragma omp for
-	for (l = 0; l < totel; ++l) {
+	for (l = 0; l < totbpbox; ++l) {
 		/* The pointer to the relevant pattern. */
 		pptr = fmaconf.radpats + l * fmaconf.nsamp;
 
@@ -177,8 +195,10 @@ int fmmprecalc () {
 	fmaconf.nborsex = 2 * fmaconf.nbors;
 
 	/* Build the expanded grid. */
-	totel = fmaconf.nborsex * fmaconf.nborsex * fmaconf.nborsex;
-	fmaconf.gridints = fftwf_malloc (totel * sizeof (complex float));
+	totbpnbr = fmaconf.nborsex * fmaconf.nborsex * fmaconf.nborsex;
+	fmaconf.gridints = fftwf_malloc (totbpnbr * sizeof (complex float));
+	/* Allocate the buffer used by the callback. */
+	dirbuf = fftwf_malloc (totbpnbr * omp_get_max_threads() * sizeof(complex float));
 
 	fmaconf.fplan = fftwf_plan_dft_3d (fmaconf.nborsex, fmaconf.nborsex,
 			fmaconf.nborsex, fmaconf.gridints, fmaconf.gridints,
@@ -194,7 +214,7 @@ int fmmprecalc () {
 
 	/* Compute the interactions. */
 #pragma omp for
-	for (l = 0; l < totel; ++l) {
+	for (l = 0; l < totbpnbr; ++l) {
 		k = l % fmaconf.nborsex;
 		j = (l / fmaconf.nborsex) % fmaconf.nborsex;
 		i = l / (fmaconf.nborsex * fmaconf.nborsex);
@@ -208,12 +228,12 @@ int fmmprecalc () {
 		dist[2] = (float)kp * fmaconf.cell;
 		
 		fmaconf.gridints[l] = srcint (fmaconf.k0, zero, dist, fmaconf.cell);
-		fmaconf.gridints[l] *= fmaconf.k0 * fmaconf.k0 / totel;
+		fmaconf.gridints[l] *= fmaconf.k0 * fmaconf.k0 / totbpnbr;
 	}
 }
 
 	/* The self term uses the analytic approximation. */
-	fmaconf.gridints[0] = selfint (fmaconf.k0, fmaconf.cell) / totel;
+	fmaconf.gridints[0] = selfint (fmaconf.k0, fmaconf.cell) / totbpnbr;
 
 	/* Perform the Fourier transform of the Green's function. */
 	fftwf_execute (fmaconf.fplan);
@@ -226,15 +246,14 @@ int fmmprecalc () {
 /* Evaluate at a group of observers the fields due to a group of sources. */
 void blockinteract (int nsrc, int nobs, int *srclist,
 		int *obslist, void *vsrc, void *vobs, float *bc) {
-	int l, totel, bsoff[3], idx[3];
+	int l, bsoff[3], idx[3];
 	complex float *csrc = (complex float *)vsrc, *cobs = (complex float *)vobs;
 	complex float *buf;
 	float fbox[3];
 
 	/* Allocate and clear the buffer array. */
-	totel = fmaconf.nborsex * fmaconf.nborsex * fmaconf.nborsex;
-	buf = fftwf_malloc (totel * sizeof(complex float));
-	memset (buf, 0, totel * sizeof(complex float));
+	buf = dirbuf + omp_get_thread_num() * totbpnbr;
+	memset (buf, 0, totbpnbr * sizeof(complex float));
 
 	/* Calculate the box position. */
 	fbox[0] = (bc[0] - fmaconf.min[0]) / (fmaconf.cell * fmaconf.bspbox);
@@ -262,7 +281,7 @@ void blockinteract (int nsrc, int nobs, int *srclist,
 	fftwf_execute_dft (fmaconf.fplan, buf, buf);
 
 	/* The convolution is now a multiplication. */
-	for (l = 0; l < totel; ++l) buf[l] *= fmaconf.gridints[l];
+	for (l = 0; l < totbpnbr; ++l) buf[l] *= fmaconf.gridints[l];
 
 	/* Inverse transform the grid in place. */
 	fftwf_execute_dft (fmaconf.bplan, buf, buf);
@@ -278,9 +297,6 @@ void blockinteract (int nsrc, int nobs, int *srclist,
 
 		cobs[l] += buf[IDX(fmaconf.nborsex,idx[0],idx[1],idx[2])];
 	}
-
-	/* Free the buffer array. */
-	fftwf_free (buf);
 
 	return;
 }
