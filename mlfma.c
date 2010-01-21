@@ -140,11 +140,41 @@ int buildradpat (complex float *pat, float k, float *rmc,
 	return ntheta;
 }
 
+/* Build the extended Green's function on an expanded cubic grid. */
+int greengrid (complex float *grf, int m, int mex, float k0, float cell, int *off) {
+	int i, j, k, ip, jp, kp;
+	float dist[3], zero[3] = {0., 0., 0.}, scale;
+
+	/* The scale of the integral equation solution. */
+	scale = k0 * k0 / (float)(mex * mex * mex);
+
+	/* Compute the interactions. */
+	for (i = 0; i < mex; ++i) {
+		ip = (i < m) ? i : (mex - i);
+		dist[0] = (float)(ip - off[0]) * fmaconf.cell;
+		for (j = 0; j < mex; ++j) {
+			jp = (j < m) ? j : (mex - j);
+			dist[1] = (float)(jp - off[1]) * fmaconf.cell;
+			for (k = 0; k < mex; ++k) {
+				kp = (k < m) ? k : (mex - k);
+				dist[2] = (float)(kp - off[2]) * fmaconf.cell;
+
+				/* Handle the self term specially. */
+				if (kp == off[2] && jp == off[1] && ip == off[0])
+					*(grf++) = selfint (k0, cell) / (mex * mex * mex);
+				else *(grf++) = scale * srcint (k0, zero, dist, cell);
+			}
+		}
+	}
+
+	return mex;
+}
+
 /* Precomputes the near interactions for redundant calculations and sets up
  * the wave vector directions to be used for fast calculation of far-field patterns. */
 int fmmprecalc () {
-	float zero[3] = { 0, 0, 0 }, *thetas, clen;
-	int ntheta, nphi;
+	float *thetas, clen;
+	int ntheta, nphi, zero[3] = {0, 0, 0};
 
 	/* The number of children in a finest-level box. */
 	totbpbox = fmaconf.bspbox * fmaconf.bspbox * fmaconf.bspbox;
@@ -207,33 +237,9 @@ int fmmprecalc () {
 			fmaconf.nborsex, fmaconf.gridints, fmaconf.gridints,
 			FFTW_BACKWARD, FFTW_MEASURE);
 
-#pragma omp parallel default(shared)
-{
-	int i, j, k, l, ip, jp, kp;
-	float dist[3];
-
-	/* Compute the interactions. */
-#pragma omp for
-	for (l = 0; l < totbpnbr; ++l) {
-		k = l % fmaconf.nborsex;
-		j = (l / fmaconf.nborsex) % fmaconf.nborsex;
-		i = l / (fmaconf.nborsex * fmaconf.nborsex);
-
-		ip = (i < fmaconf.nbors) ? i : (fmaconf.nborsex - i);
-		jp = (j < fmaconf.nbors) ? j : (fmaconf.nborsex - j);
-		kp = (k < fmaconf.nbors) ? k : (fmaconf.nborsex - k);
-
-		dist[0] = (float)ip * fmaconf.cell;
-		dist[1] = (float)jp * fmaconf.cell;
-		dist[2] = (float)kp * fmaconf.cell;
-		
-		fmaconf.gridints[l] = srcint (fmaconf.k0, zero, dist, fmaconf.cell);
-		fmaconf.gridints[l] *= fmaconf.k0 * fmaconf.k0 / totbpnbr;
-	}
-}
-
-	/* The self term uses the analytic approximation. */
-	fmaconf.gridints[0] = selfint (fmaconf.k0, fmaconf.cell) / totbpnbr;
+	/* Build the Green's function grid. */
+	greengrid (fmaconf.gridints, fmaconf.nbors, fmaconf.nborsex,
+			fmaconf.k0, fmaconf.cell, zero);
 
 	/* Perform the Fourier transform of the Green's function. */
 	fftwf_execute (fmaconf.fplan);
