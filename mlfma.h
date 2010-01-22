@@ -15,7 +15,7 @@ typedef struct {
 	int *bslist;
 	float k0;
 	complex float *contrast, *radpats, *gridints;
-	int nsamp, nbors, nborsex;
+	int nsamp, nbors, nborsvol, bspboxvol, nborsex;
 	fftwf_plan fplan, bplan;
 } fmadesc;
 

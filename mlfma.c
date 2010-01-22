@@ -221,14 +221,12 @@ int fmmprecalc () {
 }
 
 	/* Find the maximum number of near neighbors in each dimension. */
-	fmaconf.nbors = (2 * fmaconf.numbuffer + 1) * fmaconf.bspbox;
-	fmaconf.nborsex = 2 * fmaconf.nbors;
+	fmaconf.nborsex = 2 * fmaconf.nbors * fmaconf.bspbox;
 
 	/* Build the expanded grid. */
-	totbpnbr = fmaconf.nborsex * fmaconf.nborsex * fmaconf.nborsex;
-	fmaconf.gridints = fftwf_malloc (totbpnbr * sizeof (complex float));
-	/* Allocate the buffer used by the callback. */
-	dirbuf = fftwf_malloc (totbpnbr * omp_get_max_threads() * sizeof(complex float));
+	totbpnbr = 8 * fmaconf.bspboxvol * fmaconf.nborsvol;
+	fmaconf.gridints = fftwf_malloc (totbpnbr * (1 + omp_get_max_threads()) * sizeof(complex float));
+	dirbuf = fmaconf.gridints + totbpnbr;
 
 	fmaconf.fplan = fftwf_plan_dft_3d (fmaconf.nborsex, fmaconf.nborsex,
 			fmaconf.nborsex, fmaconf.gridints, fmaconf.gridints,
@@ -238,7 +236,7 @@ int fmmprecalc () {
 			FFTW_BACKWARD, FFTW_MEASURE);
 
 	/* Build the Green's function grid. */
-	greengrid (fmaconf.gridints, fmaconf.nbors, fmaconf.nborsex,
+	greengrid (fmaconf.gridints, fmaconf.nbors * fmaconf.bspbox, fmaconf.nborsex,
 			fmaconf.k0, fmaconf.cell, zero);
 
 	/* Perform the Fourier transform of the Green's function. */

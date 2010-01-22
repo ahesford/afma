@@ -64,7 +64,7 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 		measdesc *src, measdesc *obs) {
 	FILE *fp;
 	char buf[1024];
-	int nmax;
+	int nmax, nbox;
 
 	if (!(fp = fopen (fname, "r"))) {
 		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
@@ -104,13 +104,21 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 				&(fmaconf.fo2iord), &(fmaconf.fo2iosr)) < 5)
 		fmaconf.fo2iterm = fmaconf.fo2iord = fmaconf.fo2iosr = 0;
 
+	/* The total number of basis functions in a box. */
+	fmaconf.bspboxvol = fmaconf.bspbox * fmaconf.bspbox * fmaconf.bspbox;
+
 	/* Compute the maximum FMM level for the desired finest level density. */
-	fmaconf.maxlev = (int)ceil(log2(ceil((double)nmax / (double)fmaconf.bspbox)));
+	for (fmaconf.maxlev = 0, nbox = fmaconf.bspbox; nbox < nmax; nbox <<= 1, ++fmaconf.maxlev);
 
 	/* Read the number of MLFMA buffer boxes. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%d", &(fmaconf.numbuffer));
+
+	/* The number of near-neighbor boxes per dimension. */
+	fmaconf.nbors = 2 * fmaconf.numbuffer + 1;
+	/* The number of near-neighbor boxes total. */
+	fmaconf.nborsvol = fmaconf.nbors * fmaconf.nbors * fmaconf.nbors;
 
 	/* Read the MLFMA precision. */
 	skipcomments (fp);
