@@ -38,7 +38,7 @@ fmadesc fmaconf;
 
 /* Some often-used buffers that shouldn't be continually reallocated. */
 complex float *patbuf, *dirbuf;
-int totbpbox, totbpnbr;
+int totbpnbr;
 
 /* Computes the far-field pattern for the specified basis with the specified
  * center, and stores the output in a provided vector. sgn is positive for
@@ -50,8 +50,8 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 	int l, idx[3], bsoff[3];
 
 	/* The buffer that will be used by this thread for this routine. */
-	buf = patbuf + omp_get_thread_num() * totbpbox;
-	memset (buf, 0, totbpbox * sizeof(complex float));
+	buf = patbuf + omp_get_thread_num() * fmaconf.bspboxvol;
+	memset (buf, 0, fmaconf.bspboxvol * sizeof(complex float));
 
 	fbox[0] = (cen[0] - fmaconf.min[0]) / (fmaconf.cell * fmaconf.bspbox);
 	fbox[1] = (cen[1] - fmaconf.min[1]) / (fmaconf.cell * fmaconf.bspbox);
@@ -82,8 +82,8 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 
 		/* Perform the matrix-vector product. */
 		cblas_cgemv (CblasColMajor, CblasNoTrans, fmaconf.nsamp,
-				totbpbox, &fact, fmaconf.radpats, fmaconf.nsamp,
-				buf, 1, &beta, pat, 1);
+				fmaconf.bspboxvol, &fact, fmaconf.radpats, 
+				fmaconf.nsamp, buf, 1, &beta, pat, 1);
 	} else {
 		/* Distribute the far-field patterns to the basis functions. */
 		/* Scalar factors for the matrix multiplication. */
@@ -92,8 +92,8 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 
 		/* Perform the matrix-vector product. */
 		cblas_cgemv (CblasColMajor, CblasConjTrans, fmaconf.nsamp,
-				totbpbox, &fact, fmaconf.radpats, fmaconf.nsamp,
-				pat, 1, &beta, buf, 1);
+				fmaconf.bspboxvol, &fact, fmaconf.radpats,
+				fmaconf.nsamp, pat, 1, &beta, buf, 1);
 
 		for (l = 0; l < nbs; ++l) {
 			/* Find the basis grid position. */
@@ -176,9 +176,6 @@ int fmmprecalc () {
 	float *thetas, clen;
 	int ntheta, nphi, zero[3] = {0, 0, 0};
 
-	/* The number of children in a finest-level box. */
-	totbpbox = fmaconf.bspbox * fmaconf.bspbox * fmaconf.bspbox;
-
 	/* Get the finest level parameters. */
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, NULL, NULL);
 	/* Allocate the theta array. */
@@ -187,9 +184,9 @@ int fmmprecalc () {
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, thetas, NULL);
 
 	/* Allocate storage for the radiation patterns. */
-	fmaconf.radpats = malloc (totbpbox * fmaconf.nsamp * sizeof(complex float));
-	/* Allocate the buffer used by the callback. */
-	patbuf = malloc (totbpbox * omp_get_max_threads() * sizeof(complex float));
+	fmaconf.radpats = malloc (fmaconf.bspboxvol * (fmaconf.nsamp + 
+				omp_get_max_threads()) * sizeof(complex float));
+	patbuf = fmaconf.radpats + fmaconf.bspboxvol * fmaconf.nsamp;
 
 	/* Calculate the box center. */
 	clen = 0.5 * (float)fmaconf.bspbox;
@@ -201,7 +198,7 @@ int fmmprecalc () {
 	float dist[3];
 
 #pragma omp for
-	for (l = 0; l < totbpbox; ++l) {
+	for (l = 0; l < fmaconf.bspboxvol; ++l) {
 		/* The pointer to the relevant pattern. */
 		pptr = fmaconf.radpats + l * fmaconf.nsamp;
 
