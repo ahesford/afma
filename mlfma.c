@@ -38,7 +38,7 @@ fmadesc fmaconf;
 
 /* Some often-used buffers that shouldn't be continually reallocated. */
 complex float *patbuf, *dirbuf;
-int totbpnbr;
+int totbpnbr, nfft[3], nfftprod;
 
 /* Computes the far-field pattern for the specified basis with the specified
  * center, and stores the output in a provided vector. sgn is positive for
@@ -150,13 +150,13 @@ int greengrid (complex float *grf, int m, int mex, float k0, float cell, int *of
 
 	/* Compute the interactions. */
 	for (i = 0; i < mex; ++i) {
-		ip = (i < m) ? i : (mex - i);
+		ip = (i < m) ? i : (i - mex);
 		dist[0] = (float)(ip - off[0]) * fmaconf.cell;
 		for (j = 0; j < mex; ++j) {
-			jp = (j < m) ? j : (mex - j);
+			jp = (j < m) ? j : (j - mex);
 			dist[1] = (float)(jp - off[1]) * fmaconf.cell;
 			for (k = 0; k < mex; ++k) {
-				kp = (k < m) ? k : (mex - k);
+				kp = (k < m) ? k : (k - mex);
 				dist[2] = (float)(kp - off[2]) * fmaconf.cell;
 
 				/* Handle the self term specially. */
@@ -174,7 +174,7 @@ int greengrid (complex float *grf, int m, int mex, float k0, float cell, int *of
  * the wave vector directions to be used for fast calculation of far-field patterns. */
 int fmmprecalc () {
 	float *thetas, clen;
-	int ntheta, nphi, zero[3] = {0, 0, 0};
+	int ntheta, nphi;
 
 	/* Get the finest level parameters. */
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, NULL, NULL);
@@ -217,24 +217,44 @@ int fmmprecalc () {
 	}
 }
 
-	/* Find the maximum number of near neighbors in each dimension. */
-	fmaconf.nborsex = 2 * fmaconf.nbors * fmaconf.bspbox;
+	/* The FFT size. */
+	nfft[0] = nfft[1] = nfft[2] = 2 * fmaconf.bspbox;
+	nfftprod = nfft[0] * nfft[1] * nfft[2];
 
 	/* Build the expanded grid. */
-	totbpnbr = 8 * fmaconf.bspboxvol * fmaconf.nborsvol;
+	totbpnbr = nfftprod * fmaconf.nborsvol;
 	fmaconf.gridints = fftwf_malloc (totbpnbr * (1 + omp_get_max_threads()) * sizeof(complex float));
 	dirbuf = fmaconf.gridints + totbpnbr;
 
-	fmaconf.fplan = fftwf_plan_dft_3d (fmaconf.nborsex, fmaconf.nborsex,
-			fmaconf.nborsex, fmaconf.gridints, fmaconf.gridints,
-			FFTW_FORWARD, FFTW_MEASURE);
-	fmaconf.bplan = fftwf_plan_dft_3d (fmaconf.nborsex, fmaconf.nborsex,
-			fmaconf.nborsex, fmaconf.gridints, fmaconf.gridints,
-			FFTW_BACKWARD, FFTW_MEASURE);
+	/* The forward FFT plan transforms all boxes in one pass. */
+	fmaconf.fplan = fftwf_plan_many_dft (3, nfft, fmaconf.nborsvol,
+			fmaconf.gridints, NULL, 1, nfftprod, fmaconf.gridints,
+			NULL, 1, nfftprod, FFTW_FORWARD, FFTW_MEASURE);
+	/* The inverse FFT plan only transforms a single box. */
+	fmaconf.bplan = fftwf_plan_dft_3d (nfft[0], nfft[1], nfft[2],
+			fmaconf.gridints, fmaconf.gridints, FFTW_BACKWARD, FFTW_MEASURE);
 
-	/* Build the Green's function grid. */
-	greengrid (fmaconf.gridints, fmaconf.nbors * fmaconf.bspbox, fmaconf.nborsex,
-			fmaconf.k0, fmaconf.cell, zero);
+#pragma omp parallel default(shared)
+{
+	int off[3], l, i, j, k;
+	complex float *grf;
+
+#pragma omp for
+	for (l = 0; l < fmaconf.nborsvol; ++l) {
+		k = l % fmaconf.nbors;
+		j = (l / fmaconf.nbors) % fmaconf.nbors;
+		i = l / (fmaconf.nbors * fmaconf.nbors);
+
+		grf = fmaconf.gridints + l * nfftprod;
+
+		off[0] = (i - fmaconf.numbuffer) * fmaconf.bspbox;
+		off[1] = (j - fmaconf.numbuffer) * fmaconf.bspbox;
+		off[2] = (k - fmaconf.numbuffer) * fmaconf.bspbox;
+
+		/* Build the Green's function grid for this local box. */
+		greengrid (grf, fmaconf.bspbox, nfft[0], fmaconf.k0, fmaconf.cell, off);
+	}
+}
 
 	/* Perform the Fourier transform of the Green's function. */
 	fftwf_execute (fmaconf.fplan);
@@ -247,9 +267,9 @@ int fmmprecalc () {
 /* Evaluate at a group of observers the fields due to a group of sources. */
 void blockinteract (int nsrc, int nobs, int *srclist,
 		int *obslist, void *vsrc, void *vobs, float *bc) {
-	int l, bsoff[3], idx[3];
+	int l, bsoff[3], idx[3], i, j, k;
 	complex float *csrc = (complex float *)vsrc, *cobs = (complex float *)vobs;
-	complex float *buf;
+	complex float *buf, *bptr, *cbox;
 	float fbox[3];
 
 	/* Allocate and clear the buffer array. */
@@ -275,28 +295,48 @@ void blockinteract (int nsrc, int nobs, int *srclist,
 		idx[1] -= bsoff[1];
 		idx[2] -= bsoff[2];
 
-		buf[IDX(fmaconf.nborsex,idx[0],idx[1],idx[2])] = csrc[l];
+		/* Find the local box number. */
+		i = idx[0] / fmaconf.bspbox;
+		j = idx[1] / fmaconf.bspbox;
+		k = idx[2] / fmaconf.bspbox;
+
+		/* Point to the local buffer for this box. */
+		bptr = buf + nfftprod * IDX(fmaconf.nbors,i,j,k);
+
+		/* Find the position in the local box. */
+		i = idx[0] % fmaconf.bspbox;
+		j = idx[1] % fmaconf.bspbox;
+		k = idx[2] % fmaconf.bspbox;
+
+		bptr[IDX(nfft[0],i,j,k)] = csrc[l];
 	}
 
-	/* Transform the local grid in place. */
+	/* Transform the local grids in place. */
 	fftwf_execute_dft (fmaconf.fplan, buf, buf);
 
-	/* The convolution is now a multiplication. */
+	/* The convolutions are now multiplications. */
 	for (l = 0; l < totbpnbr; ++l) buf[l] *= fmaconf.gridints[l];
 
+	/* Point to the center box. */
+	cbox = buf + nfftprod * fmaconf.numbuffer * (1 + fmaconf.nbors * (1 + fmaconf.nbors));
+	for (l = 0, bptr = buf; l < fmaconf.nborsvol; ++l, bptr += nfftprod) {
+		if (bptr == cbox) continue;
+		for (i = 0; i < nfftprod; ++i) cbox[i] += bptr[i];
+	}
+
 	/* Inverse transform the grid in place. */
-	fftwf_execute_dft (fmaconf.bplan, buf, buf);
+	fftwf_execute_dft (fmaconf.bplan, cbox, cbox);
 
 	/* Augment with output with the local convolution. */
 	for (l = 0; l < nobs; ++l) {
 		bsindex (obslist[l], idx);
 
 		/* Convert the global grid position to a local position. */
-		idx[0] -= bsoff[0];
-		idx[1] -= bsoff[1];
-		idx[2] -= bsoff[2];
+		idx[0] %= fmaconf.bspbox;
+		idx[1] %= fmaconf.bspbox;
+		idx[2] %= fmaconf.bspbox;
 
-		cobs[l] += buf[IDX(fmaconf.nborsex,idx[0],idx[1],idx[2])];
+		cobs[l] += cbox[IDX(nfft[0],idx[0],idx[1],idx[2])];
 	}
 
 	return;
