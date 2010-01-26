@@ -14,14 +14,15 @@
 #include "mlfma.h"
 #include "integrate.h"
 
-dirdesc dircache;
-
-complex float *dirbuf;
-int totbpnbr;
+/* Buffers for the RHS cache, the Green's functions, and a workspace. */
+complex float *dirbuf, *boxrhs, *gridints;
+int ncbox[3], ncboxprod, cboxmin[3], cachesize, *boxfill;
+int nbors, nborsvol, nfftprod, nfft[3];
+fftwf_plan fplan, bplan;
 
 /* Initialize the direct-interaction cache structure. */
 int mkdircache () {
-	int nbs, *bslist, l, idx[3];
+	int nbs, *bslist, l, idx[3], boxmax[3];
 
 	/* Get the complete list of locally required basis functions. */
 	ScaleME_getLocallyReqBasis (&nbs, &bslist);
@@ -34,9 +35,9 @@ int mkdircache () {
 	idx[2] /= fmaconf.bspbox;
 
 	/* Set the box bounds for the local RHS cache. */
-	dircache.boxmin[0] = dircache.boxmax[0] = idx[0];
-	dircache.boxmin[1] = dircache.boxmax[1] = idx[1];
-	dircache.boxmin[2] = dircache.boxmax[2] = idx[2];
+	cboxmin[0] = boxmax[0] = idx[0];
+	cboxmin[1] = boxmax[1] = idx[1];
+	cboxmin[2] = boxmax[2] = idx[2];
 
 	/* Now loop through and establish the maxmimum and minimum box bounds. */
 	for (l = 1; l < nbs; ++l) {
@@ -49,71 +50,117 @@ int mkdircache () {
 		idx[2] /= fmaconf.bspbox;
 
 		/* Update the maximum and minimum box bounds. */
-		dircache.boxmin[0] = MIN(dircache.boxmin[0], idx[0]);
-		dircache.boxmin[1] = MIN(dircache.boxmin[1], idx[1]);
-		dircache.boxmin[2] = MIN(dircache.boxmin[2], idx[2]);
-		dircache.boxmax[0] = MAX(dircache.boxmax[0], idx[0]);
-		dircache.boxmax[1] = MAX(dircache.boxmax[1], idx[1]);
-		dircache.boxmax[2] = MAX(dircache.boxmax[2], idx[2]);
+		cboxmin[0] = MIN(cboxmin[0], idx[0]);
+		cboxmin[1] = MIN(cboxmin[1], idx[1]);
+		cboxmin[2] = MIN(cboxmin[2], idx[2]);
+		boxmax[0] = MAX(boxmax[0], idx[0]);
+		boxmax[1] = MAX(boxmax[1], idx[1]);
+		boxmax[2] = MAX(boxmax[2], idx[2]);
 	}
 
 	/* Count the boxes in the box cache. */
-	dircache.nbox[0] = dircache.boxmax[0] - dircache.boxmin[0];
-	dircache.nbox[1] = dircache.boxmax[1] - dircache.boxmin[1];
-	dircache.nbox[2] = dircache.boxmax[2] - dircache.boxmin[2];
-	dircache.nboxprod = dircache.nbox[0] * dircache.nbox[1] * dircache.nbox[2];
+	ncbox[0] = boxmax[0] - cboxmin[0] + 1;
+	ncbox[1] = boxmax[1] - cboxmin[1] + 1;
+	ncbox[2] = boxmax[2] - cboxmin[2] + 1;
+	ncboxprod = ncbox[0] * ncbox[1] * ncbox[2];
 
 	/* The total number of direct interaction elements in the cache. */
-	dircache.totelts = 8 * dircache.nboxprod * fmaconf.bspboxvol;
+	cachesize = nfftprod * ncboxprod;
 
 	/* Allocate the cache arrays. */
-	dircache.boxfill = malloc (dircache.nboxprod * sizeof(int));
-	dircache.boxrhs = malloc (dircache.totelts * sizeof(complex float));
+	boxfill = malloc (ncboxprod * sizeof(int));
+	boxrhs = malloc (cachesize * sizeof(complex float));
 
 	/* The locally-required basis list is no longer necessary. */
 	free (bslist);
 
-	return dircache.nboxprod;
+	return ncboxprod;
 }
 
 /* Clear the cache arrays for a new iteration. */
 void clrdircache () {
-	memset (dircache.boxfill, 0, dircache.nboxprod * sizeof(int));
-	memset (dircache.boxrhs, 0,  dircache.totelts * sizeof(complex float));
+	memset (boxfill, 0, ncboxprod * sizeof(int));
+	memset (boxrhs, 0,  cachesize * sizeof(complex float));
 }
 
 /* Free the allocated memory in the direct-interaction cache structure. */
 void freedircache () {
-	free (dircache.boxfill);
-	free (dircache.boxrhs);
+	free (boxfill);
+	free (boxrhs);
+	free (gridints);
+	free (dirbuf);
+}
 
-	dircache.nbox[2] = dircache.nbox[1] = dircache.nbox[0] =
-		dircache.nboxprod = dircache.totelts = 0;
+/* Check the cache for the given RHS. If it exists, return the pre-cached copy.
+ * Otherwise, cache the provided copy and take the DFT before returning a pointer
+ * to the cache bin. */
+complex float *cacheboxrhs (complex float *rhs, int *bslist, int nbs) {
+	int idx[3], l, i;
+	complex float *bptr;
+
+	/* Get the index for the first basis in the box. */
+	bsindex (bslist[0], idx);
+
+	/* The local box index. */
+	idx[0] = (idx[0] / fmaconf.bspbox) - cboxmin[0];
+	idx[1] = (idx[1] / fmaconf.bspbox) - cboxmin[1];
+	idx[2] = (idx[2] / fmaconf.bspbox) - cboxmin[2];
+
+	/* Get the index in the cache. */
+	l = IDX(ncbox[1], ncbox[2], idx[0], idx[1], idx[2]);
+	/* Point to the storage in the cache. */
+	bptr = boxrhs + l * nfftprod;
+
+	/* Already cached. Return the RHS as expected. */
+	if (boxfill[l]) return bptr;
+
+	/* Populate the local grid. */
+	for (i = 0; i < nbs; ++i) {
+		/* Find the basis index. */
+		bsindex (bslist[i], idx);
+
+		/* Find the position in the local box. */
+		idx[0] %= fmaconf.bspbox;
+		idx[1] %= fmaconf.bspbox;
+		idx[2] %= fmaconf.bspbox;
+
+		/* Fill the expanded FFT grid. */
+		bptr[SQIDX(nfft[0],idx[0],idx[1],idx[2])] = rhs[i];
+	}
+
+	/* Transform the cached RHS. */
+	fftwf_execute_dft (fplan, bptr, bptr);
+	/* Mark the cache spot as full. */
+	boxfill[l] = 1;
+
+	/* Return the RHS. */
+	return bptr;
 }
 
 /* Precompute some values for the direct interactions. */
 int dirprecalc () {
+	int totbpnbr;
+
 	/* The number of neighbor boxes per dimension. */
-	dircache.nbors = dircache.nborsvol = 2 * fmaconf.numbuffer + 1;
+	nbors = nborsvol = 2 * fmaconf.numbuffer + 1;
 	/* The number of near-neighbor boxes total. */
-	dircache.nborsvol *= dircache.nborsvol * dircache.nborsvol;
+	nborsvol *= nborsvol * nborsvol;
 
 	/* The FFT size. */
-	dircache.nfft[0] = dircache.nfft[1] = dircache.nfft[2] = 2 * fmaconf.bspbox;
-	dircache.nfftprod = dircache.nfft[0] * dircache.nfft[1] * dircache.nfft[2];
+	nfft[0] = nfft[1] = nfft[2] = 2 * fmaconf.bspbox;
+	nfftprod = nfft[0] * nfft[1] * nfft[2];
 
 	/* Build the expanded grid. */
-	totbpnbr = dircache.nfftprod * dircache.nborsvol;
-	dircache.gridints = fftwf_malloc (totbpnbr * (1 + omp_get_max_threads()) * sizeof(complex float));
-	dirbuf = dircache.gridints + totbpnbr;
+	totbpnbr = nfftprod * nborsvol;
+	gridints = fftwf_malloc (totbpnbr * sizeof(complex float));
+	dirbuf = fftwf_malloc (nfftprod * omp_get_max_threads() * sizeof(complex float));
 
 	/* The forward FFT plan transforms all boxes in one pass. */
-	dircache.fplan = fftwf_plan_many_dft (3, dircache.nfft, dircache.nborsvol,
-			dircache.gridints, NULL, 1, dircache.nfftprod, dircache.gridints,
-			NULL, 1, dircache.nfftprod, FFTW_FORWARD, FFTW_MEASURE);
+	fplan = fftwf_plan_dft_3d (nfft[0], nfft[1], nfft[2],
+			gridints, gridints, FFTW_FORWARD, FFTW_MEASURE);
 	/* The inverse FFT plan only transforms a single box. */
-	dircache.bplan = fftwf_plan_dft_3d (dircache.nfft[0], dircache.nfft[1], dircache.nfft[2],
-			dircache.gridints, dircache.gridints, FFTW_BACKWARD, FFTW_MEASURE);
+	bplan = fftwf_plan_dft_3d (nfft[0], nfft[1], nfft[2],
+			gridints, gridints, FFTW_BACKWARD, FFTW_MEASURE);
 
 #pragma omp parallel default(shared)
 {
@@ -121,91 +168,76 @@ int dirprecalc () {
 	complex float *grf;
 
 #pragma omp for
-	for (l = 0; l < dircache.nborsvol; ++l) {
-		k = l % dircache.nbors;
-		j = (l / dircache.nbors) % dircache.nbors;
-		i = l / (dircache.nbors * dircache.nbors);
+	for (l = 0; l < nborsvol; ++l) {
+		k = l % nbors;
+		j = (l / nbors) % nbors;
+		i = l / (nbors * nbors);
 
-		grf = dircache.gridints + l * dircache.nfftprod;
+		grf = gridints + l * nfftprod;
 
 		off[0] = (i - fmaconf.numbuffer) * fmaconf.bspbox;
 		off[1] = (j - fmaconf.numbuffer) * fmaconf.bspbox;
 		off[2] = (k - fmaconf.numbuffer) * fmaconf.bspbox;
 
 		/* Build the Green's function grid for this local box. */
-		greengrid (grf, fmaconf.bspbox, dircache.nfft[0], fmaconf.k0, fmaconf.cell, off);
+		greengrid (grf, fmaconf.bspbox, nfft[0], fmaconf.k0, fmaconf.cell, off);
+
+		/* Fourier transform the Green's function. */
+		fftwf_execute_dft (fplan, grf, grf);
 	}
 }
 
-	/* Perform the Fourier transform of the Green's function. */
-	fftwf_execute (dircache.fplan);
+	/* Allocate the local cache structure. */
+	mkdircache ();
 
-	return dircache.nfftprod;
+	return nfftprod;
 }
 
 /* Evaluate at a group of observers the fields due to a group of sources. */
 void blockinteract (int nsrc, int nobs, int *srclist,
-		int *obslist, void *vsrc, void *vobs, float *bc) {
-	int l, bsoff[3], idx[3], i, j, k;
+		int *obslist, void *vsrc, void *vobs) {
+	int i, l, boxoff[3], idx[3];
 	complex float *csrc = (complex float *)vsrc, *cobs = (complex float *)vobs;
-	complex float *buf, *bptr, *cbox;
-	float fbox[3];
+	complex float *buf, *gptr, *bptr;
 
-	/* Allocate and clear the buffer array. */
-	buf = dirbuf + omp_get_thread_num() * totbpnbr;
-	memset (buf, 0, totbpnbr * sizeof(complex float));
+	/* Clear the local output buffer. */
+	buf = dirbuf + omp_get_thread_num() * nfftprod;
+	memset (buf, 0, nfftprod * sizeof(complex float));
 
-	/* Calculate the box position. */
-	fbox[0] = (bc[0] - fmaconf.min[0]) / (fmaconf.cell * fmaconf.bspbox);
-	fbox[1] = (bc[1] - fmaconf.min[1]) / (fmaconf.cell * fmaconf.bspbox);
-	fbox[2] = (bc[2] - fmaconf.min[2]) / (fmaconf.cell * fmaconf.bspbox);
+	/* Find the index for the first basis in the target box. */
+	bsindex (obslist[0], boxoff);
 
-	/* Now calculate an offset for the basis indices. */
-	bsoff[0] = ((int)(fbox[0]) - fmaconf.numbuffer) * fmaconf.bspbox;
-	bsoff[1] = ((int)(fbox[1]) - fmaconf.numbuffer) * fmaconf.bspbox;
-	bsoff[2] = ((int)(fbox[2]) - fmaconf.numbuffer) * fmaconf.bspbox;
+	/* Find the minimum box index for near interactions. */
+	boxoff[0] = (boxoff[0] / fmaconf.bspbox) - fmaconf.numbuffer;
+	boxoff[1] = (boxoff[1] / fmaconf.bspbox) - fmaconf.numbuffer;
+	boxoff[2] = (boxoff[2] / fmaconf.bspbox) - fmaconf.numbuffer;
 
 	/* Populate the local grid. */
-	for (l = 0; l < nsrc; ++l) {
+	for (l = 0; l < nsrc; l += fmaconf.bspboxvol) {
+		/* Get the cached RHS for the source box in question. Cache
+		 * the RHS if it hasn't been previously built. Thread safety
+		 * requires an OMP critical block. */
+#pragma omp critical(boxcache)
+		bptr = cacheboxrhs (csrc + l, srclist + l, fmaconf.bspboxvol);
+
+		/* Get the index fo the first basis in the source box. */
 		bsindex (srclist[l], idx);
 
-		/* Convert the global grid position to a local position. */
-		idx[0] -= bsoff[0];
-		idx[1] -= bsoff[1];
-		idx[2] -= bsoff[2];
-
 		/* Find the local box number. */
-		i = idx[0] / fmaconf.bspbox;
-		j = idx[1] / fmaconf.bspbox;
-		k = idx[2] / fmaconf.bspbox;
+		idx[0] = (idx[0] / fmaconf.bspbox) - boxoff[0];
+		idx[1] = (idx[1] / fmaconf.bspbox) - boxoff[1];
+		idx[2] = (idx[2] / fmaconf.bspbox) - boxoff[2];
 
-		/* Point to the local buffer for this box. */
-		bptr = buf + dircache.nfftprod * SQIDX(dircache.nbors,i,j,k);
+		/* Point to the Green's function for this box. */
+		gptr = gridints + nfftprod * SQIDX(nbors,idx[0],idx[1],idx[2]);
 
-		/* Find the position in the local box. */
-		i = idx[0] % fmaconf.bspbox;
-		j = idx[1] % fmaconf.bspbox;
-		k = idx[2] % fmaconf.bspbox;
-
-		bptr[SQIDX(dircache.nfft[0],i,j,k)] = csrc[l];
-	}
-
-	/* Transform the local grids in place. */
-	fftwf_execute_dft (dircache.fplan, buf, buf);
-
-	/* The convolutions are now multiplications. */
-	for (l = 0; l < totbpnbr; ++l) buf[l] *= dircache.gridints[l];
-
-	/* Point to the center box. */
-	cbox = buf + dircache.nfftprod * fmaconf.numbuffer * 
-		(1 + dircache.nbors * (1 + dircache.nbors));
-	for (l = 0, bptr = buf; l < dircache.nborsvol; ++l, bptr += dircache.nfftprod) {
-		if (bptr == cbox) continue;
-		for (i = 0; i < dircache.nfftprod; ++i) cbox[i] += bptr[i];
+		/* Convolve the source field with the Green's function and
+		 * augment the field at the target. */
+		for (i = 0; i < nfftprod; ++i) buf[i] += gptr[i] * bptr[i];
 	}
 
 	/* Inverse transform the grid in place. */
-	fftwf_execute_dft (dircache.bplan, cbox, cbox);
+	fftwf_execute_dft (bplan, buf, buf);
 
 	/* Augment with output with the local convolution. */
 	for (l = 0; l < nobs; ++l) {
@@ -216,7 +248,8 @@ void blockinteract (int nsrc, int nobs, int *srclist,
 		idx[1] %= fmaconf.bspbox;
 		idx[2] %= fmaconf.bspbox;
 
-		cobs[l] += cbox[SQIDX(dircache.nfft[0],idx[0],idx[1],idx[2])];
+		/* Augment the RHS. */
+		cobs[l] += buf[SQIDX(nfft[0],idx[0],idx[1],idx[2])];
 	}
 
 	return;

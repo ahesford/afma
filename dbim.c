@@ -268,8 +268,10 @@ int main (int argc, char **argv) {
 
 	ScaleME_finalizeParHostFMA ();
 
+	freedircache ();
+
 	free (fmaconf.contrast);
-	free (dircache.gridints);
+	free (fmaconf.radpats);
 	free (field);
 	if (error) free (error);
 	free (srcmeas.locations);

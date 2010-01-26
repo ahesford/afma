@@ -160,9 +160,12 @@ int main (int argc, char **argv) {
 
 	ScaleME_finalizeParHostFMA ();
 
+	freedircache ();
+
 	free (rhs);
 	free (field);
 	free (fmaconf.contrast);
+	free (fmaconf.radpats);
 	free (srcmeas.locations);
 	free (obsmeas.locations);
 

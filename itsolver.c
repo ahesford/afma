@@ -18,6 +18,7 @@
 #include "gmres.h"
 
 #include "mlfma.h"
+#include "direct.h"
 #include "itsolver.h"
 
 static int compcrt (complex float *dst, complex float *src) {
@@ -89,6 +90,7 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 			   /* fortran indices start from 1 */
 			   tx = zwork+irc[1] - 1;
 			   ty = zwork+irc[3] - 1;
+			   clrdircache ();
 			   compcrt (solbuf, tx);
 			   ScaleME_applyParFMA(solbuf, ty, 0);
 			   augcrt (ty, tx);
