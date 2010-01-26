@@ -8,6 +8,8 @@
 #define IDX(ny,nz,i,j,k) ((k) + (nz) * ((j) + (ny) * (i)))
 #define SQIDX(ny,i,j,k) IDX(ny,ny,i,j,k)
 
+#define GEDIV(a,b) ((a) / (b) + ((a) % (b) == 0 ? 0 : 1))
+
 /* Define some no-op OpenMP functions if OpenMP is not used. */
 #ifndef _OPENMP
 int omp_get_max_threads () { return 1; }

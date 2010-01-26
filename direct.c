@@ -15,17 +15,20 @@
 #include "integrate.h"
 
 /* Buffers for the RHS cache, the Green's functions, and a workspace. */
-complex float *dirbuf, *boxrhs, *gridints;
-int ncbox[3], ncboxprod, cboxmin[3], cachesize, *boxfill;
-int nbors, nborsvol, nfftprod, nfft[3];
+complex float *dirbuf, **boxrhs, *gridints;
+int ncbox[3], cboxmin[3], *boxfill;
+int nbors, nfftprod, nfft[3];
 fftwf_plan fplan, bplan;
 
 /* Initialize the direct-interaction cache structure. */
 int mkdircache () {
-	int nbs, *bslist, l, idx[3], boxmax[3];
+	int nbs, *bslist, l, i, idx[3], boxmax[3], nebox, ncboxprod;
 
 	/* Get the complete list of locally required basis functions. */
 	ScaleME_getLocallyReqBasis (&nbs, &bslist);
+
+	/* The total number of nonempty boxes in the locally-required list. */
+	nebox = GEDIV(nbs,fmaconf.bspboxvol);
 
 	/* Get the index of the first basis function. */
 	bsindex (bslist[0], idx);
@@ -64,12 +67,34 @@ int mkdircache () {
 	ncbox[2] = boxmax[2] - cboxmin[2] + 1;
 	ncboxprod = ncbox[0] * ncbox[1] * ncbox[2];
 
-	/* The total number of direct interaction elements in the cache. */
-	cachesize = nfftprod * ncboxprod;
-
 	/* Allocate the cache arrays. */
-	boxfill = malloc (ncboxprod * sizeof(int));
-	boxrhs = malloc (cachesize * sizeof(complex float));
+	boxfill = calloc (ncboxprod, sizeof(int));
+	boxrhs = calloc (ncboxprod, sizeof(complex float *));
+	boxrhs[0] = malloc (nebox * nfftprod * sizeof(complex float));
+
+	/* Now loop through all bases and set up the box cache pointers. */
+	for (l = 0, nebox = 0; l < nbs; ++l) {
+		/* Get the index of the first basis function. */
+		bsindex (bslist[l], idx);
+		
+		/* Get the box index for this basis function. */
+		idx[0] = (idx[0] / fmaconf.bspbox) - cboxmin[0];
+		idx[1] = (idx[1] / fmaconf.bspbox) - cboxmin[1];
+		idx[2] = (idx[2] / fmaconf.bspbox) - cboxmin[2];
+
+		/* Find the linear box index. */
+		i = IDX(ncbox[1], ncbox[2], idx[0], idx[1], idx[2]);
+
+		/* Skip this basis function if the box has already been counted. */
+		if (boxfill[i]) continue;
+
+		/* Mark this box as counted. */
+		boxfill[i] = 1;
+
+		/* Set the next box pointer. */
+		boxrhs[i] = boxrhs[0] + nebox;
+		nebox += nfftprod;
+	}
 
 	/* The locally-required basis list is no longer necessary. */
 	free (bslist);
@@ -79,13 +104,14 @@ int mkdircache () {
 
 /* Clear the cache arrays for a new iteration. */
 void clrdircache () {
+	int ncboxprod = ncbox[0] * ncbox[1] * ncbox[2];
 	memset (boxfill, 0, ncboxprod * sizeof(int));
-	memset (boxrhs, 0,  cachesize * sizeof(complex float));
 }
 
 /* Free the allocated memory in the direct-interaction cache structure. */
 void freedircache () {
 	free (boxfill);
+	free (boxrhs[0]);
 	free (boxrhs);
 	free (gridints);
 	free (dirbuf);
@@ -109,29 +135,37 @@ complex float *cacheboxrhs (complex float *rhs, int *bslist, int nbs) {
 	/* Get the index in the cache. */
 	l = IDX(ncbox[1], ncbox[2], idx[0], idx[1], idx[2]);
 	/* Point to the storage in the cache. */
-	bptr = boxrhs + l * nfftprod;
+	bptr = boxrhs[l];
 
-	/* Already cached. Return the RHS as expected. */
-	if (boxfill[l]) return bptr;
-
-	/* Populate the local grid. */
-	for (i = 0; i < nbs; ++i) {
-		/* Find the basis index. */
-		bsindex (bslist[i], idx);
-
-		/* Find the position in the local box. */
-		idx[0] %= fmaconf.bspbox;
-		idx[1] %= fmaconf.bspbox;
-		idx[2] %= fmaconf.bspbox;
-
-		/* Fill the expanded FFT grid. */
-		bptr[SQIDX(nfft[0],idx[0],idx[1],idx[2])] = rhs[i];
+	/* The cache check and fill operation must be thread safe. */
+#pragma omp critical(cacherhs)
+{
+	/* Cache miss. Fill the box. */
+	if (!(boxfill[l])) {
+		/* Clear the cache storage. */
+		memset (bptr, 0, nfftprod * sizeof(complex float)); 
+		
+		/* Populate the local grid. */
+		for (i = 0; i < nbs; ++i) {
+			/* Find the basis index. */
+			bsindex (bslist[i], idx);
+			
+			/* Find the position in the local box. */
+			idx[0] %= fmaconf.bspbox;
+			idx[1] %= fmaconf.bspbox;
+			idx[2] %= fmaconf.bspbox;
+			
+			/* Fill the expanded FFT grid. */
+			bptr[SQIDX(nfft[0],idx[0],idx[1],idx[2])] = rhs[i];
+		}
+		
+		/* Transform the cached RHS. */
+		fftwf_execute_dft (fplan, bptr, bptr);
+		
+		/* Mark the cache spot as full. */
+		boxfill[l] = 1;
 	}
-
-	/* Transform the cached RHS. */
-	fftwf_execute_dft (fplan, bptr, bptr);
-	/* Mark the cache spot as full. */
-	boxfill[l] = 1;
+}
 
 	/* Return the RHS. */
 	return bptr;
@@ -139,7 +173,7 @@ complex float *cacheboxrhs (complex float *rhs, int *bslist, int nbs) {
 
 /* Precompute some values for the direct interactions. */
 int dirprecalc () {
-	int totbpnbr;
+	int totbpnbr, nborsvol;
 
 	/* The number of neighbor boxes per dimension. */
 	nbors = nborsvol = 2 * fmaconf.numbuffer + 1;
@@ -214,10 +248,7 @@ void blockinteract (int nsrc, int nobs, int *srclist,
 
 	/* Populate the local grid. */
 	for (l = 0; l < nsrc; l += fmaconf.bspboxvol) {
-		/* Get the cached RHS for the source box in question. Cache
-		 * the RHS if it hasn't been previously built. Thread safety
-		 * requires an OMP critical block. */
-#pragma omp critical(boxcache)
+		/* Get the cached RHS for the source box in question. */
 		bptr = cacheboxrhs (csrc + l, srclist + l, fmaconf.bspboxvol);
 
 		/* Get the index fo the first basis in the source box. */
