@@ -10,7 +10,7 @@
 #include "mlfma.h"
 #include "fsgreen.h"
 
-#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#include "util.h"
 
 int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	int i, mpirank;

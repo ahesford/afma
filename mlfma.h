@@ -4,19 +4,15 @@
 #include <complex.h>
 #include <fftw3.h>
 
-#include "mlfma.h"
-
 typedef struct {
 	float min[3], cen[3], cell, cellvol;
 	float precision;
 	int nx, ny, nz, gnumbases, numbases;
-	int bspbox, maxlev, numbuffer, interpord, toplev;
+	int bspbox, maxlev, numbuffer, interpord, toplev, bspboxvol;
 	int fo2iterm, fo2iord, fo2iosr;
-	int *bslist;
+	int *bslist, nsamp;
 	float k0;
-	complex float *contrast, *radpats, *gridints;
-	int nsamp, nbors, nborsvol, bspboxvol;
-	fftwf_plan fplan, bplan;
+	complex float *contrast, *radpats;
 } fmadesc;
 
 extern fmadesc fmaconf;
@@ -39,7 +35,6 @@ static inline void bscenter (int gi, float *cen) {
 
 void farpattern (int, int *, void *, void *, float *, int);
 int fmmprecalc ();
-void blockinteract (int, int, int *, int *, void *, void *, float *);
 
 /* initialisation and finalisation routines for ScaleME */
 int ScaleME_preconf (void);

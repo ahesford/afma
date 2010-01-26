@@ -10,12 +10,7 @@
 #include "itsolver.h"
 #include "measure.h"
 
-#ifdef _FREEBSD
-#define log2(a) (log(a) / log(2))
-#endif
-
-#define MIN(a,b) (((a) < (b)) ? (a) : (b))
-#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#include "util.h"
 
 void skipcomments (FILE *fp) {
 	fpos_t loc;
@@ -114,11 +109,6 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
 	sscanf (buf, "%d", &(fmaconf.numbuffer));
-
-	/* The number of near-neighbor boxes per dimension. */
-	fmaconf.nbors = 2 * fmaconf.numbuffer + 1;
-	/* The number of near-neighbor boxes total. */
-	fmaconf.nborsvol = fmaconf.nbors * fmaconf.nbors * fmaconf.nbors;
 
 	/* Read the MLFMA precision. */
 	skipcomments (fp);

@@ -13,6 +13,7 @@
 #include "itsolver.h"
 #include "measure.h"
 #include "excite.h"
+#include "direct.h"
 #include "mlfma.h"
 #include "io.h"
 
@@ -97,7 +98,9 @@ int main (int argc, char **argv) {
 	sprintf (fname, "%s.contrast", inproj);
 	getcontrast (fname, fmaconf.bslist, fmaconf.numbases);
 
-	i = fmmprecalc ();
+	/* Precalculate some values for the FMM and direct interactions. */
+	fmmprecalc ();
+	i = dirprecalc ();
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
 
 	/* Finish the ScaleME initialization. */

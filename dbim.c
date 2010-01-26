@@ -13,6 +13,7 @@
 #include "measure.h"
 #include "frechet.h"
 #include "excite.h"
+#include "direct.h"
 #include "mlfma.h"
 #include "io.h"
 #include "cg.h"
@@ -154,7 +155,9 @@ int main (int argc, char **argv) {
 	sprintf (fname, "%s.guess", inproj);
 	getcontrast (fname, fmaconf.bslist, fmaconf.numbases);
 
-	i = fmmprecalc ();
+	/* Precalculate some values for the FMM and direct interactions. */
+	fmmprecalc ();
+	i = dirprecalc ();
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
 
 	/* Finish the ScaleME initialization. */
@@ -266,7 +269,7 @@ int main (int argc, char **argv) {
 	ScaleME_finalizeParHostFMA ();
 
 	free (fmaconf.contrast);
-	free (fmaconf.gridints);
+	free (dircache.gridints);
 	free (field);
 	if (error) free (error);
 	free (srcmeas.locations);

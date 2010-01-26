@@ -10,7 +10,7 @@
 #include "excite.h"
 #include "measure.h"
 
-#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#include "util.h"
 
 /* Computes the entire RHS vector. */
 int buildrhs (complex float *rhs, float *srcloc) {
