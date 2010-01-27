@@ -33,22 +33,13 @@ complex float *patbuf;
  * center, and stores the output in a provided vector. sgn is positive for
  * radiation pattern and negative for receiving pattern. */
 void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn) {
-	float fbox[3];
 	complex float fact, beta, *buf, *crt = (complex float *)vcrt,
 		*pat = *((complex float **)vpat);
-	int l, idx[3], bsoff[3];
+	int l, idx[3];
 
 	/* The buffer that will be used by this thread for this routine. */
 	buf = patbuf + omp_get_thread_num() * fmaconf.bspboxvol;
 	memset (buf, 0, fmaconf.bspboxvol * sizeof(complex float));
-
-	fbox[0] = (cen[0] - fmaconf.min[0]) / (fmaconf.cell * fmaconf.bspbox);
-	fbox[1] = (cen[1] - fmaconf.min[1]) / (fmaconf.cell * fmaconf.bspbox);
-	fbox[2] = (cen[2] - fmaconf.min[2]) / (fmaconf.cell * fmaconf.bspbox);
-
-	bsoff[0] = (int)(fbox[0]) * fmaconf.bspbox;
-	bsoff[1] = (int)(fbox[1]) * fmaconf.bspbox;
-	bsoff[2] = (int)(fbox[2]) * fmaconf.bspbox;
 
 	if (sgn >= 0) {
 		/* Scalar factors for the matrix multiplication. */
@@ -61,9 +52,9 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 			bsindex (bsl[l], idx);
 
 			/* Shift to a local grid position. */
-			idx[0] -= bsoff[0];
-			idx[1] -= bsoff[1];
-			idx[2] -= bsoff[2];
+			idx[0] %= fmaconf.bspbox;
+			idx[1] %= fmaconf.bspbox;
+			idx[2] %= fmaconf.bspbox;
 			
 			/* Augment the current vector. */
 			buf[SQIDX(fmaconf.bspbox,idx[0],idx[1],idx[2])] = crt[l];
@@ -89,9 +80,9 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 			bsindex (bsl[l], idx);
 			
 			/* Shift to a local grid position. */
-			idx[0] -= bsoff[0];
-			idx[1] -= bsoff[1];
-			idx[2] -= bsoff[2];
+			idx[0] %= fmaconf.bspbox;
+			idx[1] %= fmaconf.bspbox;
+			idx[2] %= fmaconf.bspbox;
 			
 			/* Augment the current vector. */
 			crt[l] += buf[SQIDX(fmaconf.bspbox,idx[0],idx[1],idx[2])];
