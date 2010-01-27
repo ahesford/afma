@@ -14,6 +14,10 @@
 #ifndef _OPENMP
 int omp_get_max_threads () { return 1; }
 int omp_get_thread_num () { return 0; }
+
+int omp_set_lock (omp_lock_t *x) { return 0; }
+int omp_init_lock (omp_lock_t *x) { return 0; }
+int omp_unset_lock (omp_lock_t *x) { return 0; }
 #endif /* _OPENMP */
 
 #ifdef _FREEBSD

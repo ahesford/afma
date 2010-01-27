@@ -19,6 +19,7 @@ complex float *dirbuf, **boxrhs, *gridints;
 int ncbox[3], cboxmin[3], *boxfill;
 int nbors, nfftprod, nfft[3];
 fftwf_plan fplan, bplan;
+omp_lock_t **boxlocks;
 
 /* Initialize the direct-interaction cache structure. */
 int mkdircache () {
@@ -72,6 +73,10 @@ int mkdircache () {
 	boxrhs = calloc (ncboxprod, sizeof(complex float *));
 	boxrhs[0] = malloc (nebox * nfftprod * sizeof(complex float));
 
+	/* Allocate box locks. */
+	boxlocks = calloc (ncboxprod, sizeof(omp_lock_t *));
+	boxlocks[0] = malloc (nebox * sizeof(omp_lock_t));
+
 	/* Now loop through all bases and set up the box cache pointers. */
 	for (l = 0, nebox = 0; l < nbs; ++l) {
 		/* Get the index of the first basis function. */
@@ -91,9 +96,11 @@ int mkdircache () {
 		/* Mark this box as counted. */
 		boxfill[i] = 1;
 
-		/* Set the next box pointer. */
-		boxrhs[i] = boxrhs[0] + nebox;
-		nebox += nfftprod;
+		/* Set the next box pointer and initialize the lock. */
+		boxrhs[i] = boxrhs[0] + nebox * nfftprod;
+		boxlocks[i] = boxlocks[0] + nebox;
+		omp_init_lock (boxlocks[i]);
+		++nebox;
 	}
 
 	/* The locally-required basis list is no longer necessary. */
@@ -115,6 +122,8 @@ void freedircache () {
 	free (boxrhs);
 	free (gridints);
 	free (dirbuf);
+	free (boxlocks[0]);
+	free (boxlocks);
 }
 
 /* Check the cache for the given RHS. If it exists, return the pre-cached copy.
@@ -138,8 +147,8 @@ complex float *cacheboxrhs (complex float *rhs, int *bslist, int nbs) {
 	bptr = boxrhs[l];
 
 	/* The cache check and fill operation must be thread safe. */
-#pragma omp critical(cacherhs)
-{
+	omp_set_lock (boxlocks[l]);
+
 	/* Cache miss. Fill the box. */
 	if (!(boxfill[l])) {
 		/* Clear the cache storage. */
@@ -165,7 +174,9 @@ complex float *cacheboxrhs (complex float *rhs, int *bslist, int nbs) {
 		/* Mark the cache spot as full. */
 		boxfill[l] = 1;
 	}
-}
+
+	/* Free the lock to allow other threads to access the cache block. */
+	omp_unset_lock (boxlocks[l]);
 
 	/* Return the RHS. */
 	return bptr;
