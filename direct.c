@@ -22,7 +22,7 @@ typedef struct {
 
 /* Buffers for the RHS cache, the Green's functions, and a workspace. */
 static boxdesc *boxlist;
-static complex float *dirbuf, *gridints, *rhsbuf;
+static complex float *gridints, *rhsbuf;
 static int nbors, nfftprod, nfft[3], nebox;
 static fftwf_plan fplan, bplan;
 
@@ -47,7 +47,9 @@ int boxcomp (const void *vl, const void *vr) {
 /* Initialize the direct-interaction cache structure. */
 int mkdircache () {
 	complex float *rhsptr;
-	int nbs, *bslist, i, *idx, *boxidx;
+	int nbs, *bslist, i, *idx, *boxidx, rank;
+
+	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
 
 	/* Get the complete list of locally required basis functions. */
 	ScaleME_getLocallyReqBasis (&nbs, &bslist);
@@ -82,6 +84,9 @@ int mkdircache () {
 
 	/* Allocate the backend array. */
 	rhsptr = rhsbuf = fftwf_malloc (nebox * nfftprod * sizeof(complex float));
+
+	fprintf (stderr, "Rank %d: Expanded FFT buffer size size: %ld bytes\n",
+			rank, nebox * nfftprod * sizeof(complex float));
 
 	/* Set up the first box structure. */
 	memcpy (boxlist[0].index, boxidx, 3 * sizeof(int));
@@ -126,7 +131,6 @@ void freedircache () {
 	free (rhsbuf);
 	free (boxlist);
 	free (gridints);
-	free (dirbuf);
 }
 
 /* Check the cache for the given RHS. If it exists, return the pre-cached copy.
@@ -199,7 +203,9 @@ complex float *cacheboxrhs (int *bslist, int nbs, int boxkey) {
 
 /* Precompute some values for the direct interactions. */
 int dirprecalc () {
-	int totbpnbr, nborsvol;
+	int totbpnbr, nborsvol, rank;
+
+	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
 
 	/* The number of neighbor boxes per dimension. */
 	nbors = nborsvol = 2 * fmaconf.numbuffer + 1;
@@ -213,7 +219,9 @@ int dirprecalc () {
 	/* Build the expanded grid. */
 	totbpnbr = nfftprod * nborsvol;
 	gridints = fftwf_malloc (totbpnbr * sizeof(complex float));
-	dirbuf = fftwf_malloc (nfftprod * omp_get_max_threads() * sizeof(complex float));
+
+	fprintf (stderr, "Rank %d: Green's function grid size: %ld bytes\n",
+			rank, totbpnbr * sizeof(complex float));
 
 	/* The forward FFT plan transforms all boxes in one pass. */
 	fplan = fftwf_plan_dft_3d (nfft[0], nfft[1], nfft[2],
@@ -260,7 +268,7 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 	complex float *cobs;
 
 	/* Clear the local output buffer. */
-	buf = dirbuf + omp_get_thread_num() * nfftprod;
+	buf = fftwf_malloc (nfftprod * sizeof(complex float));
 	memset (buf, 0, nfftprod * sizeof(complex float));
 
 	/* Find the output vector segment and the target basis list. */
@@ -314,6 +322,8 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 		/* Augment the RHS. */
 		cobs[l] += buf[SQIDX(nfft[0],idx[0],idx[1],idx[2])];
 	}
+
+	free (buf);
 
 	return;
 }

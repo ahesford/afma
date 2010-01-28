@@ -26,9 +26,6 @@
 
 fmadesc fmaconf;
 
-/* Some often-used buffers that shouldn't be continually reallocated. */
-complex float *patbuf;
-
 /* Computes the far-field pattern for the specified basis with the specified
  * center, and stores the output in a provided vector. sgn is positive for
  * radiation pattern and negative for receiving pattern. */
@@ -38,8 +35,7 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 	int l, idx[3];
 
 	/* The buffer that will be used by this thread for this routine. */
-	buf = patbuf + omp_get_thread_num() * fmaconf.bspboxvol;
-	memset (buf, 0, fmaconf.bspboxvol * sizeof(complex float));
+	buf = calloc (fmaconf.bspboxvol, sizeof(complex float));
 
 	if (sgn >= 0) {
 		/* Scalar factors for the matrix multiplication. */
@@ -88,6 +84,8 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 			crt[l] += buf[SQIDX(fmaconf.bspbox,idx[0],idx[1],idx[2])];
 		}
 	}
+
+	free (buf);
 }
 
 /* Precompute the exponential radiation pattern for a point a distance rmc 
@@ -124,7 +122,9 @@ int buildradpat (complex float *pat, float k, float *rmc,
  * the wave vector directions to be used for fast calculation of far-field patterns. */
 int fmmprecalc () {
 	float *thetas, clen;
-	int ntheta, nphi;
+	int ntheta, nphi, rank;
+
+	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
 
 	/* Get the finest level parameters. */
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, NULL, NULL);
@@ -134,9 +134,10 @@ int fmmprecalc () {
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, thetas, NULL);
 
 	/* Allocate storage for the radiation patterns. */
-	fmaconf.radpats = malloc (fmaconf.bspboxvol * (fmaconf.nsamp + 
-				omp_get_max_threads()) * sizeof(complex float));
-	patbuf = fmaconf.radpats + fmaconf.bspboxvol * fmaconf.nsamp;
+	fmaconf.radpats = malloc (fmaconf.bspboxvol * fmaconf.nsamp * sizeof(complex float));
+
+	fprintf (stderr, "Rank %d: Radiation pattern buffer size: %ld bytes\n",
+			rank, fmaconf.bspboxvol * fmaconf.nsamp * sizeof(complex float));
 
 	/* Calculate the box center. */
 	clen = 0.5 * (float)fmaconf.bspbox;
