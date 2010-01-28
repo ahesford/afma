@@ -14,168 +14,151 @@
 #include "mlfma.h"
 #include "integrate.h"
 
+typedef struct {
+	int index[3], fill;
+	omp_lock_t lock;
+	complex float *rhs;
+} boxdesc;
+
 /* Buffers for the RHS cache, the Green's functions, and a workspace. */
-complex float *dirbuf, **boxrhs, *gridints;
-int ncbox[3], cboxmin[3], *boxfill;
-int nbors, nfftprod, nfft[3];
-fftwf_plan fplan, bplan;
-omp_lock_t **boxlocks;
+static boxdesc *boxlist;
+static complex float *dirbuf, *gridints, *rhsbuf;
+static int nbors, nfftprod, nfft[3], nebox;
+static fftwf_plan fplan, bplan;
 
-int boxcomp (const void *vl, const void *vr) {
-	int il = *(int *)vl, ir = *(int *)vr, bl[3], br[3];
-
-	/* Find the box indices for each basis. */
-	bsindex (il, bl);
-	bl[0] /= fmaconf.bspbox; bl[1] /= fmaconf.bspbox; bl[2] /= fmaconf.bspbox;
-	bsindex (ir, br);
-	br[0] /= fmaconf.bspbox; br[1] /= fmaconf.bspbox; br[2] /= fmaconf.bspbox;
+/* Compare two box indices for sorting and searching. */
+int idxcomp (const void *vl, const void *vr) {
+	int *bl = (int *)vl, *br = (int *)vr;
 
 	if (bl[0] != br[0]) return bl[0] - br[0];
 	if (bl[1] != br[1]) return bl[1] - br[1];
 	return bl[2] - br[2];
 }
 
+/* Compare two box indices within a box descriptor structure. */
+int boxcomp (const void *vl, const void *vr) {
+	boxdesc *bl = (boxdesc *)vl, *br = (boxdesc *)vr;
+
+	if (bl->index[0] != br->index[0]) return bl->index[0] - br->index[0];
+	if (bl->index[1] != br->index[1]) return bl->index[1] - br->index[1];
+	return bl->index[2] - br->index[2];
+}
+
 /* Initialize the direct-interaction cache structure. */
 int mkdircache () {
-	int nbs, *bslist, l, i, bidx[6], boxmax[3], nebox, ncboxprod, *idx, *lidx;
+	complex float *rhsptr;
+	int nbs, *bslist, i, *idx, *boxidx;
 
 	/* Get the complete list of locally required basis functions. */
 	ScaleME_getLocallyReqBasis (&nbs, &bslist);
 
-	/* Sort the basis list according to parent boxes. */
-	qsort (bslist, nbs, sizeof(int), boxcomp);
+	/* Allocate the box index array. */
+	boxidx = malloc (3 * nbs * sizeof(int));
 
-	/* Get the index of the first basis function. */
-	bsindex (bslist[0], bidx);
-	/* Get the box index for this basis function. */
-	bidx[0] /= fmaconf.bspbox;
-	bidx[1] /= fmaconf.bspbox;
-	bidx[2] /= fmaconf.bspbox;
-
-	/* Set the box bounds for the local RHS cache. */
-	cboxmin[0] = boxmax[0] = bidx[0];
-	cboxmin[1] = boxmax[1] = bidx[1];
-	cboxmin[2] = boxmax[2] = bidx[2];
-
-	/* Now loop through and establish the maxmimum and minimum box bounds. */
-	for (nebox = l = 1; l < nbs; ++l) {
-		/* The current index pointer. */
-		idx = bidx + 3 * (l % 2);
-		/* The last index pointer. */
-		lidx = bidx + 3 * ((l + 1) % 2);
-
-		/* Get the index of the first basis function. */
-		bsindex (bslist[l], idx);
-
-		/* Get the box index for this basis function. */
+	/* Build the array of box indices. */
+	for (i = 0, idx = boxidx; i < nbs; ++i, idx += 3) {
+		bsindex (bslist[i], idx);
 		idx[0] /= fmaconf.bspbox;
 		idx[1] /= fmaconf.bspbox;
 		idx[2] /= fmaconf.bspbox;
-
-		/* Skip the current box, since it was already counted. */
-		if (idx[0] == lidx[0] && idx[1] == lidx[1] && idx[2] == lidx[2])
-			continue;
-
-		/* Update the maximum and minimum box bounds. */
-		cboxmin[0] = MIN(cboxmin[0], idx[0]);
-		cboxmin[1] = MIN(cboxmin[1], idx[1]);
-		cboxmin[2] = MIN(cboxmin[2], idx[2]);
-		boxmax[0] = MAX(boxmax[0], idx[0]);
-		boxmax[1] = MAX(boxmax[1], idx[1]);
-		boxmax[2] = MAX(boxmax[2], idx[2]);
-
-		++nebox;
 	}
 
-	/* Count the boxes in the box cache. */
-	ncbox[0] = boxmax[0] - cboxmin[0] + 1;
-	ncbox[1] = boxmax[1] - cboxmin[1] + 1;
-	ncbox[2] = boxmax[2] - cboxmin[2] + 1;
-	ncboxprod = ncbox[0] * ncbox[1] * ncbox[2];
-
-	/* Allocate the cache arrays. */
-	boxfill = calloc (ncboxprod, sizeof(int));
-	boxrhs = calloc (ncboxprod, sizeof(complex float *));
-	boxrhs[0] = fftwf_malloc (nebox * nfftprod * sizeof(complex float));
-
-	/* Allocate box locks. */
-	boxlocks = calloc (ncboxprod, sizeof(omp_lock_t *));
-	boxlocks[0] = malloc (nebox * sizeof(omp_lock_t));
-
-	/* Now loop through all bases and set up the box cache pointers. */
-	for (l = 0, nebox = 0; l < nbs; ++l) {
-		/* Get the index of the first basis function. */
-		bsindex (bslist[l], bidx);
-		
-		/* Get the box index for this basis function. */
-		bidx[0] = (bidx[0] / fmaconf.bspbox) - cboxmin[0];
-		bidx[1] = (bidx[1] / fmaconf.bspbox) - cboxmin[1];
-		bidx[2] = (bidx[2] / fmaconf.bspbox) - cboxmin[2];
-
-		/* Find the linear box index. */
-		i = IDX(ncbox[1], ncbox[2], bidx[0], bidx[1], bidx[2]);
-
-		/* Skip this basis function if the box has already been counted. */
-		if (boxfill[i]) continue;
-
-		/* Mark this box as counted. */
-		boxfill[i] = 1;
-
-		/* Set the next box pointer and initialize the lock. */
-		boxrhs[i] = boxrhs[0] + nebox * nfftprod;
-		boxlocks[i] = boxlocks[0] + nebox;
-		omp_init_lock (boxlocks[i]);
-		++nebox;
-	}
-
-	/* The locally-required basis list is no longer necessary. */
+	/* The basis list is no longer necessary. */
 	free (bslist);
 
-	return ncboxprod;
+	/* Sort the basis list according to parent boxes. */
+	qsort (boxidx, nbs, 3 * sizeof(int), idxcomp);
+
+	/* Count the number of non-empty boxes. */
+	for (nebox = i = 1, idx = boxidx + 3; i < nbs; ++i, idx += 3) {
+		/* Skip the current box if it was already counted. */
+		if (!idxcomp (idx, idx - 3)) continue;
+
+		++nebox;
+	}
+
+	/* Allocate the list of boxes. */
+	boxlist = calloc (nebox, sizeof(boxdesc));
+
+	/* Allocate the backend array. */
+	rhsptr = rhsbuf = fftwf_malloc (nebox * nfftprod * sizeof(complex float));
+
+	/* Set up the first box structure. */
+	memcpy (boxlist[0].index, boxidx, 3 * sizeof(int));
+	omp_init_lock (&(boxlist[0].lock));
+	boxlist[0].rhs = rhsptr;
+	rhsptr += nfftprod;
+
+	/* Now loop through all bases and set up the box cache pointers. */
+	for (nebox = i = 1, idx = boxidx + 3; i < nbs; ++i, idx += 3) {
+		/* Skip a previously-counted box. */
+		if (!idxcomp (idx, idx - 3)) continue;
+
+		/* Set up the next box structure. */
+		memcpy (boxlist[nebox].index, idx, 3 * sizeof(int));
+		omp_init_lock (&(boxlist[nebox].lock));
+		boxlist[nebox].rhs = rhsptr;
+		rhsptr += nfftprod;
+
+		/* Count this box. */
+		++nebox;
+	}
+
+	/* Sort the box descriptors. */
+	qsort (boxlist, nebox, sizeof(boxdesc), boxcomp);
+
+	/* The box list is no longer necessary. */
+	free (boxidx);
+
+	return nebox;
 }
 
 /* Clear the cache arrays for a new iteration. */
 void clrdircache () {
-	int ncboxprod = ncbox[0] * ncbox[1] * ncbox[2];
-	memset (boxfill, 0, ncboxprod * sizeof(int));
+	int i;
+
+	/* Blank the box fill marker. */
+	for (i = 0; i < nebox; ++i) boxlist[i].fill = 0;
 }
 
 /* Free the allocated memory in the direct-interaction cache structure. */
 void freedircache () {
-	free (boxfill);
-	free (boxrhs[0]);
-	free (boxrhs);
+	free (rhsbuf);
+	free (boxlist);
 	free (gridints);
 	free (dirbuf);
-	free (boxlocks[0]);
-	free (boxlocks);
 }
 
 /* Check the cache for the given RHS. If it exists, return the pre-cached copy.
  * Otherwise, cache the provided copy and take the DFT before returning a pointer
  * to the cache bin. */
 complex float *cacheboxrhs (int *bslist, int nbs, int boxkey) {
-	int idx[3], l, i;
+	int l, i;
+	boxdesc key, *lbox;
 	complex float *bptr, *rhs;
 
 	/* Get the index for the first basis in the box. */
-	bsindex (bslist[0], idx);
+	bsindex (bslist[0], key.index);
 
-	/* The local box index. */
-	idx[0] = (idx[0] / fmaconf.bspbox) - cboxmin[0];
-	idx[1] = (idx[1] / fmaconf.bspbox) - cboxmin[1];
-	idx[2] = (idx[2] / fmaconf.bspbox) - cboxmin[2];
+	/* The box index. */
+	key.index[0] /= fmaconf.bspbox;
+	key.index[1] /= fmaconf.bspbox;
+	key.index[2] /= fmaconf.bspbox;
 
-	/* Get the index in the cache. */
-	l = IDX(ncbox[1], ncbox[2], idx[0], idx[1], idx[2]);
-	/* Point to the storage in the cache. */
-	bptr = boxrhs[l];
+	/* Search for the box index. */
+	lbox = bsearch (&key, boxlist, nebox, sizeof(boxdesc), boxcomp);
+
+	/* The search failed for some reason. */
+	if (!lbox) return NULL;
+
+	/* Point to the RHS storage. */
+	bptr = lbox->rhs;
 
 	/* The cache check and fill operation must be thread safe. */
-	omp_set_lock (boxlocks[l]);
+	omp_set_lock (&(lbox->lock));
 
 	/* Cache miss. Fill the box. */
-	if (!(boxfill[l])) {
+	if (!(lbox->fill)) {
 		/* Clear the cache storage. */
 		memset (bptr, 0, nfftprod * sizeof(complex float));
 
@@ -185,26 +168,30 @@ complex float *cacheboxrhs (int *bslist, int nbs, int boxkey) {
 		/* Populate the local grid. */
 		for (i = 0; i < nbs; ++i) {
 			/* Find the basis index. */
-			bsindex (bslist[i], idx);
+			bsindex (bslist[i], key.index);
 			
 			/* Find the position in the local box. */
-			idx[0] %= fmaconf.bspbox;
-			idx[1] %= fmaconf.bspbox;
-			idx[2] %= fmaconf.bspbox;
+			key.index[0] %= fmaconf.bspbox;
+			key.index[1] %= fmaconf.bspbox;
+			key.index[2] %= fmaconf.bspbox;
+
+			/* The index into the RHS array. */
+			l = SQIDX(nfft[0],key.index[0],key.index[1],key.index[2]);
 			
 			/* Fill the expanded FFT grid. */
-			bptr[SQIDX(nfft[0],idx[0],idx[1],idx[2])] = rhs[i];
+			bptr[l] = rhs[i];
 		}
 		
 		/* Transform the cached RHS. */
 		fftwf_execute_dft (fplan, bptr, bptr);
 		
 		/* Mark the cache spot as full. */
-		boxfill[l] = 1;
+		lbox->fill = 1;
+
 	}
 
 	/* Free the lock to allow other threads to access the cache block. */
-	omp_unset_lock (boxlocks[l]);
+	omp_unset_lock (&(lbox->lock));
 
 	/* Return the RHS. */
 	return bptr;
