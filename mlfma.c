@@ -197,8 +197,10 @@ int ScaleME_preconf (void) {
 
 	ScaleME_setTopComputeLevel (fmaconf.toplev);
 
-	if (fmaconf.fo2iterm > 0)
+	if (fmaconf.fo2iterm > 0) {
+		ScaleME_useFastO2IGhosts (1);
 		ScaleME_selectFastO2I (fmaconf.fo2iterm, fmaconf.fo2iord, fmaconf.fo2iosr);
+	}
 
 	/* Set the root box length. */
 	len = (1 <<  fmaconf.maxlev) * fmaconf.bspbox * fmaconf.cell;
