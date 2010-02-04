@@ -15,14 +15,12 @@
 int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	int i, mpirank;
 	float *thetas, dtheta;
-	complex float *fields = NULL, fact;
+	complex float fact;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
 
 	/* The theta samples. */
 	thetas = malloc (obs->ntheta * sizeof(float));
-
-	if (!mpirank) fields = malloc (obs->count * sizeof(complex float));
 
 	dtheta = (obs->trange[1] - obs->trange[0]);
 	dtheta /= MAX(obs->ntheta - 1, 1);
@@ -32,31 +30,25 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 
 	/* The result must be a pointer to the pointer. */
 	if (ScaleME_evlRootFarFld_PI (6, obs->ntheta, obs->nphi, thetas,
-				obs->prange, currents, &fields)) return 0;
+				obs->prange, currents, &result)) return 0;
 
-	if (!mpirank) {
-		/* The far-field pattern already has a factor of k in the
-		 * front. However, the actual integral needs (k^2 / 4 pi), so
-		 * we need the extra factors in the field. */
-		fact = fmaconf.k0 / (4 * M_PI);
-		for (i = 0; i < obs->count; ++i) result[i] = fact * fields[i];
-	}
-
-	/* Distribute the solution to all processors. */
-	MPI_Bcast (result, 2 * obs->count, MPI_FLOAT, 0, MPI_COMM_WORLD);
+	/* The far-field pattern already has a factor of k in the front.
+	 * However, the actual integral needs (k^2 / 4 pi), so we need the
+	 * extra factors in the field. */
+	fact = fmaconf.k0 / (4 * M_PI);
+	for (i = 0; i < obs->count; ++i) result[i] *= fact;
 
 	free (thetas);
-	if (!mpirank) free (fields);
 	return 1;
 }
 
 int directfield (complex float *currents, measdesc *obs,
 		complex float *result, complex float *grf) {
 	int i, j;
-	complex float val, *buf, *gptr;
+	complex float val, *gptr;
 	float cen[3], fact;
 
-	buf = calloc (obs->count, sizeof(complex float));
+	memset (result, 0, obs->count * sizeof(complex float));
 
 	/* The integration factor. */
 	fact = fmaconf.k0 * fmaconf.k0 * fmaconf.cellvol;
@@ -67,23 +59,21 @@ int directfield (complex float *currents, measdesc *obs,
 			bscenter (fmaconf.bslist[j], cen);
 			for (i = 0; i < obs->count; ++i) {
 				val = fsgreen (fmaconf.k0, cen, obs->locations + 3 * i);
-				buf[i] += fact * val * currents[j];
+				result[i] += fact * val * currents[j];
 			}
 		}
 	} else {
 		/* The Green's function has already been precomputed. */
-		for (j = 0, gptr = grf; j < fmaconf.numbases; ++j) {
+		for (j = 0; j < fmaconf.numbases; ++j) {
+			gptr = grf + j * obs->count;
 			for (i = 0; i < obs->count; ++i, ++gptr) {
-				buf[i] += fact * currents[j] * (*gptr);
+				result[i] += fact * currents[j] * (*gptr);
 			}
 		}
 	}
 
-
 	/* Collect the solution across all processors. */
-	MPI_Allreduce (buf, result, 2 * obs->count, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-
-	free (buf);
+	MPI_Allreduce (MPI_IN_PLACE, result, 2 * obs->count, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
 	return obs->count;
 }

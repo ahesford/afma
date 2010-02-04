@@ -25,16 +25,16 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 	scat = malloc (obs->count * sizeof(complex float));
 
 	/* Initialize some values. */
-	lrnorm = 0;
+	rnorm = 0;
 	for (i = 0; i < fmaconf.numbases; ++i) {
 		pn[i] = rn[i];
 		sol[i] = 0.0;
 		alpha = cabs (rn[i]);
-		lrnorm += alpha * alpha;
+		rnorm += alpha * alpha;
 	}
 
 	/* Reduce the local norms into a global norm. */
-	MPI_Allreduce (&lrnorm, &rnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce (MPI_IN_PLACE, &rnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 	pnorm = (rninc = rnorm);
 
 	for (j = 0; j < slv->maxit; ++j) {
