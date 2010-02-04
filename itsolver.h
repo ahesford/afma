@@ -9,5 +9,6 @@ typedef struct {
 } solveparm;
 
 int cgmres (complex float *, complex float *, int, solveparm *);
+int bicgstab (complex float *, complex float *, int, solveparm *);
 
 #endif /* __ITSOLVER_H_ */

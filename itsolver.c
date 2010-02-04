@@ -41,6 +41,104 @@ static int augcrt (complex float *dst, complex float *src) {
 	return fmaconf.numbases;
 }
 
+int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
+	int i, j, rank;
+	complex float *r, *rhat, *v, *p, *mvp, *t, *s;
+	complex float rho, alpha, omega[2], beta, rnorm;
+	float err, errinc;
+
+	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
+
+	rho = alpha = omega[0] = 1.;
+
+	/* Allocate the work arrays. */
+	r = malloc (7 * fmaconf.numbases * sizeof(complex float));
+	rhat = r + fmaconf.numbases;
+	v = rhat + fmaconf.numbases;
+	p = v + fmaconf.numbases;
+	t = p + fmaconf.numbases;
+	s = t + fmaconf.numbases;
+	mvp = s + fmaconf.numbases;
+
+	/* Zero the solution buffer and copy the residuals. */
+#pragma omp parallel for default(shared) private(i)
+	for (i = 0; i < fmaconf.numbases; ++i) {
+		r[i] = rhat[i] = rhs[i];
+		v[0] = sol[i] = 0;
+	}
+
+	/* Find the initial residual magnitude. */
+	cblas_cdotc_sub (fmaconf.numbases, r, 1, r, 1, &rnorm);
+	MPI_Allreduce(MPI_IN_PLACE, &rnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	errinc = sqrt(creal(rnorm));
+
+	for (i = 0; i < slv->maxit; ++i) {
+		/* Pre-compute portion of beta from previous iteration. */
+		beta = alpha / (rho * omega[0]);
+		/* Collect the total rho. */
+		cblas_cdotc_sub (fmaconf.numbases, rhat, 1, r, 1, &rho);
+		MPI_Allreduce(MPI_IN_PLACE, &rho, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+		/* Include the missing factor. */
+		beta *= rho;
+
+#pragma omp parallel for default(shared) private(j)
+		for (j = 0; j < fmaconf.numbases; ++j) {
+			/* Update the search vector. */
+			p[j] = r[j] + beta * (p[j] - omega[0] * v[j]);
+			/* Pre-compute the contrast for FMM evaluation. */
+			mvp[j] = p[j] * fmaconf.contrast[j];
+		}
+		/* Matrix-vector product. */
+		clrdircache ();
+		ScaleME_applyParFMA(mvp, v, 0);
+		/* Identity portion. */
+		augcrt (v, p);
+		/* Compute the inner product for alpha. */
+		cblas_cdotc_sub (fmaconf.numbases, rhat, 1, v, 1, &alpha);
+		MPI_Allreduce(MPI_IN_PLACE, &alpha, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+		alpha = rho / alpha;
+#pragma omp parallel for default(shared) private(j)
+		for (j = 0; j < fmaconf.numbases; ++j) {
+			s[j] = r[j] - alpha * v[j];
+			/* Pre-compute the next contrast. */
+			mvp[j] = s[j] * fmaconf.contrast[j];
+		}
+		/* Matrix-vector product. */
+		clrdircache ();
+		ScaleME_applyParFMA(mvp, t, 0);
+		/* Identity portion. */
+		augcrt (t, s);
+		/* Compute the numerator of omega. */
+		cblas_cdotc_sub (fmaconf.numbases, t, 1, s, 1, omega);
+		/* Compute the denominator of omega. */
+		cblas_cdotc_sub (fmaconf.numbases, t, 1, t, 1, omega + 1);
+		MPI_Allreduce(MPI_IN_PLACE, omega, 4, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+		/* Compute the ratio for omega. */
+		omega[0] /= omega[1];
+#pragma omp parallel for default(shared) private(j)
+		for (j = 0; j < fmaconf.numbases; ++j) {
+			/* Update the solution vector. */
+			sol[j] += alpha * p[j] + omega[0] * s[j];
+			/* Update the residual vector. */
+			r[j] = s[j] - omega[0] * t[j];
+		}
+
+		/* Compute the norm of the residual s. */
+		cblas_cdotc_sub (fmaconf.numbases, r, 1, r, 1, &rnorm);
+		MPI_Allreduce(MPI_IN_PLACE, &rnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+		err = sqrt(creal(rnorm)) / errinc;
+
+		if (!rank && !silent) printf ("BiCG-STAB(%d): %g\n", i, err);
+
+		/* Break if convergence is detected. */
+		if (err < slv->epscg) break;
+	}
+
+	free (r);
+
+	return i;
+}
+
 int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
 	int icntl[8], irc[5], lwork, info[3], i, myRank;
 	float rinfo[2], cntl[5];

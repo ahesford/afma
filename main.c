@@ -128,7 +128,7 @@ int main (int argc, char **argv) {
 		tstart = clock ();
 		gettimeofday (&wtstart, NULL);
 		/* Run the iterative solver. The solution is stored in the RHS. */
-		cgmres (rhs, rhs, 0, &solver);
+		bicgstab (rhs, rhs, 0, &solver);
 		gettimeofday (&wtend, NULL);
 		tend = clock ();
 		cputime = (double) (tend - tstart) / CLOCKS_PER_SEC;
