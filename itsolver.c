@@ -43,7 +43,7 @@ static int augcrt (complex float *dst, complex float *src) {
 
 int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
 	int i, j, rank;
-	complex float *r, *rhat, *v, *p, *mvp, *t, *s;
+	complex float *r, *rhat, *v, *p, *mvp, *t;
 	complex float rho, alpha, omega[2], beta, rnorm;
 	float err, errinc;
 
@@ -52,13 +52,12 @@ int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv
 	rho = alpha = omega[0] = 1.;
 
 	/* Allocate the work arrays. */
-	r = malloc (7 * fmaconf.numbases * sizeof(complex float));
+	r = malloc (6 * fmaconf.numbases * sizeof(complex float));
 	rhat = r + fmaconf.numbases;
 	v = rhat + fmaconf.numbases;
 	p = v + fmaconf.numbases;
 	t = p + fmaconf.numbases;
-	s = t + fmaconf.numbases;
-	mvp = s + fmaconf.numbases;
+	mvp = t + fmaconf.numbases;
 
 	/* Zero the solution buffer and copy the residuals. */
 #pragma omp parallel for default(shared) private(i)
@@ -99,17 +98,17 @@ int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv
 		alpha = rho / alpha;
 #pragma omp parallel for default(shared) private(j)
 		for (j = 0; j < fmaconf.numbases; ++j) {
-			s[j] = r[j] - alpha * v[j];
+			r[j] -= alpha * v[j];
 			/* Pre-compute the next contrast. */
-			mvp[j] = s[j] * fmaconf.contrast[j];
+			mvp[j] = r[j] * fmaconf.contrast[j];
 		}
 		/* Matrix-vector product. */
 		clrdircache ();
 		ScaleME_applyParFMA(mvp, t, 0);
 		/* Identity portion. */
-		augcrt (t, s);
+		augcrt (t, r);
 		/* Compute the numerator of omega. */
-		cblas_cdotc_sub (fmaconf.numbases, t, 1, s, 1, omega);
+		cblas_cdotc_sub (fmaconf.numbases, t, 1, r, 1, omega);
 		/* Compute the denominator of omega. */
 		cblas_cdotc_sub (fmaconf.numbases, t, 1, t, 1, omega + 1);
 		MPI_Allreduce(MPI_IN_PLACE, omega, 4, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
@@ -118,12 +117,12 @@ int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv
 #pragma omp parallel for default(shared) private(j)
 		for (j = 0; j < fmaconf.numbases; ++j) {
 			/* Update the solution vector. */
-			sol[j] += alpha * p[j] + omega[0] * s[j];
+			sol[j] += alpha * p[j] + omega[0] * r[j];
 			/* Update the residual vector. */
-			r[j] = s[j] - omega[0] * t[j];
+			r[j] -= omega[0] * t[j];
 		}
 
-		/* Compute the norm of the residual s. */
+		/* Compute the norm of the residual r. */
 		cblas_cdotc_sub (fmaconf.numbases, r, 1, r, 1, &rnorm);
 		MPI_Allreduce(MPI_IN_PLACE, &rnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 		err = sqrt(creal(rnorm)) / errinc;
