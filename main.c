@@ -29,9 +29,9 @@ void usage (char *name) {
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i, j;
-	complex float *rhs, *field;
+	complex float *rhs, *sol, *field;
 	clock_t tstart, tend;
-	double cputime, wtime;
+	double err, cputime, wtime;
 	int debug = 0;
 	struct timeval wtstart, wtend;
 
@@ -87,7 +87,8 @@ int main (int argc, char **argv) {
 	ScaleME_preconf ();
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
 	/* Allocate the RHS vector, which will also store the solution. */
-	rhs = malloc (fmaconf.numbases * sizeof(complex float));
+	rhs = malloc (2 * fmaconf.numbases * sizeof(complex float));
+	sol = rhs + fmaconf.numbases;
 	/* Allocate the local portion of the contrast storage. */
 	fmaconf.contrast = malloc (fmaconf.numbases * sizeof(complex float));
 	/* Allocate the observation array. */
@@ -127,8 +128,10 @@ int main (int argc, char **argv) {
 
 		tstart = clock ();
 		gettimeofday (&wtstart, NULL);
-		/* Run the iterative solver. The solution is stored in the RHS. */
-		bicgstab (rhs, rhs, 0, &solver);
+		/* Run the iterative solver, repeating as necessary to ensure
+		 * that the true residual is below the desired tolerance. */
+		for (j = 0, err = 1; j < solver.restart && err > solver.epscg; ++j)
+			err = bicgstab (rhs, sol, 0, &solver);
 		gettimeofday (&wtend, NULL);
 		tend = clock ();
 		cputime = (double) (tend - tstart) / CLOCKS_PER_SEC;
@@ -136,20 +139,20 @@ int main (int argc, char **argv) {
 			+ (double)(wtend.tv_usec - wtstart.tv_usec) * 1e-6;
 
 		if (!mpirank) {
-			fprintf (stderr, "CPU time for CGMRES: %0.6g\n", cputime);
-			fprintf (stderr, "Wall time for CGMRES: %0.6g\n", wtime);
+			fprintf (stderr, "CPU time for solution: %0.6g\n", cputime);
+			fprintf (stderr, "Wall time for solution: %0.6g\n", wtime);
 		}
 
 		if (debug) {
 			sprintf (fname, "%s.%d.currents", outproj, i);
-			prtcontrast (fname, rhs);
+			prtcontrast (fname, sol);
 		}
 
 		/* Convert total field into contrast current. */
 		for (j = 0; j < fmaconf.numbases; ++j)
-			rhs[j] *= fmaconf.contrast[j];
+			sol[j] *= fmaconf.contrast[j];
 
-		farfield (rhs, &obsmeas, field);
+		farfield (sol, &obsmeas, field);
 
 		/* Append the field for the current transmitter. */
 		if (!mpirank) {

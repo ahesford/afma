@@ -21,111 +21,115 @@
 #include "direct.h"
 #include "itsolver.h"
 
-static int compcrt (complex float *dst, complex float *src) {
+static int matvec (complex float *out, complex float *in, complex float *cur) {
 	int i;
 
+	/* Compute the contrast pressure. */
 #pragma omp parallel for default(shared) private(i)
 	for (i = 0; i < fmaconf.numbases; ++i)
-		dst[i] = src[i] * fmaconf.contrast[i];
+		cur[i] = in[i] * fmaconf.contrast[i];
 
-	return fmaconf.numbases;
-}
+	/* Reset the direct-interaction buffer and compute
+	 * the matrix-vector product for the Green's matrix. */
+	clrdircache();
+	ScaleME_applyParFMA (cur, out, 0);
 
-static int augcrt (complex float *dst, complex float *src) {
-	int i;
-
+	/* Add in the identity portion. */
 #pragma omp parallel for default(shared) private(i)
-	for (i = 0; i < fmaconf.numbases; ++i)
-		dst[i] = src[i] - dst[i];
+	for (i = 0; i < fmaconf.numbases; ++i) out[i] = in[i] - out[i];
 
-	return fmaconf.numbases;
+	return 0;
 }
 
-int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
+static complex float pardot (complex float *x, complex float *y, int n) {
+	complex float dp;
+
+	/* Compute the local portion. */
+	cblas_cdotc_sub (n, x, 1, y, 1, &dp);
+	/* Add in the contributions from other processors. */
+	MPI_Allreduce (MPI_IN_PLACE, &dp, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+
+	return dp;
+}
+
+float bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
 	int i, j, rank;
 	complex float *r, *rhat, *v, *p, *mvp, *t;
-	complex float rho, alpha, omega[2], beta, rnorm;
-	float err, errinc;
+	complex float rho, alpha, omega, beta;
+	float err, rhn;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
 
-	rho = alpha = omega[0] = 1.;
+	rho = alpha = omega = 1.;
 
-	/* Allocate the work arrays. */
-	r = malloc (6 * fmaconf.numbases * sizeof(complex float));
+	/* Allocate and zero the work arrays. */
+	r = calloc (6 * fmaconf.numbases, sizeof(complex float));
 	rhat = r + fmaconf.numbases;
 	v = rhat + fmaconf.numbases;
 	p = v + fmaconf.numbases;
 	t = p + fmaconf.numbases;
 	mvp = t + fmaconf.numbases;
 
-	/* Zero the solution buffer and copy the residuals. */
-#pragma omp parallel for default(shared) private(i)
-	for (i = 0; i < fmaconf.numbases; ++i) {
-		r[i] = rhat[i] = rhs[i];
-		v[0] = sol[i] = 0;
-	}
+	/* Compute the norm of the right-hand side for residual scaling. */
+	rhn = sqrt(creal(pardot (rhs, rhs, fmaconf.numbases)));
 
-	/* Find the initial residual magnitude. */
-	cblas_cdotc_sub (fmaconf.numbases, r, 1, r, 1, &rnorm);
-	MPI_Allreduce(MPI_IN_PLACE, &rnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-	errinc = sqrt(creal(rnorm));
+	/* Compute the inital matrix-vector product for the input guess. */
+	matvec (r, sol, mvp);
+
+	/* Subtract from the RHS to form the residual. */
+#pragma omp parallel for default(shared) private(j)
+	for (j = 0; j < fmaconf.numbases; ++j) r[j] = rhs[j] - r[j];
+		
+	/* Copy the initial residual as the test vector. */
+	memcpy (rhat, r, fmaconf.numbases * sizeof(complex float));
+
+	/* Find the norm of the initial residual. */
+	err = sqrt(creal(pardot (r, r, fmaconf.numbases))) / rhn;
+	if (!rank && !silent) printf ("Initial residual: %g\n", err);
+
+	/* No need to iterate if the residual is already low enough. */
+	if (err < slv->epscg) return err;
 
 	for (i = 0; i < slv->maxit; ++i) {
 		/* Pre-compute portion of beta from previous iteration. */
-		beta = alpha / (rho * omega[0]);
-		/* Collect the total rho. */
-		cblas_cdotc_sub (fmaconf.numbases, rhat, 1, r, 1, &rho);
-		MPI_Allreduce(MPI_IN_PLACE, &rho, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-		/* Include the missing factor. */
+		beta = alpha / (rho * omega);
+		/* Compute rho for this iteration. */
+		rho = pardot (rhat, r, fmaconf.numbases);
+		/* Include the missing factor in beta. */
 		beta *= rho;
 
+		/* Update the search vector. */
 #pragma omp parallel for default(shared) private(j)
-		for (j = 0; j < fmaconf.numbases; ++j) {
-			/* Update the search vector. */
-			p[j] = r[j] + beta * (p[j] - omega[0] * v[j]);
-			/* Pre-compute the contrast for FMM evaluation. */
-			mvp[j] = p[j] * fmaconf.contrast[j];
-		}
-		/* Matrix-vector product. */
-		clrdircache ();
-		ScaleME_applyParFMA(mvp, v, 0);
-		/* Identity portion. */
-		augcrt (v, p);
-		/* Compute the inner product for alpha. */
-		cblas_cdotc_sub (fmaconf.numbases, rhat, 1, v, 1, &alpha);
-		MPI_Allreduce(MPI_IN_PLACE, &alpha, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-		alpha = rho / alpha;
+		for (j = 0; j < fmaconf.numbases; ++j)
+			p[j] = r[j] + beta * (p[j] - omega * v[j]);
+
+		/* Compute the first search step, v = A * p. */
+		matvec (v, p, mvp);
+
+		/* Compute the next alpha. */
+		alpha = rho / pardot (rhat, v, fmaconf.numbases);
+
+		/* Update the residual. */
 #pragma omp parallel for default(shared) private(j)
-		for (j = 0; j < fmaconf.numbases; ++j) {
-			r[j] -= alpha * v[j];
-			/* Pre-compute the next contrast. */
-			mvp[j] = r[j] * fmaconf.contrast[j];
-		}
-		/* Matrix-vector product. */
-		clrdircache ();
-		ScaleME_applyParFMA(mvp, t, 0);
-		/* Identity portion. */
-		augcrt (t, r);
-		/* Compute the numerator of omega. */
-		cblas_cdotc_sub (fmaconf.numbases, t, 1, r, 1, omega);
-		/* Compute the denominator of omega. */
-		cblas_cdotc_sub (fmaconf.numbases, t, 1, t, 1, omega + 1);
-		MPI_Allreduce(MPI_IN_PLACE, omega, 4, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-		/* Compute the ratio for omega. */
-		omega[0] /= omega[1];
+		for (j = 0; j < fmaconf.numbases; ++j) r[j] -= alpha * v[j];
+
+		/* Compute the next search step, t = A * r. */
+		matvec (t, r, mvp);
+
+		/* Compute the update direction. */
+		omega = pardot (t, r, fmaconf.numbases) / pardot (t, t, fmaconf.numbases);
+
+		/* Update both the residual and the solution guess. */
 #pragma omp parallel for default(shared) private(j)
 		for (j = 0; j < fmaconf.numbases; ++j) {
 			/* Update the solution vector. */
-			sol[j] += alpha * p[j] + omega[0] * r[j];
+			sol[j] += alpha * p[j] + omega * r[j];
 			/* Update the residual vector. */
-			r[j] -= omega[0] * t[j];
+			r[j] -= omega * t[j];
 		}
-
-		/* Compute the norm of the residual r. */
-		cblas_cdotc_sub (fmaconf.numbases, r, 1, r, 1, &rnorm);
-		MPI_Allreduce(MPI_IN_PLACE, &rnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-		err = sqrt(creal(rnorm)) / errinc;
+	
+		/* Compute the scaled residual norm. */
+		err = sqrt(creal(pardot (r, r, fmaconf.numbases))) / rhn;
 
 		if (!rank && !silent) printf ("BiCG-STAB(%d): %g\n", i, err);
 
@@ -134,11 +138,10 @@ int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv
 	}
 
 	free (r);
-
-	return i;
+	return err;
 }
 
-int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
+float cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
 	int icntl[8], irc[5], lwork, info[3], i, myRank;
 	float rinfo[2], cntl[5];
 	complex float *zwork, *solbuf, *tx, *ty, *tz;
@@ -187,10 +190,7 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 			   /* fortran indices start from 1 */
 			   tx = zwork+irc[1] - 1;
 			   ty = zwork+irc[3] - 1;
-			   clrdircache ();
-			   compcrt (solbuf, tx);
-			   ScaleME_applyParFMA(solbuf, ty, 0);
-			   augcrt (ty, tx);
+			   matvec (ty, tx, solbuf);
 			   break;
 		case DOT_PROD:
 			   ty = zwork + irc[2] - 1;
@@ -217,5 +217,5 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 
 	free (zwork);
 	free (solbuf);
-	return info[0];
+	return rinfo[1];
 }
