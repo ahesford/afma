@@ -52,7 +52,7 @@ static complex float pardot (complex float *x, complex float *y, int n) {
 	return dp;
 }
 
-float bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
+int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
 	int i, j, rank;
 	complex float *r, *rhat, *v, *p, *mvp, *t;
 	complex float rho, alpha, omega, beta;
@@ -85,12 +85,10 @@ float bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *s
 
 	/* Find the norm of the initial residual. */
 	err = sqrt(creal(pardot (r, r, fmaconf.numbases))) / rhn;
-	if (!rank && !silent) printf ("Initial residual: %g\n", err);
+	if (!rank && !silent) printf ("True residual: %g\n", err);
 
-	/* No need to iterate if the residual is already low enough. */
-	if (err < slv->epscg) return err;
-
-	for (i = 0; i < slv->maxit; ++i) {
+	/* Run iterations until convergence or the maximum is reached. */
+	for (i = 0; i < slv->maxit && err > slv->epscg; ++i) {
 		/* Pre-compute portion of beta from previous iteration. */
 		beta = alpha / (rho * omega);
 		/* Compute rho for this iteration. */
@@ -130,18 +128,14 @@ float bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *s
 	
 		/* Compute the scaled residual norm. */
 		err = sqrt(creal(pardot (r, r, fmaconf.numbases))) / rhn;
-
 		if (!rank && !silent) printf ("BiCG-STAB(%d): %g\n", i, err);
-
-		/* Break if convergence is detected. */
-		if (err < slv->epscg) break;
 	}
 
 	free (r);
-	return err;
+	return i;
 }
 
-float cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
+int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
 	int icntl[8], irc[5], lwork, info[3], i, myRank;
 	float rinfo[2], cntl[5];
 	complex float *zwork, *solbuf, *tx, *ty, *tz;
@@ -217,5 +211,5 @@ float cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv
 
 	free (zwork);
 	free (solbuf);
-	return rinfo[1];
+	return info[1];
 }

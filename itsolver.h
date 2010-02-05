@@ -8,7 +8,7 @@ typedef struct {
   float epscg;
 } solveparm;
 
-float cgmres (complex float *, complex float *, int, solveparm *);
-float bicgstab (complex float *, complex float *, int, solveparm *);
+int cgmres (complex float *, complex float *, int, solveparm *);
+int bicgstab (complex float *, complex float *, int, solveparm *);
 
 #endif /* __ITSOLVER_H_ */

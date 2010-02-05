@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <complex.h>
 #include <math.h>
 #include <unistd.h>
@@ -28,10 +29,10 @@ void usage (char *name) {
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, j;
+	int mpirank, mpisize, i, j, nit;
 	complex float *rhs, *sol, *field;
 	clock_t tstart, tend;
-	double err, cputime, wtime;
+	double cputime, wtime;
 	int debug = 0;
 	struct timeval wtstart, wtend;
 
@@ -126,12 +127,15 @@ int main (int argc, char **argv) {
 			prtcontrast (fname, rhs);
 		}
 
+		/* Initial first guess is zero. */
+		memset (sol, 0, fmaconf.numbases * sizeof(complex float));
+
 		tstart = clock ();
 		gettimeofday (&wtstart, NULL);
-		/* Run the iterative solver, repeating as necessary to ensure
-		 * that the true residual is below the desired tolerance. */
-		for (j = 0, err = 1; j < solver.restart && err > solver.epscg; ++j)
-			err = bicgstab (rhs, sol, 0, &solver);
+		/* Run the iterative solver, repeating until the maximum number
+		 * of repeats is reached or one repeat runs no iterations. */
+		for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j)
+			nit = bicgstab (rhs, sol, 0, &solver);
 		gettimeofday (&wtend, NULL);
 		tend = clock ();
 		cputime = (double) (tend - tstart) / CLOCKS_PER_SEC;
