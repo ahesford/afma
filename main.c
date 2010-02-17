@@ -135,7 +135,7 @@ int main (int argc, char **argv) {
 		/* Run the iterative solver, repeating until the maximum number
 		 * of repeats is reached or one repeat runs no iterations. */
 		for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j)
-			nit = bicgstab (rhs, sol, 0, &solver);
+			nit = bicgstab (rhs, sol, j, solver.maxit, solver.epscg);
 		gettimeofday (&wtend, NULL);
 		tend = clock ();
 		cputime = (double) (tend - tstart) / CLOCKS_PER_SEC;

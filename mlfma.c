@@ -23,6 +23,8 @@
 #include "mlfma.h"
 #include "direct.h"
 #include "util.h"
+#include "fsgreen.h"
+#include "integrate.h"
 
 fmadesc fmaconf;
 
@@ -39,7 +41,7 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 
 	if (sgn >= 0) {
 		/* Scalar factors for the matrix multiplication. */
-		fact = fmaconf.k0 * fmaconf.cellvol;
+		fact = fmaconf.k0;
 		beta = 1.0;
 
 		/* Compute the far-field pattern for the basis functions. */
@@ -93,11 +95,12 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 int buildradpat (complex float *pat, float k, float *rmc,
 		float *thetas, int ntheta, int nphi) {
 	int i, j, nthsc = ntheta - 1;
-	float s[3], sdr, dphi = 2 * M_PI / nphi, sn, phi;
+	float s[3], dphi = 2 * M_PI / nphi, sn, phi;
 
 	/* South pole first. */
-	sdr = -rmc[2];
-	*(pat++) = cexp (-I * k * sdr);
+	s[0] = s[1] = 0.0;
+	s[2] = -1.0;
+	*(pat++) = srcint (k, rmc, s, fmaconf.cell, fsplane);
 
 	for (i = 1; i < nthsc; ++i) {
 		s[2] = thetas[i];
@@ -106,14 +109,14 @@ int buildradpat (complex float *pat, float k, float *rmc,
 		for (j = 0, phi = 0; j < nphi; ++j, phi += dphi) {
 			s[0] = sn * cos (phi);
 			s[1] = sn * sin (phi);
-			sdr = s[0] * rmc[0] + s[1] * rmc[1] + s[2] * rmc[2];
-			*(pat++) = cexp (-I * k * sdr);
+			*(pat++) = srcint (k, rmc, s, fmaconf.cell, fsplane);
 		}
 	}
 
 	/* North pole last. */
-	sdr = rmc[2];
-	*pat = cexp (-I * k * sdr);
+	s[0] = s[1] = 0.0;
+	s[2] = 1.0;
+	*pat = srcint (k, rmc, s, fmaconf.cell, fsplane);
 
 	return ntheta;
 }

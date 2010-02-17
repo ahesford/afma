@@ -346,11 +346,9 @@ int greengrid (complex float *grf, int m, int mex, float k0, float cell, int *of
 			for (k = 0; k < mex; ++k) {
 				kp = (k < m) ? k : (k - mex);
 				dist[2] = (float)(kp - off[2]) * fmaconf.cell;
-
-				/* Handle the self term specially. */
-				if (kp == off[2] && jp == off[1] && ip == off[0])
-					*(grf++) = selfint (k0, cell) / (mex * mex * mex);
-				else *(grf++) = scale * srcint (k0, zero, dist, cell);
+				/* The self-term needs no special attention because
+				 * the integration grids don't coincide. */
+				*(grf++) = scale * rcvint (k0, zero, dist, cell, fsgreen);
 			}
 		}
 	}

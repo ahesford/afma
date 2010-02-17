@@ -19,7 +19,8 @@ int buildrhs (complex float *rhs, float *srcloc) {
 
 	for (i = 0; i < fmaconf.numbases; ++i) {
 		bscenter (fmaconf.bslist[i], ctr);
-		rhs[i] = fsplane (fmaconf.k0, ctr, srcloc);
+		rhs[i] = fsplane (fmaconf.k0, ctr, srcloc) / (4 * M_PI);
+		rhs[i] *= fmaconf.cellvol;
 	}
 
 	return fmaconf.numbases;
@@ -33,7 +34,8 @@ int multirhs (complex float *rhs, measdesc *src, complex float *mag) {
 		rhs[i] = 0;
 		bscenter (fmaconf.bslist[i], ctr);
 		for (j = 0; j < src->count; ++j)
-			rhs[i] += mag[j] * fsplane (fmaconf.k0, ctr, src->locations + 3 * j);
+			rhs[i] += mag[j] * fsplane (fmaconf.k0, ctr, src->locations + 3 * j) / (4 * M_PI);
+		rhs[i] *= fmaconf.cellvol;
 	}
 
 	return fmaconf.numbases * src->count;
@@ -47,7 +49,8 @@ int precompgrf (measdesc *src, complex float *grf) {
 	for (i = 0; i < fmaconf.numbases; ++i) {
 		bscenter (fmaconf.bslist[i], ctr);
 		for (j = 0; j < src->count; ++j) {
-			*ptr = fsplane (fmaconf.k0, ctr, src->locations + 3 * j);
+			*ptr = fsplane (fmaconf.k0, ctr, src->locations + 3 * j) / (4 * M_PI);
+			*ptr *= fmaconf.cellvol;
 			++ptr;
 		}
 	}

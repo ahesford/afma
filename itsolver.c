@@ -36,7 +36,8 @@ static int matvec (complex float *out, complex float *in, complex float *cur) {
 
 	/* Add in the identity portion. */
 #pragma omp parallel for default(shared) private(i)
-	for (i = 0; i < fmaconf.numbases; ++i) out[i] = in[i] - out[i];
+	for (i = 0; i < fmaconf.numbases; ++i)
+		out[i] = fmaconf.cellvol * in[i] - out[i];
 
 	return 0;
 }
@@ -52,7 +53,7 @@ static complex float pardot (complex float *x, complex float *y, int n) {
 	return dp;
 }
 
-int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
+int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float tol) {
 	int i, j, rank;
 	complex float *r, *rhat, *v, *p, *mvp, *t;
 	complex float rho, alpha, omega, beta;
@@ -74,21 +75,23 @@ int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv
 	rhn = sqrt(creal(pardot (rhs, rhs, fmaconf.numbases)));
 
 	/* Compute the inital matrix-vector product for the input guess. */
-	matvec (r, sol, mvp);
+	if (guess) matvec (r, sol, mvp);
 
 	/* Subtract from the RHS to form the residual. */
 #pragma omp parallel for default(shared) private(j)
 	for (j = 0; j < fmaconf.numbases; ++j) r[j] = rhs[j] - r[j];
+
+	if (!guess) memset (sol, 0, fmaconf.numbases * sizeof(complex float));
 		
 	/* Copy the initial residual as the test vector. */
 	memcpy (rhat, r, fmaconf.numbases * sizeof(complex float));
 
 	/* Find the norm of the initial residual. */
 	err = sqrt(creal(pardot (r, r, fmaconf.numbases))) / rhn;
-	if (!rank && !silent) printf ("True residual: %g\n", err);
+	if (!rank) printf ("True residual: %g\n", err);
 
 	/* Run iterations until convergence or the maximum is reached. */
-	for (i = 0; i < slv->maxit && err > slv->epscg; ++i) {
+	for (i = 0; i < mit && err > tol; ++i) {
 		/* Pre-compute portion of beta from previous iteration. */
 		beta = alpha / (rho * omega);
 		/* Compute rho for this iteration. */
@@ -107,9 +110,19 @@ int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv
 		/* Compute the next alpha. */
 		alpha = rho / pardot (rhat, v, fmaconf.numbases);
 
-		/* Update the residual. */
 #pragma omp parallel for default(shared) private(j)
-		for (j = 0; j < fmaconf.numbases; ++j) r[j] -= alpha * v[j];
+		for (j = 0; j < fmaconf.numbases; ++j) {
+			/* Update the solution vector. */
+			sol[j] += alpha * p[j];
+			/* Update the residual vector. */
+			r[j] -= alpha * v[j];
+		}
+
+		/* Compute the scaled residual norm and stop if convergence
+		 * has been achieved. */
+		err = sqrt(creal(pardot (r, r, fmaconf.numbases))) / rhn;
+		if (!rank) printf ("BiCG-STAB(%0.1f): %g\n", 0.5 + i, err);
+		if (err < tol) break;
 
 		/* Compute the next search step, t = A * r. */
 		matvec (t, r, mvp);
@@ -121,14 +134,14 @@ int bicgstab (complex float *rhs, complex float *sol, int silent, solveparm *slv
 #pragma omp parallel for default(shared) private(j)
 		for (j = 0; j < fmaconf.numbases; ++j) {
 			/* Update the solution vector. */
-			sol[j] += alpha * p[j] + omega * r[j];
+			sol[j] += omega * r[j];
 			/* Update the residual vector. */
 			r[j] -= omega * t[j];
 		}
 	
 		/* Compute the scaled residual norm. */
 		err = sqrt(creal(pardot (r, r, fmaconf.numbases))) / rhn;
-		if (!rank && !silent) printf ("BiCG-STAB(%d): %g\n", i, err);
+		if (!rank) printf ("BiCG-STAB(%d): %g\n", i + 1, err);
 	}
 
 	free (r);
