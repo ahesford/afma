@@ -331,10 +331,12 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 /* Build the extended Green's function on an expanded cubic grid. */
 int greengrid (complex float *grf, int m, int mex, float k0, float cell, int *off) {
 	int i, j, k, ip, jp, kp;
-	float dist[3], zero[3] = {0., 0., 0.}, scale;
+	float dist[3], zero[3] = {0., 0., 0.}, scale, slfscale;
 
 	/* The scale of the integral equation solution. */
 	scale = k0 * k0 / (float)(mex * mex * mex);
+	/* Scale for the self term. */
+	slfscale = (float)(mex * mex * mex);
 
 	/* Compute the interactions. */
 	for (i = 0; i < mex; ++i) {
@@ -346,9 +348,9 @@ int greengrid (complex float *grf, int m, int mex, float k0, float cell, int *of
 			for (k = 0; k < mex; ++k) {
 				kp = (k < m) ? k : (k - mex);
 				dist[2] = (float)(kp - off[2]) * fmaconf.cell;
-				/* The self-term needs no special attention because
-				 * the integration grids don't coincide. */
-				*(grf++) = scale * rcvint (k0, zero, dist, cell, fsgreen);
+				if (kp == off[2] && jp == off[1] && ip == off[0])
+					*(grf++) = selfint (k0, cell) / slfscale;
+				else *(grf++) = scale * srcint (k0, zero, dist, cell, fsgreen);
 			}
 		}
 	}

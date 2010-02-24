@@ -37,7 +37,7 @@ static int matvec (complex float *out, complex float *in, complex float *cur) {
 	/* Add in the identity portion. */
 #pragma omp parallel for default(shared) private(i)
 	for (i = 0; i < fmaconf.numbases; ++i)
-		out[i] = fmaconf.cellvol * in[i] - out[i];
+		out[i] = in[i] - out[i];
 
 	return 0;
 }

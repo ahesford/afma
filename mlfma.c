@@ -44,7 +44,7 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 
 	if (sgn >= 0) {
 		/* Scalar factors for the matrix multiplication. */
-		fact = fmaconf.k0;
+		fact = fmaconf.k0 * fmaconf.cellvol;
 		beta = 1.0;
 
 		/* Compute the far-field pattern for the basis functions. */
@@ -103,7 +103,7 @@ int buildradpat (complex float *pat, float k, float *rmc,
 	/* South pole first. */
 	s[0] = s[1] = 0.0;
 	s[2] = -1.0;
-	*(pat++) = srcint (k, rmc, s, fmaconf.cell, fsplane);
+	*(pat++) = fsplane (k, rmc, s);
 
 	for (i = 1; i < nthsc; ++i) {
 		s[2] = thetas[i];
@@ -112,14 +112,14 @@ int buildradpat (complex float *pat, float k, float *rmc,
 		for (j = 0, phi = 0; j < nphi; ++j, phi += dphi) {
 			s[0] = sn * cos (phi);
 			s[1] = sn * sin (phi);
-			*(pat++) = srcint (k, rmc, s, fmaconf.cell, fsplane);
+			*(pat++) = fsplane (k, rmc, s);
 		}
 	}
 
 	/* North pole last. */
 	s[0] = s[1] = 0.0;
 	s[2] = 1.0;
-	*pat = srcint (k, rmc, s, fmaconf.cell, fsplane);
+	*pat = fsplane (k, rmc, s);
 
 	return ntheta;
 }
