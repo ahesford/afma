@@ -1,8 +1,8 @@
 CC=mpicc
 FF=mpif90
-LD=$(CC)
+LD=$(FF)
 
-LIBS= -lScaleME2 -lgmres -lgfortran -lfftw3f -lm
+LIBS= -lScaleME2 -lgmres -lfftw3f
 
 OPTFLAGS= -fopenmp -O3 -march=core2 -mtune=core2
 ARCHFLAGS= -arch x86_64 -arch i386 -D_MACOSX
@@ -41,12 +41,11 @@ bsd: ARCHFLAGS= -m64 -D_FREEBSD
 bsd: afma adbim
 	@echo "Building for FreeBSD."
 
-linux: GSLDIR= /usr/local/gsl_gnu/lib
-linux: ARCHLIBS= $(GSLDIR)/libgslcblas.a /usr/lib64/liblapack.so.3 /usr/lib64/libblas.so.3
-linux: ARCHFLAGS= -m64 -D_LINUX
-linux: CC= /usr/local/openmpi/bin/mpicc
-linux: FF= /usr/local/openmpi/bin/mpif90
-linux: afma adbim
+bluehive: OPTFLAGS= -O3 -openmp -xHost -parallel -no-prec-div
+bluehive: ARCHLIBS= -lgslcblas -llapack -lblas -nofor_main
+bluehive: ARCHFLAGS= -m64 -D_LINUX -I/usr/local/gsl/1.12-gnu4.1/include/gsl \
+	-L/usr/local/gsl/1.12-gnu4.1/lib
+bluehive: afma adbim
 	@echo "Building for Linux."
 
 clean:

@@ -10,13 +10,16 @@
 
 #include <omp.h>
 
+/* Pull in the CBLAS header. */
 #ifdef _MACOSX
 #include <Accelerate/Accelerate.h>
-#endif /* _MACOSX */
-
+#else
 #ifdef _FREEBSD
 #include <cblas.h>
+#else
+#include <gsl_cblas.h>
 #endif /* _FREEBSD */
+#endif /* _MACOSX */
 
 #include "ScaleME.h"
 
