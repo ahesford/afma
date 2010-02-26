@@ -25,11 +25,12 @@ void usage (char *name) {
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
 	fprintf (stderr, "\t-d: Debug mode (prints RHS and induced currents)\n");
+	fprintf (stderr, "\t-g: Use GMRES instead of BiCG-STAB\n");
 }
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, j, nit;
+	int mpirank, mpisize, i, j, nit, gmr = 0;
 	complex float *rhs, *sol, *field;
 	clock_t tstart, tend;
 	double cputime, wtime;
@@ -49,7 +50,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:d")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:dg")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -59,6 +60,9 @@ int main (int argc, char **argv) {
 			break;
 		case 'd':
 			debug = 1;
+			break;
+		case 'g':
+			gmr = 1;
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -132,10 +136,14 @@ int main (int argc, char **argv) {
 
 		tstart = clock ();
 		gettimeofday (&wtstart, NULL);
-		/* Run the iterative solver, repeating until the maximum number
-		 * of repeats is reached or one repeat runs no iterations. */
-		for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j)
-			nit = bicgstab (rhs, sol, j, solver.maxit, solver.epscg);
+		/* Use GMRES if requested, otherwise use BiCG-STAB. */
+		if (gmr) cgmres (rhs, sol, 0, &solver);
+		else {
+			/* BiCG-STAB restarts if the true residual differs from
+			 * the predicted residual. */
+			for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j)
+				nit = bicgstab (rhs, sol, j, solver.maxit, solver.epscg);
+		}
 		gettimeofday (&wtend, NULL);
 		tend = clock ();
 		cputime = (double) (tend - tstart) / CLOCKS_PER_SEC;
