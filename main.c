@@ -30,7 +30,7 @@ void usage (char *name) {
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, j, nit, gmr = 0, gsize[3];
+	int mpirank, mpisize, i, j, nit, gmr = 0;
 	complex float *rhs, *sol, *field;
 	clock_t tstart, tend;
 	double cputime, wtime;
@@ -102,10 +102,7 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the contrast for the local basis set. */
 	sprintf (fname, "%s.contrast", inproj);
-	getcontrast (fmaconf.contrast, fname, fmaconf.bslist, fmaconf.numbases);
-
-	/* Store the 3-D grid size for writing the contrast values. */
-	gsize[0] = fmaconf.nx; gsize[1] = fmaconf.ny; gsize[2] = fmaconf.nz;
+	getcontrast (fname, fmaconf.bslist, fmaconf.numbases);
 
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc ();
@@ -131,12 +128,11 @@ int main (int argc, char **argv) {
 
 		if (debug) {
 			sprintf (fname, "%s.%d.rhs", outproj, i);
-			prtcontrast (fname, rhs, fmaconf.bslist,
-					fmaconf.numbases, gsize);
+			prtcontrast (fname, rhs);
 		}
 
-		/* Initial first guess is the RHS. */
-		memcpy (sol, rhs, fmaconf.numbases * sizeof(complex float));
+		/* Initial first guess is zero. */
+		memset (sol, 0, fmaconf.numbases * sizeof(complex float));
 
 		tstart = clock ();
 		gettimeofday (&wtstart, NULL);
@@ -146,7 +142,7 @@ int main (int argc, char **argv) {
 			/* BiCG-STAB restarts if the true residual differs from
 			 * the predicted residual. */
 			for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j)
-				nit = bicgstab (rhs, sol, 1, solver.maxit, solver.epscg);
+				nit = bicgstab (rhs, sol, j, solver.maxit, solver.epscg);
 		}
 		gettimeofday (&wtend, NULL);
 		tend = clock ();
@@ -161,8 +157,7 @@ int main (int argc, char **argv) {
 
 		if (debug) {
 			sprintf (fname, "%s.%d.currents", outproj, i);
-			prtcontrast (fname, sol, fmaconf.bslist,
-					fmaconf.numbases, gsize);
+			prtcontrast (fname, sol);
 		}
 
 		/* Convert total field into contrast current. */

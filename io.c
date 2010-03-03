@@ -183,87 +183,62 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 }
 
 /* Read a portion of the contrast file and store it. */
-void getcontrast (complex float *contrast, char *fname, int *bslist, int nbs) {
-	int i, err;
-	long offset;
-
-	MPI_File fh;
-	MPI_Offset spos;
-	MPI_Status stat;
+void getcontrast (char *fname, int *bslist, int nbs) {
+	FILE *fp;
+	int size[3], i, offset;
+	long spos;
 
 	/* Zero out the contrast in case nothing can be read. */
-	memset (contrast, 0, nbs * sizeof(complex float));
+	memset (fmaconf.contrast, 0, nbs * sizeof(complex float));
 
-	/* Open the file using MPI. */
-	err = MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
-
-	if (err != MPI_SUCCESS) {
+	if (!(fp = fopen (fname, "r"))) {
 		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
 		return;
 	}
 
-	/* Skip the contrast grid size. */
-	MPI_File_seek (fh, 3 * sizeof(int), MPI_SEEK_SET);
+	/* Read the size of the contrast grid. */
+	fread (size, sizeof(int), 3, fp);
 
-	MPI_Barrier (MPI_COMM_WORLD);
-
-	/* Read all values required by this processor. */
 	for (offset = 0, i = 0; i < nbs; ++i) {
 		spos = (long)(bslist[i] - offset) * sizeof(complex float);
 		offset = bslist[i] + 1;
 
-		/* Seek to the place holding the contrast. */
-		MPI_File_seek (fh, spos, MPI_SEEK_CUR);
-		/* Read the contrast value. */
-		MPI_File_read (fh, contrast + i, 2, MPI_FLOAT, &stat);
+		fseek (fp, spos, SEEK_CUR);
+		fread (fmaconf.contrast + i, sizeof(complex float), 1, fp);
 	}
 
-	MPI_File_close (&fh);
+	fclose (fp);
 }
 
-/* Write the contrast values using MPI files to keep things localized. */
-int prtcontrast (char *fname, complex float *contrast,
-		int *bslist, int nbs, int size[3]) {
-	int i, err, mpirank;
-	long offset;
+int prtcontrast (char *fname, complex float *currents) {
+	int i, mpirank, size[3];
+	FILE *fp;
+	complex float *lct;
 
-	MPI_File fh;
-	MPI_Offset spos;
-	MPI_Status stat;
-
-	/* Grab the process rank. */
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
 
-	/* Create and open the file using MPI. */
-	err = MPI_File_open (MPI_COMM_WORLD, fname,
-			MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &fh);
+	lct = calloc (fmaconf.gnumbases, sizeof(complex float));
 
-	if (err != MPI_SUCCESS) {
-		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
-		return 0;
+	for (i = 0; i < fmaconf.numbases; ++i)
+		lct[fmaconf.bslist[i]] = currents[i];
+
+	MPI_Reduce (MPI_IN_PLACE, lct, 2 * fmaconf.gnumbases, 
+			MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+	if (!mpirank) { 
+		if (!(fp = fopen (fname, "w"))) {
+			fprintf (stderr, "ERROR: could not open current output.\n");
+			return 0;
+		} 
+		
+		size[0] = fmaconf.nx; size[1] = fmaconf.ny; size[2] = fmaconf.nz;
+		fwrite (size, sizeof(int), 3, fp);
+		fwrite (lct, sizeof(complex float), fmaconf.gnumbases, fp);
+		
+		fclose (fp);
 	}
 
-	/* Write the grid size to the start of the file. */
-	if (!mpirank) MPI_File_write (fh, size, 3, MPI_INT, &stat);
-
-	/* Wait for the root node to write the size. */
-	MPI_Barrier (MPI_COMM_WORLD);
-
-	/* Skip over the grid size. */
-	MPI_File_seek (fh, 3 * sizeof(int), MPI_SEEK_SET);
-
-	/* Write all values on this processor. */
-	for (offset = 0, i = 0; i < fmaconf.numbases; ++i) {
-		spos = (long)(bslist[i] - offset) * sizeof(complex float);
-		offset = bslist[i] + 1;
-
-		/* Seek to the place to write the current contrast. */
-		MPI_File_seek (fh, spos, MPI_SEEK_CUR);
-		/* Write the contrast value. */
-		MPI_File_write (fh, contrast + i, 2, MPI_FLOAT, &stat);
-	}
-
-	MPI_File_close (&fh);
+	free (lct);
 
 	return fmaconf.gnumbases;
 }
