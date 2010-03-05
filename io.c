@@ -183,64 +183,87 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 }
 
 /* Read a portion of the contrast file and store it. */
-void getcontrast (char *fname, int *bslist, int nbs) {
-	FILE *fp;
-	int size[3], i, offset;
-	long spos;
+void getcontrast (complex float *contrast, char *fname, int *bslist, int nbs) {
+	int i;
+
+	/* MPI data types for file I/O. */
+	MPI_Status stat;
+	MPI_Datatype cplx;
+	MPI_File fh;
+
+	/* Define and commit a complex type for MPI reads. */
+	MPI_Type_contiguous (2, MPI_FLOAT, &cplx);
+	MPI_Type_commit (&cplx);
 
 	/* Zero out the contrast in case nothing can be read. */
-	memset (fmaconf.contrast, 0, nbs * sizeof(complex float));
+	memset (contrast, 0, nbs * sizeof(complex float));
 
-	if (!(fp = fopen (fname, "r"))) {
+	/* Open the MPI file with the specified name. */
+	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_RDONLY,
+				MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
 		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
 		return;
 	}
 
-	/* Read the size of the contrast grid. */
-	fread (size, sizeof(int), 3, fp);
+	/* Set the file view to skip over the grid size header. */
+	MPI_File_set_view (fh, 3 * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
 
-	for (offset = 0, i = 0; i < nbs; ++i) {
-		spos = (long)(bslist[i] - offset) * sizeof(complex float);
-		offset = bslist[i] + 1;
+	/* Read each complex value from the appropriate position in the file. */
+	for (i = 0; i < nbs; ++i)
+		MPI_File_read_at(fh, bslist[i], contrast + i, 1, cplx, &stat);
 
-		fseek (fp, spos, SEEK_CUR);
-		fread (fmaconf.contrast + i, sizeof(complex float), 1, fp);
-	}
-
-	fclose (fp);
+	/* Free the MPI complex type and close the file. */
+	MPI_File_close (&fh);
+	MPI_Type_free (&cplx);
 }
 
-int prtcontrast (char *fname, complex float *currents) {
-	int i, mpirank, size[3];
-	FILE *fp;
-	complex float *lct;
+int prtcontrast (char *fname, complex float *crt, int *size, int *bslist, int nbs) {
+	int i, mpirank;
+	
+	/* MPI data types for file I/O. */
+	MPI_Offset offset;
+	MPI_Status stat;
+	MPI_Datatype cplx;
+	MPI_File fh;
+
+	/* Define and commit a complex type for MPI reads. */
+	MPI_Type_contiguous (2, MPI_FLOAT, &cplx);
+	MPI_Type_commit (&cplx);
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
 
-	lct = calloc (fmaconf.gnumbases, sizeof(complex float));
+	/* Compute the output file size and store the size array. */
+	offset = size[0] * size[1] * size[2] * sizeof(complex float) + 3 * sizeof(int);
 
-	for (i = 0; i < fmaconf.numbases; ++i)
-		lct[fmaconf.bslist[i]] = currents[i];
-
-	MPI_Reduce (MPI_IN_PLACE, lct, 2 * fmaconf.gnumbases, 
-			MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
-
-	if (!mpirank) { 
-		if (!(fp = fopen (fname, "w"))) {
-			fprintf (stderr, "ERROR: could not open current output.\n");
-			return 0;
-		} 
-		
-		size[0] = fmaconf.nx; size[1] = fmaconf.ny; size[2] = fmaconf.nz;
-		fwrite (size, sizeof(int), 3, fp);
-		fwrite (lct, sizeof(complex float), fmaconf.gnumbases, fp);
-		
-		fclose (fp);
+	/* Open the MPI file with the specified name. */
+	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_WRONLY | MPI_MODE_CREATE,
+				MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
+		fprintf (stderr, "ERROR: could not open %s.\n", fname);
+		return 0;
 	}
 
-	free (lct);
+	/* Set the size of the output file and set the view to write the header. */
+	MPI_File_set_size (fh, offset);
+	MPI_File_set_view (fh, 0, MPI_INT, MPI_INT, "native", MPI_INFO_NULL);
+	/* The first process should write the size header in the file. */
+	if (!mpirank) MPI_File_write (fh, size, 3, MPI_INT, &stat);
+	/* Ensure the write is committed and all processes should wait. */
+	MPI_File_sync (fh);
+	MPI_Barrier (MPI_COMM_WORLD);
+	MPI_File_sync (fh);
 
-	return fmaconf.gnumbases;
+	/* Now set the file view to skip over the header and write complex values. */
+	MPI_File_set_view (fh, 3 * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
+
+	/* Write each contrast value to the appropriate position in the file. */
+	for (i = 0; i < nbs; ++i)
+		MPI_File_write_at(fh, bslist[i], crt + i, 1, cplx, &stat);
+
+	/* Free the MPI complex type and close the file. */
+	MPI_File_close (&fh);
+	MPI_Type_free (&cplx);
+
+	return size[0] * size[1] * size[2];
 }
 
 /* Print the header for the overall field matrix. */

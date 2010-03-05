@@ -3,7 +3,4 @@ syntax: glob
 
 afma
 adbim
-afma32
-afma64
-adbim32
-adbim64
+tissue

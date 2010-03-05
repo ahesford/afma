@@ -86,7 +86,7 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, j, nmeas, dbimit[2], q, lfrog = 1;
+	int mpirank, mpisize, i, j, nmeas, dbimit[2], q, lfrog = 1, gsize[3];
 	complex float *rn, *crt, *field, *fldptr, *error;
 	float errnorm = 0, tolerance[2], regparm[4], cgnorm, erninc;
 	solveparm hislv, loslv;
@@ -153,7 +153,10 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the guess contrast for the local basis set. */
 	sprintf (fname, "%s.guess", inproj);
-	getcontrast (fname, fmaconf.bslist, fmaconf.numbases);
+	getcontrast (fmaconf.contrast, fname, fmaconf.bslist, fmaconf.numbases);
+
+	/* Store the grid size for writing of contrast values. */
+	gsize[0] = fmaconf.nx; gsize[1] = fmaconf.ny; gsize[2] = fmaconf.nz;
 
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc ();
@@ -202,7 +205,7 @@ int main (int argc, char **argv) {
 					fmaconf.contrast[j] += crt[j];
 				
 				sprintf (fname, "%s.inverse.t%03d", outproj, q);
-				prtcontrast (fname, fmaconf.contrast);
+				prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist, fmaconf.numbases);
 			}
 			
 			if (!mpirank) fprintf (stderr, "Reassess DBIM error.\n");
@@ -218,7 +221,7 @@ int main (int argc, char **argv) {
 		}
 		
 		sprintf (fname, "%s.inverse.%03d", outproj, i);
-		prtcontrast (fname, fmaconf.contrast);
+		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist, fmaconf.numbases);
 		
 		if (!mpirank)
 			fprintf (stderr, "DBIM relative error: %g, iteration %d.\n", errnorm, i);
@@ -259,7 +262,7 @@ int main (int argc, char **argv) {
 			fmaconf.contrast[j] += crt[j];
 
 		sprintf (fname, "%s.inverse.%03d", outproj, i);
-		prtcontrast (fname, fmaconf.contrast);
+		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist, fmaconf.numbases);
 
 		if (!mpirank)
 			fprintf (stderr, "DBIM: %g, CG: %g (%d).\n", errnorm, cgnorm, i);

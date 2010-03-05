@@ -189,6 +189,8 @@ long buildmodel (FILE *output, FILE *template, FILE *avlrand, FILE *adprand,
 	nx = size[0]; ny = size[1]; nz = size[2];
 	npx = nx * ny;
 
+	fprintf (stderr, "Grid size is %ld x %ld x %ld.\n", nx, ny, nz);
+
 	/* Allocate the arrays used for storage. */
 	rstore = malloc (3 * npx * sizeof(float));
 	kslab = malloc (3 * npx * sizeof(complex float));
