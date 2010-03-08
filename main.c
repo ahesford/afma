@@ -5,7 +5,6 @@
 #include <math.h>
 #include <unistd.h>
 #include <time.h>
-#include <sys/time.h>
 
 #include <mpi.h>
 
@@ -32,10 +31,8 @@ int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i, j, nit, gmr = 0, gsize[3];
 	complex float *rhs, *sol, *field;
-	clock_t tstart, tend;
 	double cputime, wtime;
 	int debug = 0;
-	struct timeval wtstart, wtend;
 
 	measdesc obsmeas, srcmeas;
 	solveparm solver;
@@ -99,13 +96,16 @@ int main (int argc, char **argv) {
 	/* Allocate the observation array. */
 	field = malloc (obsmeas.count * sizeof(complex float));
 
+	/* Store the grid size for printing of field values. */
+	gsize[0] = fmaconf.nx; gsize[1] = fmaconf.ny; gsize[2] = fmaconf.nz;
+
+	wtime = MPI_Wtime();
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the contrast for the local basis set. */
 	sprintf (fname, "%s.contrast", inproj);
-	getcontrast (fmaconf.contrast, fname, fmaconf.bslist, fmaconf.numbases);
-
-	/* Store the grid size for printing of field values. */
-	gsize[0] = fmaconf.nx; gsize[1] = fmaconf.ny; gsize[2] = fmaconf.nz;
+	getcontrast (fmaconf.contrast, fname, gsize, fmaconf.bslist, fmaconf.numbases);
+	wtime = MPI_Wtime() - wtime;
+	if (!mpirank) fprintf (stderr, "Wall time for contrast read: %0.6g\n", wtime);
 
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc ();
@@ -119,9 +119,6 @@ int main (int argc, char **argv) {
 
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
 
-	sprintf (fname, "%s.field", outproj);
-	prtfldhdr (fname, &srcmeas, &obsmeas);
-
 	for (i = 0; i < srcmeas.count; ++i) {
 		if (!mpirank)
 			fprintf (stderr, "Running simulation for source %d.\n", i + 1);
@@ -129,16 +126,11 @@ int main (int argc, char **argv) {
 		 * point sources, rather than plane waves, for excitation. */
 		buildrhs (rhs, srcmeas.locations + 3 * i);
 
-		if (debug) {
-			sprintf (fname, "%s.%d.rhs", outproj, i);
-			prtcontrast (fname, rhs, gsize, fmaconf.bslist, fmaconf.numbases);
-		}
-
 		/* Initial first guess is zero. */
 		memset (sol, 0, fmaconf.numbases * sizeof(complex float));
 
-		tstart = clock ();
-		gettimeofday (&wtstart, NULL);
+		cputime = (double)clock() / CLOCKS_PER_SEC;
+		wtime = MPI_Wtime();
 		/* Use GMRES if requested, otherwise use BiCG-STAB. */
 		if (gmr) cgmres (rhs, sol, 0, &solver);
 		else {
@@ -147,11 +139,8 @@ int main (int argc, char **argv) {
 			for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j)
 				nit = bicgstab (rhs, sol, j, solver.maxit, solver.epscg);
 		}
-		gettimeofday (&wtend, NULL);
-		tend = clock ();
-		cputime = (double) (tend - tstart) / CLOCKS_PER_SEC;
-		wtime = wtend.tv_sec - wtstart.tv_sec
-			+ (double)(wtend.tv_usec - wtstart.tv_usec) * 1e-6;
+		cputime = (double)clock() / CLOCKS_PER_SEC - cputime;
+		wtime = MPI_Wtime() - wtime;
 
 		if (!mpirank) {
 			fprintf (stderr, "CPU time for solution: %0.6g\n", cputime);
@@ -159,8 +148,11 @@ int main (int argc, char **argv) {
 		}
 
 		if (debug) {
+			wtime = MPI_Wtime();
 			sprintf (fname, "%s.%d.currents", outproj, i);
 			prtcontrast (fname, sol, gsize, fmaconf.bslist, fmaconf.numbases);
+			wtime = MPI_Wtime() - wtime;
+			if (!mpirank) fprintf (stderr, "Wall time for field write: %0.6g\n", wtime);
 		}
 
 		/* Convert total field into contrast current. */
@@ -171,8 +163,8 @@ int main (int argc, char **argv) {
 
 		/* Append the field for the current transmitter. */
 		if (!mpirank) {
-			sprintf (fname, "%s.field", outproj);
-			appendfld (fname, &obsmeas, field);
+			sprintf (fname, "%s.%d.field", outproj, i);
+			writefld (fname, &obsmeas, field);
 		}
 	}
 

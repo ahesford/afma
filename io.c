@@ -12,6 +12,13 @@
 
 #include "util.h"
 
+/* Compare the basis map for sorting. */
+int mapcomp (const void *left, const void *right) {
+	int *il = (int *)left, *ir = (int *)right;
+	return *il - *ir;
+}
+
+/* Skip comments in the input file. */
 void skipcomments (FILE *fp) {
 	fpos_t loc;
 	char buf[1024];
@@ -24,6 +31,7 @@ void skipcomments (FILE *fp) {
 	fsetpos (fp, &loc);
 }
 
+/* Read the DBIM configuration. */
 void getdbimcfg (char *fname, int *maxit, float *regparm, float *tol) {
 	FILE *fp;
 	char buf[1024];
@@ -182,18 +190,76 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	fclose (fp);
 }
 
-/* Read a portion of the contrast file and store it. */
-void getcontrast (complex float *contrast, char *fname, int *bslist, int nbs) {
-	int i;
+/* Build the MPI filetype for contrast grid I/O using floats as the basic unit. The
+ * provided array bsmap should be of length nbs and specifies the ordered local
+ * indices of the data covered by the filetype. Thus, if data is read into an array
+ * tmp, the field or contrast value val[bsmap[i]] = tmp[i]. */
+int getgridftype (MPI_Datatype *ftype, MPI_Datatype *ctype,
+		int *bsmap, int *bslist, int nbs, int *size) {
+	int i, *blens, *bsort;
+	MPI_Datatype *types;
+	MPI_Aint *displ;
+
+	/* Build the indexed displacement array for sorting. */
+	bsort = malloc (2 * nbs * sizeof(int));
+	/* Build the MPI type arrays. */
+	displ = malloc ((nbs + 2) * sizeof(MPI_Aint));
+	types = malloc ((nbs + 2) * sizeof(MPI_Datatype));
+	blens = malloc ((nbs + 2) * sizeof(int));
+
+	/* Create a complex type. */
+	MPI_Type_contiguous (2, MPI_FLOAT, ctype);
+	MPI_Type_commit (ctype);
+
+	/* Build the indexed basis map. */
+	for (i = 0; i < nbs; ++i) {
+		/* The basis index on which the sort will be performed. */
+		bsort[2 * i] = bslist[i];
+		bsort[2 * i + 1] = i;
+	}
+
+	/* Sort the indexed basis map. */
+	qsort (bsort, nbs, 2 * sizeof(int), mapcomp);
+
+	/* Set the lower bound of the MPI type. */
+	blens[0] = 1;
+	types[0] = MPI_LB;
+	displ[0] = 0;
+
+	/* Build the arrays of displacements needed for the indexed type. */
+	for (i = 0; i < nbs; ++i) {
+		blens[i + 1] = 1;
+		types[i + 1] = *ctype;
+		displ[i + 1] = bsort[2 * i] * sizeof(complex float);
+		bsmap[i] = bsort[2 * i + 1];
+	}
+
+	/* Set the upper bound of the MPI type. */
+	blens[nbs + 1] = 1;
+	types[nbs + 1] = MPI_UB;
+	displ[nbs + 1] = size[0] * size[1] * size[2] * sizeof(complex float);
+
+	/* Build and commit the MPI filetype. */
+	MPI_Type_create_struct (nbs + 2, blens, displ, types, ftype);
+	MPI_Type_commit (ftype);
+
+	/* Free all of the work arrays. */
+	free (bsort);
+	free (displ);
+	free (types);
+	free (blens);
+	return nbs;
+}
+
+/* Distributed read of a gridded file into local arrays. */
+int getcontrast (complex float *contrast, char *fname, int *size, int *bslist, int nbs) {
+	int i, *bsmap;
+	complex float *ctbuf;
 
 	/* MPI data types for file I/O. */
 	MPI_Status stat;
-	MPI_Datatype cplx;
+	MPI_Datatype ftype, ctype;
 	MPI_File fh;
-
-	/* Define and commit a complex type for MPI reads. */
-	MPI_Type_contiguous (2, MPI_FLOAT, &cplx);
-	MPI_Type_commit (&cplx);
 
 	/* Zero out the contrast in case nothing can be read. */
 	memset (contrast, 0, nbs * sizeof(complex float));
@@ -202,33 +268,48 @@ void getcontrast (complex float *contrast, char *fname, int *bslist, int nbs) {
 	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_RDONLY,
 				MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
 		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
-		return;
+		return 0;
 	}
 
+	/* Allocate the map from the read order to the local storage order. */
+	bsmap = malloc (nbs * sizeof(int));
+
+	/* Build the filetype and the ordering map. */
+	getgridftype (&ftype, &ctype, bsmap, bslist, nbs, size);
+
 	/* Set the file view to skip over the grid size header. */
-	MPI_File_set_view (fh, 3 * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
+	MPI_File_set_view (fh, 3 * sizeof(int), ctype, ftype, "native", MPI_INFO_NULL);
 
-	/* Read each complex value from the appropriate position in the file. */
-	for (i = 0; i < nbs; ++i)
-		MPI_File_read_at(fh, bslist[i], contrast + i, 1, cplx, &stat);
+	/* Allocate the read buffer that will be read in increasing index order. */
+	ctbuf = malloc (nbs * sizeof(complex float));
 
-	/* Free the MPI complex type and close the file. */
+	/* Read the complex values in increasing order, as groups of two floats. */
+	MPI_File_read_all (fh, ctbuf, nbs, ctype, &stat);
+
+	/* Now sort the read values according to the map. */
+	for (i = 0; i < nbs; ++i) contrast[bsmap[i]] = ctbuf[i];
+
+	/* Free the MPI file type and close the file. */
 	MPI_File_close (&fh);
-	MPI_Type_free (&cplx);
+	MPI_Type_free (&ftype);
+	MPI_Type_free (&ctype);
+
+	free (ctbuf);
+	free (bsmap);
+
+	return nbs;
 }
 
+/* Distributed write of a gridded file into local arrays. */
 int prtcontrast (char *fname, complex float *crt, int *size, int *bslist, int nbs) {
-	int i, mpirank;
+	int i, mpirank, *bsmap;
+	complex float *ctbuf;
 	
 	/* MPI data types for file I/O. */
 	MPI_Offset offset;
 	MPI_Status stat;
-	MPI_Datatype cplx;
+	MPI_Datatype ftype, ctype;
 	MPI_File fh;
-
-	/* Define and commit a complex type for MPI reads. */
-	MPI_Type_contiguous (2, MPI_FLOAT, &cplx);
-	MPI_Type_commit (&cplx);
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
 
@@ -252,94 +333,103 @@ int prtcontrast (char *fname, complex float *crt, int *size, int *bslist, int nb
 	MPI_Barrier (MPI_COMM_WORLD);
 	MPI_File_sync (fh);
 
-	/* Now set the file view to skip over the header and write complex values. */
-	MPI_File_set_view (fh, 3 * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
+	/* Allocate the map from the read order to the local storage order. */
+	bsmap = malloc (nbs * sizeof(int));
 
-	/* Write each contrast value to the appropriate position in the file. */
-	for (i = 0; i < nbs; ++i)
-		MPI_File_write_at(fh, bslist[i], crt + i, 1, cplx, &stat);
+	/* Build the filetype and the ordering map. */
+	getgridftype (&ftype, &ctype, bsmap, bslist, nbs, size);
 
-	/* Free the MPI complex type and close the file. */
+	/* Set the file view to skip over the grid size header. */
+	MPI_File_set_view (fh, 3 * sizeof(int), ctype, ftype, "native", MPI_INFO_NULL);
+
+	/* Allocate the read buffer that will be read in increasing index order. */
+	ctbuf = malloc (nbs * sizeof(complex float));
+	/* Now sort the read values according to the map. */
+	for (i = 0; i < nbs; ++i) ctbuf[i] = crt[bsmap[i]];
+
+	/* Read the complex values in increasing order, as groups of two floats. */
+	MPI_File_write_all (fh, ctbuf, nbs, ctype, &stat);
+
+	/* Free the MPI file type and close the file. */
 	MPI_File_close (&fh);
-	MPI_Type_free (&cplx);
+	MPI_Type_free (&ftype);
+	MPI_Type_free (&ctype);
+
+	free (ctbuf);
+	free (bsmap);
 
 	return size[0] * size[1] * size[2];
 }
 
-/* Print the header for the overall field matrix. */
-int prtfldhdr (char *fname, measdesc *src, measdesc *obs) {
+/* Append the provided field to the specified field file. */
+int writefld (char *fname, measdesc *obs, complex float *field) {
 	FILE *fp;
 	int size[2];
 
 	if (!(fp = fopen (fname, "w"))) {
-		fprintf (stderr, "ERROR: could not open field output.\n");
+		fprintf (stderr, "ERROR: could not write file %s.\n", fname);
 		return 0;
 	}
 
-	size[0] = obs->count;
-	size[1] = src->count;
+	size[0] = obs->nphi;
+	size[1] = obs->ntheta;
 
+	/* Write the matrix size. */
 	fwrite (size, sizeof(int), 2, fp);
-
-	fclose (fp);
-
-	return size[0] * size[1];
-}
-
-/* Append the provided field to the specified field file. */
-int appendfld (char *fname, measdesc *obs, complex float *field) {
-	FILE *fp;
-
-	if (!(fp = fopen (fname, "a"))) {
-		fprintf (stderr, "ERROR: could not append field output.\n");
-		return 0;
-	}
-
+	/* Write the values. */
 	fwrite (field, sizeof(complex float), obs->count, fp);
-
 	fclose (fp);
 
 	return obs->count;
 }
 
-int getfields (char *fname, complex float *field, int len, float *nrm) {
+int readfld (complex float *field, char *fname, int nobs) {
 	FILE *fp;
-	complex float *fldptr;
-	int nmeas, size[2], i, j;
-	float lerr;
+	int size[2];
 
-	if (!(fp = fopen (fname, "r"))) {
-		fprintf (stderr, "ERROR: could not open field input.\n");
+	if (!(fp = fopen(fname, "r"))) {
+		fprintf (stderr, "ERROR: could not read file %s.\n", fname);
 		return 0;
 	}
 
-	/* Read the number of recorded measurements. */
+	/* Read the stored matrix size. */
 	fread (size, sizeof(int), 2, fp);
 
-	nmeas = size[0] * size[1];
+	if (size[0] * size[1] != nobs) {
+		fprintf (stderr, "ERROR: wrong matrix size in file %s.\n", fname);
+		fclose (fp);
+		return 0;
+	}
+
+	/* Read the values. */
+	fread (field, sizeof(complex float), nobs, fp);
+	fclose (fp);
+
+	return nobs;
+}
+
+int getfields (char *inproj, complex float *field, int nobs, int nsrc, float *nrm) {
+	complex float *fldptr;
+	int i, j;
+	float lerr;
+	char fname[1024];
 
 	/* The initial norm of the matrix is zero, if it is desired. */
 	if (nrm) *nrm = 0;
 
-	/* If the specified size doesn't match the recorded size, fail. */
-	if (nmeas != len) {
-		fprintf (stderr, "ERROR: recorded and specified counts do not agree.\n");
-		return 0;
-	}
-
 	/* Read each column of the matrix and compute the norm. */
-	for (fldptr = field, i = 0; i < size[1]; ++i) {
-		fread (fldptr, sizeof(complex float), size[0], fp);
-		if (nrm) {
-			for (j = 0; j < size[0]; ++j) {
-				lerr = cabs (fldptr[j]);
-				*nrm += lerr * lerr;
-			}
+	for (fldptr = field, i = 0; i < nsrc; ++i, fldptr += nobs) {
+		sprintf (fname, "%s.%d.field", inproj, i);
+		readfld (fldptr, fname, nobs);
+
+		/* If the norm isn't desired, don't comput anything else. */
+		if (!nrm) continue;
+		
+		for (j = 0; j < nobs; ++j) {
+			lerr = cabs (fldptr[j]);
+			*nrm += lerr * lerr;
 		}
-		fldptr += size[0];
 	}
 
-	fclose (fp);
-
-	return len;
+	return nobs * nsrc;
 }

@@ -150,13 +150,13 @@ int main (int argc, char **argv) {
 	rn = fmaconf.contrast + fmaconf.numbases;
 	crt = rn + fmaconf.numbases;
 
+	/* Store the grid size for writing of contrast values. */
+	gsize[0] = fmaconf.nx; gsize[1] = fmaconf.ny; gsize[2] = fmaconf.nz;
+
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the guess contrast for the local basis set. */
 	sprintf (fname, "%s.guess", inproj);
-	getcontrast (fmaconf.contrast, fname, fmaconf.bslist, fmaconf.numbases);
-
-	/* Store the grid size for writing of contrast values. */
-	gsize[0] = fmaconf.nx; gsize[1] = fmaconf.ny; gsize[2] = fmaconf.nz;
+	getcontrast (fmaconf.contrast, fname, gsize, fmaconf.bslist, fmaconf.numbases);
 
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc ();
@@ -170,8 +170,7 @@ int main (int argc, char **argv) {
 	field = malloc (nmeas * sizeof(complex float));
 
 	/* Read the measurements and compute their norm. */
-	sprintf (fname, "%s.field", inproj);
-	getfields (fname, field, nmeas, &erninc);
+	getfields (inproj, field, obsmeas.count, srcmeas.count, &erninc);
 
 	bldfrechbuf (fmaconf.numbases, &obsmeas);
 
