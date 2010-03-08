@@ -32,7 +32,7 @@ adbim: dbim.o $(OBJS)
 
 tissue: tissue.o
 	@echo "Building $@."
-	$(LD) $(DFLAGS) $(LFLAGS) -o $@ $^ $(LIBDIR) -lm $(ARCHILBS)
+	$(LD) $(DFLAGS) $(LFLAGS) -o $@ $^ $(LIBDIR) -lm $(ARCHLIBS)
 
 darwin32: OPTFLAGS= -fopenmp -O3 -march=prescott -mtune=prescott
 darwin32: ARCHFLAGS= -arch i386 -D_MACOSX
