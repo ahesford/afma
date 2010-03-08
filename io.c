@@ -14,7 +14,7 @@
 
 /* Compare the basis map for sorting. */
 int mapcomp (const void *left, const void *right) {
-	int *il = (int *)left, *ir = (int *)right;
+	long *il = (long *)left, *ir = (long *)right;
 	return *il - *ir;
 }
 
@@ -190,79 +190,21 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	fclose (fp);
 }
 
-/* Build the MPI filetype for contrast grid I/O using floats as the basic unit. The
- * provided array bsmap should be of length nbs and specifies the ordered local
- * indices of the data covered by the filetype. Thus, if data is read into an array
- * tmp, the field or contrast value val[bsmap[i]] = tmp[i]. */
-int getgridftype (MPI_Datatype *ftype, MPI_Datatype *ctype,
-		int *bsmap, int *bslist, int nbs, int *size) {
-	int i, *blens, *bsort;
-	MPI_Datatype *types;
-	MPI_Aint *displ;
-
-	/* Build the indexed displacement array for sorting. */
-	bsort = malloc (2 * nbs * sizeof(int));
-	/* Build the MPI type arrays. */
-	displ = malloc ((nbs + 2) * sizeof(MPI_Aint));
-	types = malloc ((nbs + 2) * sizeof(MPI_Datatype));
-	blens = malloc ((nbs + 2) * sizeof(int));
-
-	/* Create a complex type. */
-	MPI_Type_contiguous (2, MPI_FLOAT, ctype);
-	MPI_Type_commit (ctype);
-
-	/* Build the indexed basis map. */
-	for (i = 0; i < nbs; ++i) {
-		/* The basis index on which the sort will be performed. */
-		bsort[2 * i] = bslist[i];
-		bsort[2 * i + 1] = i;
-	}
-
-	/* Sort the indexed basis map. */
-	qsort (bsort, nbs, 2 * sizeof(int), mapcomp);
-
-	/* Set the lower bound of the MPI type. */
-	blens[0] = 1;
-	types[0] = MPI_LB;
-	displ[0] = 0;
-
-	/* Build the arrays of displacements needed for the indexed type. */
-	for (i = 0; i < nbs; ++i) {
-		blens[i + 1] = 1;
-		types[i + 1] = *ctype;
-		displ[i + 1] = bsort[2 * i] * sizeof(complex float);
-		bsmap[i] = bsort[2 * i + 1];
-	}
-
-	/* Set the upper bound of the MPI type. */
-	blens[nbs + 1] = 1;
-	types[nbs + 1] = MPI_UB;
-	displ[nbs + 1] = size[0] * size[1] * size[2] * sizeof(complex float);
-
-	/* Build and commit the MPI filetype. */
-	MPI_Type_create_struct (nbs + 2, blens, displ, types, ftype);
-	MPI_Type_commit (ftype);
-
-	/* Free all of the work arrays. */
-	free (bsort);
-	free (displ);
-	free (types);
-	free (blens);
-	return nbs;
-}
-
-/* Distributed read of a gridded file into local arrays. */
-int getcontrast (complex float *contrast, char *fname, int *size, int *bslist, int nbs) {
-	int i, *bsmap;
-	complex float *ctbuf;
+/* Read the gridded file into local arrays. */
+int getcontrast (complex float *contrast, char *fname, int *bslist, int nbs) {
+	long i, *bsmap;
 
 	/* MPI data types for file I/O. */
 	MPI_Status stat;
-	MPI_Datatype ftype, ctype;
+	MPI_Datatype cplx;
 	MPI_File fh;
 
 	/* Zero out the contrast in case nothing can be read. */
 	memset (contrast, 0, nbs * sizeof(complex float));
+
+	/* Define and commit a complex type for MPI reads. */
+	MPI_Type_contiguous (2, MPI_FLOAT, &cplx);
+	MPI_Type_commit (&cplx);
 
 	/* Open the MPI file with the specified name. */
 	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_RDONLY,
@@ -271,44 +213,40 @@ int getcontrast (complex float *contrast, char *fname, int *size, int *bslist, i
 		return 0;
 	}
 
+	MPI_File_set_view (fh, 3 * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
+
 	/* Allocate the map from the read order to the local storage order. */
-	bsmap = malloc (nbs * sizeof(int));
+	bsmap = malloc (2 * nbs * sizeof(long));
 
-	/* Build the filetype and the ordering map. */
-	getgridftype (&ftype, &ctype, bsmap, bslist, nbs, size);
+	/* Build a basis map for sorting. */
+	for (i = 0; i < nbs; ++i) {
+		bsmap[2 * i] = bslist[i];
+		bsmap[2 * i + 1] = i;
+	}
 
-	/* Set the file view to skip over the grid size header. */
-	MPI_File_set_view (fh, 3 * sizeof(int), ctype, ftype, "native", MPI_INFO_NULL);
+	/* Sort the basis map. */
+	qsort (bsmap, nbs, 2 * sizeof(long), mapcomp);
 
-	/* Allocate the read buffer that will be read in increasing index order. */
-	ctbuf = malloc (nbs * sizeof(complex float));
+	for (i = 0; i < nbs; ++i)
+		MPI_File_read_at (fh, bsmap[2*i], contrast+bsmap[2*i+1], 1, cplx, &stat);
 
-	/* Read the complex values in increasing order, as groups of two floats. */
-	MPI_File_read_all (fh, ctbuf, nbs, ctype, &stat);
-
-	/* Now sort the read values according to the map. */
-	for (i = 0; i < nbs; ++i) contrast[bsmap[i]] = ctbuf[i];
-
-	/* Free the MPI file type and close the file. */
-	MPI_File_close (&fh);
-	MPI_Type_free (&ftype);
-	MPI_Type_free (&ctype);
-
-	free (ctbuf);
+	/* Free the sorted map and MPI complex type, and close the file. */
 	free (bsmap);
+	MPI_File_close (&fh);
+	MPI_Type_free (&cplx);
 
 	return nbs;
 }
 
 /* Distributed write of a gridded file into local arrays. */
 int prtcontrast (char *fname, complex float *crt, int *size, int *bslist, int nbs) {
-	int i, mpirank, *bsmap;
-	complex float *ctbuf;
+	int mpirank;
+	long i, *bsmap;
 	
 	/* MPI data types for file I/O. */
 	MPI_Offset offset;
 	MPI_Status stat;
-	MPI_Datatype ftype, ctype;
+	MPI_Datatype cplx;
 	MPI_File fh;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -333,30 +271,34 @@ int prtcontrast (char *fname, complex float *crt, int *size, int *bslist, int nb
 	MPI_Barrier (MPI_COMM_WORLD);
 	MPI_File_sync (fh);
 
-	/* Allocate the map from the read order to the local storage order. */
-	bsmap = malloc (nbs * sizeof(int));
-
-	/* Build the filetype and the ordering map. */
-	getgridftype (&ftype, &ctype, bsmap, bslist, nbs, size);
+	MPI_Type_contiguous (2, MPI_FLOAT, &cplx);
+	MPI_Type_commit (&cplx);
 
 	/* Set the file view to skip over the grid size header. */
-	MPI_File_set_view (fh, 3 * sizeof(int), ctype, ftype, "native", MPI_INFO_NULL);
+	MPI_File_set_view (fh, 3 * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
 
-	/* Allocate the read buffer that will be read in increasing index order. */
-	ctbuf = malloc (nbs * sizeof(complex float));
-	/* Now sort the read values according to the map. */
-	for (i = 0; i < nbs; ++i) ctbuf[i] = crt[bsmap[i]];
+	/* Allocate the map from the read order to the local storage order. */
+	bsmap = malloc (2 * nbs * sizeof(long));
 
-	/* Read the complex values in increasing order, as groups of two floats. */
-	MPI_File_write_all (fh, ctbuf, nbs, ctype, &stat);
+	/* Build a basis map for sorting. */
+	for (i = 0; i < nbs; ++i) {
+		bsmap[2 * i] = bslist[i];
+		bsmap[2 * i + 1] = i;
+	}
+
+	/* Sort the basis map. */
+	qsort (bsmap, nbs, 2 * sizeof(long), mapcomp);
+
+	/* Perform an ordered write of the file. */
+	for (i = 0; i < nbs; ++i)
+		MPI_File_write_at(fh, bsmap[2*i], crt+bsmap[2*i+1], 1, cplx, &stat);
+
+	/* Free the basis map. */
+	free (bsmap);
 
 	/* Free the MPI file type and close the file. */
 	MPI_File_close (&fh);
-	MPI_Type_free (&ftype);
-	MPI_Type_free (&ctype);
-
-	free (ctbuf);
-	free (bsmap);
+	MPI_Type_free (&cplx);
 
 	return size[0] * size[1] * size[2];
 }

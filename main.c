@@ -103,7 +103,7 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the contrast for the local basis set. */
 	sprintf (fname, "%s.contrast", inproj);
-	getcontrast (fmaconf.contrast, fname, gsize, fmaconf.bslist, fmaconf.numbases);
+	getcontrast (fmaconf.contrast, fname, fmaconf.bslist, fmaconf.numbases);
 	wtime = MPI_Wtime() - wtime;
 	if (!mpirank) fprintf (stderr, "Wall time for contrast read: %0.6g\n", wtime);
 

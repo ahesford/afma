@@ -156,7 +156,7 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the guess contrast for the local basis set. */
 	sprintf (fname, "%s.guess", inproj);
-	getcontrast (fmaconf.contrast, fname, gsize, fmaconf.bslist, fmaconf.numbases);
+	getcontrast (fmaconf.contrast, fname, fmaconf.bslist, fmaconf.numbases);
 
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc ();
