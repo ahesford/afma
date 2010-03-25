@@ -58,12 +58,7 @@ int mkdircache () {
 	boxidx = malloc (3 * nbs * sizeof(int));
 
 	/* Build the array of box indices. */
-	for (i = 0, idx = boxidx; i < nbs; ++i, idx += 3) {
-		bsindex (bslist[i], idx);
-		idx[0] /= fmaconf.bspbox;
-		idx[1] /= fmaconf.bspbox;
-		idx[2] /= fmaconf.bspbox;
-	}
+	for (i = 0, idx = boxidx; i < nbs; ++i, idx += 3) bsindex (bslist[i], idx);
 
 	/* The basis list is no longer necessary. */
 	free (bslist);
@@ -136,18 +131,13 @@ void freedircache () {
 /* Check the cache for the given RHS. If it exists, return the pre-cached copy.
  * Otherwise, cache the provided copy and take the DFT before returning a pointer
  * to the cache bin. */
-complex float *cacheboxrhs (int *bslist, int nbs, int boxkey) {
+complex float *cacheboxrhs (int bsl, int boxkey) {
 	int l, i;
 	boxdesc key, *lbox;
 	complex float *bptr, *rhs;
 
 	/* Get the index for the first basis in the box. */
-	bsindex (bslist[0], key.index);
-
-	/* The box index. */
-	key.index[0] /= fmaconf.bspbox;
-	key.index[1] /= fmaconf.bspbox;
-	key.index[2] /= fmaconf.bspbox;
+	bsindex (bsl, key.index);
 
 	/* Search for the box index. */
 	lbox = bsearch (&key, boxlist, nebox, sizeof(boxdesc), boxcomp);
@@ -170,14 +160,11 @@ complex float *cacheboxrhs (int *bslist, int nbs, int boxkey) {
 		rhs = (complex float *)ScaleME_getInputVec (boxkey);
 		
 		/* Populate the local grid. */
-		for (i = 0; i < nbs; ++i) {
-			/* Find the basis index. */
-			bsindex (bslist[i], key.index);
-			
+		for (i = 0; i < fmaconf.bspboxvol; ++i) {
 			/* Find the position in the local box. */
-			key.index[0] %= fmaconf.bspbox;
-			key.index[1] %= fmaconf.bspbox;
-			key.index[2] %= fmaconf.bspbox;
+			key.index[0] = i / (fmaconf.bspbox * fmaconf.bspbox);
+			key.index[1] = (i / fmaconf.bspbox) % fmaconf.bspbox;
+			key.index[2] = i % fmaconf.bspbox;
 
 			/* The index into the RHS array. */
 			l = SQIDX(nfft[0],key.index[0],key.index[1],key.index[2]);
@@ -191,7 +178,6 @@ complex float *cacheboxrhs (int *bslist, int nbs, int boxkey) {
 		
 		/* Mark the cache spot as full. */
 		lbox->fill = 1;
-
 	}
 
 	/* Free the lock to allow other threads to access the cache block. */
@@ -279,9 +265,9 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 	bsindex (obslist[0], boxoff);
 
 	/* Find the minimum box index for near interactions. */
-	boxoff[0] = (boxoff[0] / fmaconf.bspbox) - fmaconf.numbuffer;
-	boxoff[1] = (boxoff[1] / fmaconf.bspbox) - fmaconf.numbuffer;
-	boxoff[2] = (boxoff[2] / fmaconf.bspbox) - fmaconf.numbuffer;
+	boxoff[0] -= fmaconf.numbuffer;
+	boxoff[1] -= fmaconf.numbuffer;
+	boxoff[2] -= fmaconf.numbuffer;
 
 	/* Populate the local grid with contributions from near boxes. */
 	for (l = 0; l < numsrc; ++l) {
@@ -289,15 +275,15 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 
 		/* Get the cached RHS for the source box in question.
 		 * The cache may need to be filled. */
-		bptr = cacheboxrhs (srclist, scts[l], skeys[l]);
+		bptr = cacheboxrhs (srclist[0], skeys[l]);
 
 		/* Get the index fo the first basis in the source box. */
 		bsindex (srclist[0], idx);
 
 		/* Find the local box number. */
-		idx[0] = (idx[0] / fmaconf.bspbox) - boxoff[0];
-		idx[1] = (idx[1] / fmaconf.bspbox) - boxoff[1];
-		idx[2] = (idx[2] / fmaconf.bspbox) - boxoff[2];
+		idx[0] -= boxoff[0];
+		idx[1] -= boxoff[1];
+		idx[2] -= boxoff[2];
 
 		/* Point to the Green's function for this box. */
 		gptr = gridints + nfftprod * SQIDX(nbors,idx[0],idx[1],idx[2]);
@@ -311,13 +297,11 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 	fftwf_execute_dft (bplan, buf, buf);
 
 	/* Augment with output with the local convolution. */
-	for (l = 0; l < tct; ++l) {
-		bsindex (obslist[l], idx);
-
-		/* Convert the global grid position to a local position. */
-		idx[0] %= fmaconf.bspbox;
-		idx[1] %= fmaconf.bspbox;
-		idx[2] %= fmaconf.bspbox;
+	/* Note that each ScaleME "basis" is actually a finest-level group. */
+	for (l = 0; l < fmaconf.bspboxvol; ++l) {
+		idx[0] = l / (fmaconf.bspbox * fmaconf.bspbox);
+		idx[1] = (l / fmaconf.bspbox) % fmaconf.bspbox;
+		idx[2] = l % fmaconf.bspbox;
 
 		/* Augment the RHS. */
 		cobs[l] += buf[SQIDX(nfft[0],idx[0],idx[1],idx[2])];

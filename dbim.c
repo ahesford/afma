@@ -35,15 +35,16 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 	solveparm *hislv, solveparm *loslv, measdesc *src, measdesc *obs) {
 	complex float *rhs, *crt, *err, *fldptr;
 	float errnorm = 0, lerr, errd = 0;
-	int j, k;
+	int j;
+	long k, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 
 	if (!error) err = malloc (obs->count * sizeof(complex float));
 	else err = error;
 
-	rhs = malloc (2 * fmaconf.numbases * sizeof(complex float));
-	crt = rhs + fmaconf.numbases;
+	rhs = malloc (2 * nelt * sizeof(complex float));
+	crt = rhs + nelt;
 
-	if (rn) memset (rn, 0, fmaconf.numbases * sizeof(complex float));
+	if (rn) memset (rn, 0, nelt * sizeof(complex float));
 	
 	for (j = 0, fldptr = field; j < src->count; ++j, fldptr += obs->count) {
 		/* Build the right-hand side for the specified location. Use
@@ -55,7 +56,7 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 		cgmres (rhs, rhs, 1, hislv);
 		
 		/* Convert total field into contrast current. */
-		for (k = 0; k < fmaconf.numbases; ++k)
+		for (k = 0; k < nelt; ++k)
 			crt[k] = rhs[k] * fmaconf.contrast[k];
 		
 		MPI_Barrier (MPI_COMM_WORLD);
@@ -86,11 +87,12 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, j, nmeas, dbimit[2], q, lfrog = 1, gsize[3];
+	int mpirank, mpisize, i, nmeas, dbimit[2], q, lfrog = 1, gsize[3];
 	complex float *rn, *crt, *field, *fldptr, *error;
 	float errnorm = 0, tolerance[2], regparm[4], cgnorm, erninc;
 	solveparm hislv, loslv;
 	measdesc obsmeas, srcmeas, ssrc;
+	long nelt, j;
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -145,10 +147,12 @@ int main (int argc, char **argv) {
 	ScaleME_preconf ();
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
 
+	nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
+
 	/* Allocate the RHS vector, residual vector and contrast. */
-	fmaconf.contrast = malloc (3 * fmaconf.numbases * sizeof(complex float));
-	rn = fmaconf.contrast + fmaconf.numbases;
-	crt = rn + fmaconf.numbases;
+	fmaconf.contrast = malloc (3 * nelt * sizeof(complex float));
+	rn = fmaconf.contrast + nelt;
+	crt = rn + nelt;
 
 	/* Store the grid size for writing of contrast values. */
 	gsize[0] = fmaconf.nx; gsize[1] = fmaconf.ny; gsize[2] = fmaconf.nz;
@@ -156,7 +160,8 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the guess contrast for the local basis set. */
 	sprintf (fname, "%s.guess", inproj);
-	getcontrast (fmaconf.contrast, fname, fmaconf.bslist, fmaconf.numbases);
+	getcontrast (fmaconf.contrast, fname, gsize,
+			fmaconf.bslist, fmaconf.numbases, fmaconf.bspbox);
 
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc ();
@@ -172,7 +177,7 @@ int main (int argc, char **argv) {
 	/* Read the measurements and compute their norm. */
 	getfields (inproj, field, obsmeas.count, srcmeas.count, &erninc);
 
-	bldfrechbuf (fmaconf.numbases, &obsmeas);
+	bldfrechbuf (nelt, &obsmeas);
 
 	MPI_Barrier (MPI_COMM_WORLD);
 
@@ -200,11 +205,12 @@ int main (int argc, char **argv) {
 					fprintf (stderr, "DBIM: %g, CG: %g (%d/%d).\n", errnorm, cgnorm, i, q);
 				
 				/* Update the background. */
-				for (j = 0; j < fmaconf.numbases; ++j)
+				for (j = 0; j < nelt; ++j)
 					fmaconf.contrast[j] += crt[j];
 				
 				sprintf (fname, "%s.inverse.t%03d", outproj, q);
-				prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist, fmaconf.numbases);
+				prtcontrast (fname, fmaconf.contrast, gsize,
+						fmaconf.bslist, fmaconf.numbases, fmaconf.bspbox);
 			}
 			
 			if (!mpirank) fprintf (stderr, "Reassess DBIM error.\n");
@@ -215,12 +221,12 @@ int main (int argc, char **argv) {
 			cgnorm = cgls (rn, crt, &loslv, &srcmeas, &obsmeas, regparm[0]);
 			
 			/* Update the background. */
-			for (j = 0; j < fmaconf.numbases; ++j)
-				fmaconf.contrast[j] += crt[j];
+			for (j = 0; j < nelt; ++j) fmaconf.contrast[j] += crt[j];
 		}
 		
 		sprintf (fname, "%s.inverse.%03d", outproj, i);
-		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist, fmaconf.numbases);
+		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist,
+				fmaconf.numbases, fmaconf.bspbox);
 		
 		if (!mpirank)
 			fprintf (stderr, "DBIM relative error: %g, iteration %d.\n", errnorm, i);
@@ -257,11 +263,11 @@ int main (int argc, char **argv) {
 			cgnorm = cgls (rn, crt, &hislv, &srcmeas, &obsmeas, regparm[1]);
 		}
 		
-		for (j = 0; j < fmaconf.numbases; ++j)
-			fmaconf.contrast[j] += crt[j];
+		for (j = 0; j < nelt; ++j) fmaconf.contrast[j] += crt[j];
 
 		sprintf (fname, "%s.inverse.%03d", outproj, i);
-		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist, fmaconf.numbases);
+		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist,
+				fmaconf.numbases, fmaconf.bspbox);
 
 		if (!mpirank)
 			fprintf (stderr, "DBIM: %g, CG: %g (%d).\n", errnorm, cgnorm, i);

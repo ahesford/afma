@@ -31,66 +31,39 @@
 
 fmadesc fmaconf;
 
-/* Computes the far-field pattern for the specified basis with the specified
+/* Computes the far-field pattern for the specified group with the specified
  * center, and stores the output in a provided vector. sgn is positive for
- * radiation pattern and negative for receiving pattern. */
+ * radiation pattern and negative for receiving pattern. The list of "basis
+ * functions" and center are ignored, since the calling program ensures each
+ * FMM basis function is actually a single group of gridded elements with the
+ * same affine grid. The center of the finest-level FMM group coincides with
+ * the single FMM basis function contained therein. */
 void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn) {
-	complex float fact, beta, *buf, *crt = (complex float *)vcrt,
+	complex float fact, beta = 1.0, *crt = (complex float *)vcrt,
 		*pat = *((complex float **)vpat);
-	int l, idx[3];
-
-	/* The buffer that will be used by this thread for this routine. */
-	buf = calloc (fmaconf.bspboxvol, sizeof(complex float));
 
 	if (sgn >= 0) {
 		/* Scalar factors for the matrix multiplication. */
 		fact = fmaconf.k0 * fmaconf.cellvol;
-		beta = 1.0;
 
-		/* Compute the far-field pattern for the basis functions. */
-		for (l = 0; l < nbs; ++l) {
-			/* Find the basis grid position. */
-			bsindex (bsl[l], idx);
-
-			/* Shift to a local grid position. */
-			idx[0] %= fmaconf.bspbox;
-			idx[1] %= fmaconf.bspbox;
-			idx[2] %= fmaconf.bspbox;
-			
-			/* Augment the current vector. */
-			buf[SQIDX(fmaconf.bspbox,idx[0],idx[1],idx[2])] = crt[l];
-		}
+		/* Don't add in the existing output vector since it should
+		 * have been zeroed anyway. */
+		beta = 0.0;
 
 		/* Perform the matrix-vector product. */
 		cblas_cgemv (CblasColMajor, CblasNoTrans, fmaconf.nsamp,
 				fmaconf.bspboxvol, &fact, fmaconf.radpats, 
-				fmaconf.nsamp, buf, 1, &beta, pat, 1);
+				fmaconf.nsamp, crt, 1, &beta, pat, 1);
 	} else {
 		/* Distribute the far-field patterns to the basis functions. */
 		/* Scalar factors for the matrix multiplication. */
 		fact = I * fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
-		beta = 0.0;
 
 		/* Perform the matrix-vector product. */
 		cblas_cgemv (CblasColMajor, CblasConjTrans, fmaconf.nsamp,
 				fmaconf.bspboxvol, &fact, fmaconf.radpats,
-				fmaconf.nsamp, pat, 1, &beta, buf, 1);
-
-		for (l = 0; l < nbs; ++l) {
-			/* Find the basis grid position. */
-			bsindex (bsl[l], idx);
-			
-			/* Shift to a local grid position. */
-			idx[0] %= fmaconf.bspbox;
-			idx[1] %= fmaconf.bspbox;
-			idx[2] %= fmaconf.bspbox;
-			
-			/* Augment the current vector. */
-			crt[l] += buf[SQIDX(fmaconf.bspbox,idx[0],idx[1],idx[2])];
-		}
+				fmaconf.nsamp, pat, 1, &beta, crt, 1);
 	}
-
-	free (buf);
 }
 
 /* Precompute the exponential radiation pattern for a point a distance rmc 
@@ -202,6 +175,8 @@ int ScaleME_preconf (void) {
 	ScaleME_setInterpOrder (fmaconf.interpord);
 
 	ScaleME_setTopComputeLevel (fmaconf.toplev);
+
+	ScaleME_setRHSDataWidth (fmaconf.bspboxvol);
 
 	if (fmaconf.fo2iterm > 0) {
 		ScaleME_useFastO2IGhosts (1);

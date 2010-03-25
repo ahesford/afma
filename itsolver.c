@@ -22,27 +22,25 @@
 #include "itsolver.h"
 
 static int matvec (complex float *out, complex float *in, complex float *cur) {
-	int i;
+	long i, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 
 	/* Compute the contrast pressure. */
 #pragma omp parallel for default(shared) private(i)
-	for (i = 0; i < fmaconf.numbases; ++i)
-		cur[i] = in[i] * fmaconf.contrast[i];
+	for (i = 0; i < nelt; ++i) cur[i] = in[i] * fmaconf.contrast[i];
 
 	/* Reset the direct-interaction buffer and compute
 	 * the matrix-vector product for the Green's matrix. */
 	clrdircache();
-	ScaleME_applyParFMA (cur, out, 0);
+	ScaleME_applyParFMA (cur, out);
 
 	/* Add in the identity portion. */
 #pragma omp parallel for default(shared) private(i)
-	for (i = 0; i < fmaconf.numbases; ++i)
-		out[i] = in[i] - out[i];
+	for (i = 0; i < nelt; ++i) out[i] = in[i] - out[i];
 
 	return 0;
 }
 
-static complex float pardot (complex float *x, complex float *y, int n) {
+static complex float pardot (complex float *x, complex float *y, long n) {
 	complex float dp;
 
 	/* Compute the local portion. */
@@ -54,7 +52,8 @@ static complex float pardot (complex float *x, complex float *y, int n) {
 }
 
 int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float tol) {
-	int i, j, rank;
+	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
+	int i, rank;
 	complex float *r, *rhat, *v, *p, *mvp, *t;
 	complex float rho, alpha, omega, beta;
 	float err, rhn;
@@ -64,30 +63,30 @@ int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float 
 	rho = alpha = omega = 1.;
 
 	/* Allocate and zero the work arrays. */
-	r = calloc (6 * fmaconf.numbases, sizeof(complex float));
-	rhat = r + fmaconf.numbases;
-	v = rhat + fmaconf.numbases;
-	p = v + fmaconf.numbases;
-	t = p + fmaconf.numbases;
-	mvp = t + fmaconf.numbases;
+	r = calloc (6L * nelt, sizeof(complex float));
+	rhat = r + nelt;
+	v = rhat + nelt;
+	p = v + nelt;
+	t = p + nelt;
+	mvp = t + nelt;
 
 	/* Compute the norm of the right-hand side for residual scaling. */
-	rhn = sqrt(creal(pardot (rhs, rhs, fmaconf.numbases)));
+	rhn = sqrt(creal(pardot (rhs, rhs, nelt)));
 
 	/* Compute the inital matrix-vector product for the input guess. */
 	if (guess) matvec (r, sol, mvp);
 
 	/* Subtract from the RHS to form the residual. */
 #pragma omp parallel for default(shared) private(j)
-	for (j = 0; j < fmaconf.numbases; ++j) r[j] = rhs[j] - r[j];
+	for (j = 0; j < nelt; ++j) r[j] = rhs[j] - r[j];
 
-	if (!guess) memset (sol, 0, fmaconf.numbases * sizeof(complex float));
+	if (!guess) memset (sol, 0, nelt * sizeof(complex float));
 		
 	/* Copy the initial residual as the test vector. */
-	memcpy (rhat, r, fmaconf.numbases * sizeof(complex float));
+	memcpy (rhat, r, nelt * sizeof(complex float));
 
 	/* Find the norm of the initial residual. */
-	err = sqrt(creal(pardot (r, r, fmaconf.numbases))) / rhn;
+	err = sqrt(creal(pardot (r, r, nelt))) / rhn;
 	if (!rank) printf ("True residual: %g\n", err);
 
 	/* Run iterations until convergence or the maximum is reached. */
@@ -95,23 +94,23 @@ int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float 
 		/* Pre-compute portion of beta from previous iteration. */
 		beta = alpha / (rho * omega);
 		/* Compute rho for this iteration. */
-		rho = pardot (rhat, r, fmaconf.numbases);
+		rho = pardot (rhat, r, nelt);
 		/* Include the missing factor in beta. */
 		beta *= rho;
 
 		/* Update the search vector. */
 #pragma omp parallel for default(shared) private(j)
-		for (j = 0; j < fmaconf.numbases; ++j)
+		for (j = 0; j < nelt; ++j)
 			p[j] = r[j] + beta * (p[j] - omega * v[j]);
 
 		/* Compute the first search step, v = A * p. */
 		matvec (v, p, mvp);
 
 		/* Compute the next alpha. */
-		alpha = rho / pardot (rhat, v, fmaconf.numbases);
+		alpha = rho / pardot (rhat, v, nelt);
 
 #pragma omp parallel for default(shared) private(j)
-		for (j = 0; j < fmaconf.numbases; ++j) {
+		for (j = 0; j < nelt; ++j) {
 			/* Update the solution vector. */
 			sol[j] += alpha * p[j];
 			/* Update the residual vector. */
@@ -120,7 +119,7 @@ int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float 
 
 		/* Compute the scaled residual norm and stop if convergence
 		 * has been achieved. */
-		err = sqrt(creal(pardot (r, r, fmaconf.numbases))) / rhn;
+		err = sqrt(creal(pardot (r, r, nelt))) / rhn;
 		if (!rank) printf ("BiCG-STAB(%0.1f): %g\n", 0.5 + i, err);
 		if (err < tol) break;
 
@@ -128,11 +127,11 @@ int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float 
 		matvec (t, r, mvp);
 
 		/* Compute the update direction. */
-		omega = pardot (t, r, fmaconf.numbases) / pardot (t, t, fmaconf.numbases);
+		omega = pardot (t, r, nelt) / pardot (t, t, nelt);
 
 		/* Update both the residual and the solution guess. */
 #pragma omp parallel for default(shared) private(j)
-		for (j = 0; j < fmaconf.numbases; ++j) {
+		for (j = 0; j < nelt; ++j) {
 			/* Update the solution vector. */
 			sol[j] += omega * r[j];
 			/* Update the residual vector. */
@@ -140,7 +139,7 @@ int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float 
 		}
 	
 		/* Compute the scaled residual norm. */
-		err = sqrt(creal(pardot (r, r, fmaconf.numbases))) / rhn;
+		err = sqrt(creal(pardot (r, r, nelt))) / rhn;
 		if (!rank) printf ("BiCG-STAB(%d): %g\n", i + 1, err);
 	}
 
@@ -150,6 +149,7 @@ int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float 
 
 int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
 	int icntl[8], irc[5], lwork, info[3], i, myRank;
+	int nelt = fmaconf.numbases * fmaconf.bspboxvol;
 	float rinfo[2], cntl[5];
 	complex float *zwork, *solbuf, *tx, *ty, *tz;
 
@@ -157,9 +157,9 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 
 	/* Allocate memory for work array. */
 	lwork = slv->restart * slv->restart +
-		slv->restart * (fmaconf.numbases + 5) + 5 * fmaconf.numbases + 2;
+		slv->restart * (nelt + 5) + 5 * nelt + 2;
 	zwork = calloc (lwork, sizeof(complex float));
-	solbuf = malloc (fmaconf.numbases * sizeof(complex float));
+	solbuf = malloc (nelt * sizeof(complex float));
 
 	/* Initialize the parameters. */
 	initcgmres_(icntl, cntl);
@@ -181,12 +181,12 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 	cntl[0] = slv->epscg;
 
 	/* Copy the initial guess: use the RHS. */
-	memcpy (zwork, rhs, fmaconf.numbases * sizeof(complex float));
+	memcpy (zwork, rhs, nelt * sizeof(complex float));
 	/* Copy the RHS. */
-	memcpy (zwork + fmaconf.numbases, rhs, fmaconf.numbases * sizeof(complex float));
+	memcpy (zwork + nelt, rhs, nelt * sizeof(complex float));
 
 	do {
-		drivecgmres_(&(fmaconf.gnumbases), &(fmaconf.numbases),
+		drivecgmres_(&(fmaconf.gnumbases), &(nelt),
 				&(slv->restart), &lwork, zwork, irc,
 				icntl, cntl, info, rinfo);
 		if (!(info[0]) && !(irc[0])) break;
@@ -207,7 +207,7 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 #pragma omp parallel for default(shared) private(i)
 			   for (i = 0; i < irc[4]; ++i)
 				   /* compute the local dot product first */
-				   cblas_cdotc_sub (fmaconf.numbases, tx + i * fmaconf.numbases, 1, ty, 1, tz + i);
+				   cblas_cdotc_sub (nelt, tx + i * nelt, 1, ty, 1, tz + i);
 			   
 			   /* now do a global reduce to get the final answer */
 			   MPI_Allreduce(MPI_IN_PLACE, tz, 2 * irc[4], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
@@ -217,7 +217,7 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 
 	if (!myRank && info[0]) fprintf (stdout, "CGMRES: return value: %d\n", info[0]); 
 
-	memcpy (sol, zwork, fmaconf.numbases * sizeof(complex float));
+	memcpy (sol, zwork, nelt * sizeof(complex float));
 	
 	if (!myRank && !silent)
 		fprintf(stdout, "CGMRES: %d iterations, %.6E PBE, %.6E BE.\n", info[1], rinfo[0], rinfo[1]);

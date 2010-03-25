@@ -42,42 +42,6 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	return 1;
 }
 
-int directfield (complex float *currents, measdesc *obs,
-		complex float *result, complex float *grf) {
-	int i, j;
-	complex float val, *gptr;
-	float cen[3], fact;
-
-	memset (result, 0, obs->count * sizeof(complex float));
-
-	/* The integration factor. */
-	fact = fmaconf.k0 * fmaconf.k0 * fmaconf.cellvol;
-
-	if (!grf) {
-		/* Compute the fields radiated by the local fields. */
-		for (j = 0; j < fmaconf.numbases; ++j) {
-			bscenter (fmaconf.bslist[j], cen);
-			for (i = 0; i < obs->count; ++i) {
-				val = fsgreen (fmaconf.k0, cen, obs->locations + 3 * i);
-				result[i] += fact * val * currents[j];
-			}
-		}
-	} else {
-		/* The Green's function has already been precomputed. */
-		for (j = 0; j < fmaconf.numbases; ++j) {
-			gptr = grf + j * obs->count;
-			for (i = 0; i < obs->count; ++i, ++gptr) {
-				result[i] += fact * currents[j] * (*gptr);
-			}
-		}
-	}
-
-	/* Collect the solution across all processors. */
-	MPI_Allreduce (MPI_IN_PLACE, result, 2 * obs->count, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-
-	return obs->count;
-}
-
 int buildlocs (measdesc *desc) {
 	int i, j, k;
 	float dtheta, dphi, theta, phi, rst;

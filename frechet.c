@@ -11,13 +11,16 @@
 #include "frechet.h"
 #include "excite.h"
 
-complex float *zwork, *zwcrt, *rcvgrf;
+static complex float *zwork, *zwcrt, *rcvgrf;
 
 complex float *bldfrechbuf (int size, measdesc *obs) {
+	long nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
+
 	zwork = malloc (2 * size * sizeof(complex float));
 	zwcrt = zwork + size;
 
-	rcvgrf = malloc (fmaconf.numbases * obs->count * sizeof(complex float));
+	rcvgrf = malloc (nelt * (long)(obs->count) * sizeof(complex float));
+
 	precompgrf (obs, rcvgrf);
 
 	return zwork;
@@ -31,21 +34,20 @@ void delfrechbuf (void) {
 /* Computes a contribution to the Frechet derivative for one transmitter. */
 int frechet (complex float *crt, complex float *fld,
 		complex float *sol, measdesc *obs, solveparm *slv) {
-	int j;
+	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 
 	/* Given the test vector and field distribution, compute the currents. */
-	for (j = 0; j < fmaconf.numbases; ++j)
-		zwcrt[j] = crt[j] * fld[j];
+	for (j = 0; j < nelt; ++j) zwcrt[j] = crt[j] * fld[j];
 
 	/* Compute the RHS for the given current distribution.
 	 * Store it in the buffer space. */
-	ScaleME_applyParFMA (zwcrt, zwork, 0);
+	ScaleME_applyParFMA (zwcrt, zwork);
 
 	/* Compute the Frechet derivative field. */
 	cgmres (zwork, zwork, 1, slv);
 
 	/* Convert this into a current distribution. */
-	for (j = 0; j < fmaconf.numbases; ++j)
+	for (j = 0; j < nelt; ++j)
 		zwork[j] = fmaconf.contrast[j] * zwork[j] + zwcrt[j];
 
 	/* Compute the measured scattered field. */
@@ -56,7 +58,7 @@ int frechet (complex float *crt, complex float *fld,
 
 int frechadj (complex float *mag, complex float *fld,
 		complex float *sol, measdesc *obs, solveparm *slv) {
-	int j;
+	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 	float factor = fmaconf.k0 * fmaconf.k0 * fmaconf.cellvol;
 
 	for (j = 0; j < obs->count; ++j)
@@ -70,7 +72,7 @@ int frechadj (complex float *mag, complex float *fld,
 	cgmres (zwork, zwork, 1, slv);
 
 	/* Augment the solution for this transmitter. */
-	for (j = 0; j < fmaconf.numbases; ++j)
+	for (j = 0; j < nelt; ++j)
 		sol[j] += factor * conj (zwork[j] * fld[j]);
 
 	for (j = 0; j < obs->count; ++j)

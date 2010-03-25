@@ -10,8 +10,8 @@
 void skipcomments (FILE *);
 void getdbimcfg (char *, int *, float *, float *);
 void getconfig (char *, solveparm *, solveparm *, measdesc *, measdesc *);
-int getcontrast (complex float *, char *, int *, int);
-int prtcontrast (char *, complex float *, int *, int *, int);
+int getcontrast (complex float *, char *, int *, int *, int, int);
+int prtcontrast (char *, complex float *, int *, int *, int, int);
 int writefld (char *, measdesc *, complex float *);
 int readfld (complex float *, char *, int);
 int getfields (char *, complex float *, int, int, float *);

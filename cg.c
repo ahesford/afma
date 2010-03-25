@@ -14,19 +14,20 @@
 /* Least-squares solution using CG. The residual must be precomputed. */
 float cgls (complex float *rn, complex float *sol, solveparm *slv,
 		measdesc *src, measdesc *obs, float regparm) {
-	int i, j, k;
+	long i, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
+	int j, k;
 	complex float *ifld, *pn, *scat, *adjcrt;
 	float rnorm, pnorm, lrnorm, lpnorm, alpha, beta, rninc;
 
-	ifld = malloc (3 * fmaconf.numbases * sizeof(complex float));
-	pn = ifld + fmaconf.numbases;
-	adjcrt = pn + fmaconf.numbases;
+	ifld = malloc (3L * nelt * sizeof(complex float));
+	pn = ifld + nelt;
+	adjcrt = pn + nelt;
 
 	scat = malloc (obs->count * sizeof(complex float));
 
 	/* Initialize some values. */
 	rnorm = 0;
-	for (i = 0; i < fmaconf.numbases; ++i) {
+	for (i = 0; i < nelt; ++i) {
 		pn[i] = rn[i];
 		sol[i] = 0.0;
 		alpha = cabs (rn[i]);
@@ -38,7 +39,7 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 	pnorm = (rninc = rnorm);
 
 	for (j = 0; j < slv->maxit; ++j) {
-		memset (adjcrt, 0, fmaconf.numbases * sizeof(complex float));
+		memset (adjcrt, 0, nelt * sizeof(complex float));
 		alpha = 0;
 		for (i = 0; i < src->count; ++i) {
 			/* Build the incident field. */
@@ -60,7 +61,7 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 		beta = rnorm;
 
 		/* Update the residual. */
-		for (i = 0, lrnorm = 0; i < fmaconf.numbases; ++i) {
+		for (i = 0, lrnorm = 0; i < nelt; ++i) {
 			rn[i] -= alpha * (adjcrt[i] + regparm * pn[i]);
 			rnorm = cabs (rn[i]);
 			lrnorm += rnorm * rnorm;
@@ -74,7 +75,7 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 		pnorm = lpnorm = 0;
 
 		/* Update the solution and the search vector. */
-		for (i = 0, lpnorm = 0; i < fmaconf.numbases; ++i) {
+		for (i = 0, lpnorm = 0; i < nelt; ++i) {
 			sol[i] += alpha * pn[i];
 			pn[i] = rn[i] + beta * pn[i];
 			pnorm = cabs(pn[i]);
@@ -95,14 +96,15 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 
 float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 		measdesc *src, measdesc *obs, float regparm) {
-	int i, j, nmeas;
+	long i, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
+	int j, nmeas;
 	complex float *ifld, *mptr, *rn, *pn, *scat, *adjcrt, *asol;
 	float rnorm, pnorm, lrnorm, alpha, beta, rninc;
 
 	nmeas = src->count * obs->count;
 
-	ifld = malloc (2 * fmaconf.numbases * sizeof(complex float));
-	adjcrt = ifld + fmaconf.numbases; 
+	ifld = malloc (2L * nelt * sizeof(complex float));
+	adjcrt = ifld + nelt;
 
 	scat = malloc (4 * nmeas * sizeof(complex float));
 	rn = scat + nmeas;
@@ -122,7 +124,7 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 
 	for (j = 0; j < slv->maxit; ++j) {
 		alpha = 0;
-		memset (adjcrt, 0, fmaconf.numbases * sizeof(complex float));
+		memset (adjcrt, 0, nelt * sizeof(complex float));
 		for (i = 0, mptr = pn; i < src->count; ++i, mptr += obs->count) {
 			/* Build the incident field. */
 			buildrhs (ifld, src->locations + 3 * i);
@@ -132,7 +134,7 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 			frechadj (mptr, ifld, adjcrt, obs, slv);
 		}
 
-		for (i = 0, lrnorm = 0; i < fmaconf.numbases; ++i) { 
+		for (i = 0, lrnorm = 0; i < nelt; ++i) { 
 			alpha = cabs (adjcrt[i]);
 			lrnorm += alpha * alpha;
 		}
@@ -171,7 +173,7 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 		if (sqrt(rnorm / rninc) < slv->epscg) break;
 	}
 
-	memset (sol, 0, fmaconf.numbases * sizeof(complex float));
+	memset (sol, 0, nelt * sizeof(complex float));
 	/* Compute the adjoint acting on the RHS. */
 	for (i = 0, mptr = asol; i < src->count; ++i, mptr += obs->count) {
 		/* Build the incident field. */

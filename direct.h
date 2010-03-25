@@ -7,7 +7,7 @@
 int greengrid (complex float *, int, int, float, float, int *);
 int dirprecalc ();
 
-complex float *cacheboxrhs (int *, int, int);
+complex float *cacheboxrhs (int, int);
 void blockinteract(int, int, int *, int *, int);
 
 int mkdircache ();

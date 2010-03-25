@@ -33,6 +33,7 @@ int main (int argc, char **argv) {
 	complex float *rhs, *sol, *field;
 	double cputime, wtime;
 	int debug = 0;
+	long nelt;
 
 	measdesc obsmeas, srcmeas;
 	solveparm solver;
@@ -88,11 +89,13 @@ int main (int argc, char **argv) {
 	/* Initialize ScaleME and find the local basis set. */
 	ScaleME_preconf ();
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
+
+	nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 	/* Allocate the RHS vector, which will also store the solution. */
-	rhs = malloc (2 * fmaconf.numbases * sizeof(complex float));
-	sol = rhs + fmaconf.numbases;
+	rhs = malloc (2 * nelt * sizeof(complex float));
+	sol = rhs + nelt;
 	/* Allocate the local portion of the contrast storage. */
-	fmaconf.contrast = malloc (fmaconf.numbases * sizeof(complex float));
+	fmaconf.contrast = malloc (nelt * sizeof(complex float));
 	/* Allocate the observation array. */
 	field = malloc (obsmeas.count * sizeof(complex float));
 
@@ -103,7 +106,8 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the contrast for the local basis set. */
 	sprintf (fname, "%s.contrast", inproj);
-	getcontrast (fmaconf.contrast, fname, fmaconf.bslist, fmaconf.numbases);
+	getcontrast (fmaconf.contrast, fname, gsize,
+			fmaconf.bslist, fmaconf.numbases, fmaconf.bspbox);
 	wtime = MPI_Wtime() - wtime;
 	if (!mpirank) fprintf (stderr, "Wall time for contrast read: %0.6g\n", wtime);
 
@@ -118,7 +122,7 @@ int main (int argc, char **argv) {
 	MPI_Barrier (MPI_COMM_WORLD);
 
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
-
+	
 	for (i = 0; i < srcmeas.count; ++i) {
 		if (!mpirank)
 			fprintf (stderr, "Running simulation for source %d.\n", i + 1);
@@ -127,7 +131,7 @@ int main (int argc, char **argv) {
 		buildrhs (rhs, srcmeas.locations + 3 * i);
 
 		/* Initial first guess is zero. */
-		memset (sol, 0, fmaconf.numbases * sizeof(complex float));
+		memset (sol, 0, nelt * sizeof(complex float));
 
 		cputime = (double)clock() / CLOCKS_PER_SEC;
 		wtime = MPI_Wtime();
@@ -150,13 +154,14 @@ int main (int argc, char **argv) {
 		if (debug) {
 			wtime = MPI_Wtime();
 			sprintf (fname, "%s.%d.currents", outproj, i);
-			prtcontrast (fname, sol, gsize, fmaconf.bslist, fmaconf.numbases);
+			prtcontrast (fname, sol, gsize, fmaconf.bslist,
+					fmaconf.numbases, fmaconf.bspbox);
 			wtime = MPI_Wtime() - wtime;
 			if (!mpirank) fprintf (stderr, "Wall time for field write: %0.6g\n", wtime);
 		}
 
 		/* Convert total field into contrast current. */
-		for (j = 0; j < fmaconf.numbases; ++j)
+		for (j = 0; j < nelt; ++j)
 			sol[j] *= fmaconf.contrast[j];
 
 		farfield (sol, &obsmeas, field);

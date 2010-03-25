@@ -5,7 +5,7 @@
 #include <fftw3.h>
 
 typedef struct {
-	float min[3], cen[3], cell, cellvol;
+	float min[3], cen[3], cell, cellvol, grplen;
 	float precision;
 	int nx, ny, nz, gnumbases, numbases;
 	int bspbox, maxlev, numbuffer, interpord, toplev, bspboxvol;
@@ -28,9 +28,9 @@ static inline void bscenter (int gi, float *cen) {
 
 	bsindex (gi, idx);
 
-	cen[0] = fmaconf.min[0] + ((float)idx[0] + 0.5) * fmaconf.cell;
-	cen[1] = fmaconf.min[1] + ((float)idx[1] + 0.5) * fmaconf.cell;
-	cen[2] = fmaconf.min[2] + ((float)idx[2] + 0.5) * fmaconf.cell;
+	cen[0] = fmaconf.min[0] + ((float)idx[0] + 0.5) * fmaconf.grplen;
+	cen[1] = fmaconf.min[1] + ((float)idx[1] + 0.5) * fmaconf.grplen;
+	cen[2] = fmaconf.min[2] + ((float)idx[2] + 0.5) * fmaconf.grplen;
 }
 
 void farpattern (int, int *, void *, void *, float *, int);
