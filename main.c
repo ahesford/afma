@@ -12,7 +12,6 @@
 
 #include "itsolver.h"
 #include "measure.h"
-#include "excite.h"
 #include "direct.h"
 #include "mlfma.h"
 #include "io.h"
@@ -119,6 +118,10 @@ int main (int argc, char **argv) {
 	/* Finish the ScaleME initialization. */
 	ScaleME_postconf ();
 
+	/* Build the root interpolation matrix for measurements. */
+	ScaleME_buildRootInterpMat (&(obsmeas.imat), 6, obsmeas.ntheta,
+			obsmeas.nphi, obsmeas.trange, obsmeas.prange);
+
 	MPI_Barrier (MPI_COMM_WORLD);
 
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
@@ -126,8 +129,7 @@ int main (int argc, char **argv) {
 	for (i = 0; i < srcmeas.count; ++i) {
 		if (!mpirank)
 			fprintf (stderr, "Running simulation for source %d.\n", i + 1);
-		/* Build the right-hand side for the specified location. Use
-		 * point sources, rather than plane waves, for excitation. */
+		/* Build the right-hand side for the specified location. */
 		buildrhs (rhs, srcmeas.locations + 3 * i);
 
 		/* Initial first guess is zero. */
@@ -161,8 +163,7 @@ int main (int argc, char **argv) {
 		}
 
 		/* Convert total field into contrast current. */
-		for (j = 0; j < nelt; ++j)
-			sol[j] *= fmaconf.contrast[j];
+		for (j = 0; j < nelt; ++j) sol[j] *= fmaconf.contrast[j];
 
 		farfield (sol, &obsmeas, field);
 
@@ -176,13 +177,13 @@ int main (int argc, char **argv) {
 	ScaleME_finalizeParHostFMA ();
 
 	freedircache ();
+	delmeas (&srcmeas);
+	delmeas (&obsmeas);
 
 	free (rhs);
 	free (field);
 	free (fmaconf.contrast);
 	free (fmaconf.radpats);
-	free (srcmeas.locations);
-	free (obsmeas.locations);
 
 	MPI_Barrier (MPI_COMM_WORLD);
 	MPI_Finalize ();

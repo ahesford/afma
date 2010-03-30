@@ -7,7 +7,6 @@
 
 #include "frechet.h"
 #include "measure.h"
-#include "excite.h"
 #include "mlfma.h"
 #include "cg.h"
 

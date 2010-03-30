@@ -9,32 +9,16 @@
 #include "itsolver.h"
 #include "measure.h"
 #include "frechet.h"
-#include "excite.h"
-
-static complex float *zwork, *zwcrt, *rcvgrf;
-
-complex float *bldfrechbuf (int size, measdesc *obs) {
-	long nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
-
-	zwork = malloc (2 * size * sizeof(complex float));
-	zwcrt = zwork + size;
-
-	rcvgrf = malloc (nelt * (long)(obs->count) * sizeof(complex float));
-
-	precompgrf (obs, rcvgrf);
-
-	return zwork;
-}
-
-void delfrechbuf (void) {
-	if (zwork) free (zwork);
-	if (rcvgrf) free (rcvgrf);
-}
 
 /* Computes a contribution to the Frechet derivative for one transmitter. */
 int frechet (complex float *crt, complex float *fld,
 		complex float *sol, measdesc *obs, solveparm *slv) {
 	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
+	complex float *zwork, *zwcrt;
+
+	/* Set up the workspaces. */
+	zwork = malloc (2L * nelt * sizeof(complex float));
+	zwcrt = zwork + nelt;
 
 	/* Given the test vector and field distribution, compute the currents. */
 	for (j = 0; j < nelt; ++j) zwcrt[j] = crt[j] * fld[j];
@@ -53,6 +37,7 @@ int frechet (complex float *crt, complex float *fld,
 	/* Compute the measured scattered field. */
 	farfield (zwork, obs, sol);
 
+	free (zwork);
 	return obs->count;
 }
 
@@ -60,13 +45,22 @@ int frechadj (complex float *mag, complex float *fld,
 		complex float *sol, measdesc *obs, solveparm *slv) {
 	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 	float factor = fmaconf.k0 * fmaconf.k0 * fmaconf.cellvol;
+	complex float *zwork, *smag, scale;
 
+	/* Temporary workspaces. */
+	zwork = malloc ((nelt + (long)obs->count) * sizeof(complex float));
+	smag = zwork + nelt;
+
+	/* Compensate incident field for FMM incoming signature scaling. */
+	scale = I * fmaconf.k0 * fmaconf.k0;
+
+	/* Conjugate for back-propagtion. Scale to compensate for
+	 * scaling of incoming far-field signature. */
 	for (j = 0; j < obs->count; ++j)
-		mag[j] = conj(mag[j]);
+		smag[j] = conj(mag[j]) / scale;
 
-	/* Compute the RHS for the provided magnitude distribution.
-	 * For now, the slow, direct calculation routine will be used. */
-	precomprhs (zwork, obs, mag, rcvgrf);
+	/* Compute the RHS for the provided magnitude distribution. */
+	ScaleME_setRootFarFld (obs->imat, zwork, &smag);
 
 	/* Compute the adjoint Frechet derivative field. */
 	cgmres (zwork, zwork, 1, slv);
@@ -75,8 +69,7 @@ int frechadj (complex float *mag, complex float *fld,
 	for (j = 0; j < nelt; ++j)
 		sol[j] += factor * conj (zwork[j] * fld[j]);
 
-	for (j = 0; j < obs->count; ++j)
-		mag[j] = conj(mag[j]);
+	free (zwork);
 
 	return fmaconf.numbases;
 }

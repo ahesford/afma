@@ -12,7 +12,6 @@
 #include "itsolver.h"
 #include "measure.h"
 #include "frechet.h"
-#include "excite.h"
 #include "direct.h"
 #include "mlfma.h"
 #include "io.h"
@@ -177,8 +176,6 @@ int main (int argc, char **argv) {
 	/* Read the measurements and compute their norm. */
 	getfields (inproj, field, obsmeas.count, srcmeas.count, &erninc);
 
-	bldfrechbuf (nelt, &obsmeas);
-
 	MPI_Barrier (MPI_COMM_WORLD);
 
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
@@ -282,9 +279,8 @@ int main (int argc, char **argv) {
 	free (fmaconf.radpats);
 	free (field);
 	if (error) free (error);
-	free (srcmeas.locations);
-	free (obsmeas.locations);
-	delfrechbuf ();
+	delmeas (&srcmeas);
+	delmeas (&obsmeas);
 
 	MPI_Barrier (MPI_COMM_WORLD);
 	MPI_Finalize ();

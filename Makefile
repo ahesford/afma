@@ -16,17 +16,18 @@ CFLAGS= $(OPTFLAGS) $(ARCHFLAGS) -Wall
 FFLAGS= $(OPTFLAGS) $(ARCHFLAGS) -Wall
 LFLAGS= $(OPTFLAGS) $(ARCHFLAGS)
 
-OBJS= fsgreen.o integrate.o mlfma.o itsolver.o direct.o \
-      excite.o io.o measure.o frechet.o cg.o
+FWDOBJS= main.o
+INVOBJS= frechet.o cg.o dbim.o
+OBJS= fsgreen.o integrate.o mlfma.o itsolver.o direct.o io.o measure.o
 
 all: adbim afma tissue
 	@echo "Building for Darwin (universal)."
 
-afma: main.o $(OBJS)
+afma: $(FWDOBJS) $(OBJS)
 	@echo "Building $@."
 	$(LD) $(DFLAGS) $(LFLAGS) -o $@ $^ $(LIBDIR) $(LIBS) $(ARCHLIBS)
 
-adbim: dbim.o $(OBJS)
+adbim: $(INVOBJS) $(OBJS)
 	@echo "Building $@."
 	$(LD) $(DFLAGS) $(LFLAGS) -o $@ $^ $(LIBDIR) $(LIBS) $(ARCHLIBS)
 
@@ -53,7 +54,7 @@ bluehive: afma adbim tissue
 	@echo "Building for Linux."
 
 clean:
-	rm -f $(OBJS) main.o dbim.o *.core core tissue.o
+	rm -f $(OBJS) $(FWDOBJS) $(INVOBJS) *.core core tissue.o
 
 distclean: clean
 	rm -f afma adbim tissue

@@ -6,9 +6,6 @@
 #include "measure.h"
 #include "itsolver.h"
 
-complex float *bldfrechbuf (int, measdesc *);
-void delfrechbuf (void);
-
 int frechet (complex float *, complex float *,
 		complex float *, measdesc *, solveparm *);
 int frechadj (complex float *, complex float *,
