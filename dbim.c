@@ -34,13 +34,13 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 	solveparm *hislv, solveparm *loslv, measdesc *src, measdesc *obs) {
 	complex float *rhs, *crt, *err, *fldptr;
 	float errnorm = 0, lerr, errd = 0;
-	int j;
+	int j, i, nit;
 	long k, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 
 	if (!error) err = malloc (obs->count * sizeof(complex float));
 	else err = error;
 
-	rhs = malloc (2 * nelt * sizeof(complex float));
+	rhs = malloc (2L * nelt * sizeof(complex float));
 	crt = rhs + nelt;
 
 	if (rn) memset (rn, 0, nelt * sizeof(complex float));
@@ -52,11 +52,12 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 		
 		MPI_Barrier (MPI_COMM_WORLD);
 		/* Run the iterative solver. The solution is stored in the RHS. */
-		cgmres (rhs, rhs, 1, hislv);
+		for (i = 0, nit = 1; i < hislv->restart && nit > 0; ++i)
+			nit = bicgstab (rhs, crt, i, hislv->maxit, hislv->epscg, 1);
 		
 		/* Convert total field into contrast current. */
 		for (k = 0; k < nelt; ++k)
-			crt[k] = rhs[k] * fmaconf.contrast[k];
+			crt[k] *= fmaconf.contrast[k];
 		
 		MPI_Barrier (MPI_COMM_WORLD);
 		
@@ -88,7 +89,7 @@ int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i, nmeas, dbimit[2], q, lfrog = 1, gsize[3];
 	complex float *rn, *crt, *field, *fldptr, *error;
-	float errnorm = 0, tolerance[2], regparm[4], cgnorm, erninc;
+	float errnorm = 0, tolerance[2], regparm[4], cgnorm, erninc, trange[2], prange[2];
 	solveparm hislv, loslv;
 	measdesc obsmeas, srcmeas, ssrc;
 	long nelt, j;
@@ -175,6 +176,19 @@ int main (int argc, char **argv) {
 
 	/* Read the measurements and compute their norm. */
 	getfields (inproj, field, obsmeas.count, srcmeas.count, &erninc);
+
+	/* Build the root interpolation matrix for measurements. */
+	ScaleME_buildRootInterpMat (obsmeas.imat, 6, obsmeas.ntheta,
+			obsmeas.nphi, obsmeas.trange, obsmeas.prange);
+
+	/* Build the root interpolation matrix for adjoint Frechet fields. Note the
+	 * angular shift since the incoming fields have to be flipped. */
+	trange[0] = M_PI - obsmeas.trange[0];
+	trange[1] = M_PI - obsmeas.trange[1];
+	prange[0] = M_PI + obsmeas.prange[0];
+	prange[1] = M_PI + obsmeas.prange[1];
+	ScaleME_buildRootInterpMat (obsmeas.imat + 1, 6,
+			obsmeas.ntheta, obsmeas.nphi, trange, prange);
 
 	MPI_Barrier (MPI_COMM_WORLD);
 

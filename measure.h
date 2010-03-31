@@ -7,7 +7,7 @@ typedef struct {
 	int count, ntheta, nphi;
 	float radius;
 	float prange[2], trange[2], *locations;
-	void *imat;
+	void *imat[2];
 } measdesc;
 
 int buildrhs (complex float *, float *);

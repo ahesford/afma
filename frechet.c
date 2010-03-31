@@ -28,7 +28,7 @@ int frechet (complex float *crt, complex float *fld,
 	ScaleME_applyParFMA (zwcrt, zwork);
 
 	/* Compute the Frechet derivative field. */
-	cgmres (zwork, zwork, 1, slv);
+	bicgstab (zwork, zwork, 0, slv->maxit, slv->epscg, 1);
 
 	/* Convert this into a current distribution. */
 	for (j = 0; j < nelt; ++j)
@@ -60,10 +60,10 @@ int frechadj (complex float *mag, complex float *fld,
 		smag[j] = conj(mag[j]) / scale;
 
 	/* Compute the RHS for the provided magnitude distribution. */
-	ScaleME_setRootFarFld (obs->imat, zwork, &smag);
+	ScaleME_setRootFarFld (obs->imat[1], zwork, &smag);
 
 	/* Compute the adjoint Frechet derivative field. */
-	cgmres (zwork, zwork, 1, slv);
+	bicgstab (zwork, zwork, 0, slv->maxit, slv->epscg, 1);
 
 	/* Augment the solution for this transmitter. */
 	for (j = 0; j < nelt; ++j)

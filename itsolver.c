@@ -51,7 +51,8 @@ static complex float pardot (complex float *x, complex float *y, long n) {
 	return dp;
 }
 
-int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float tol) {
+int bicgstab (complex float *rhs, complex float *sol,
+		int guess, int mit, float tol, int quiet) {
 	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 	int i, rank;
 	complex float *r, *rhat, *v, *p, *mvp, *t;
@@ -87,7 +88,7 @@ int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float 
 
 	/* Find the norm of the initial residual. */
 	err = sqrt(creal(pardot (r, r, nelt))) / rhn;
-	if (!rank) printf ("True residual: %g\n", err);
+	if (!rank && !quiet) printf ("True residual: %g\n", err);
 
 	/* Run iterations until convergence or the maximum is reached. */
 	for (i = 0; i < mit && err > tol; ++i) {
@@ -120,7 +121,7 @@ int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float 
 		/* Compute the scaled residual norm and stop if convergence
 		 * has been achieved. */
 		err = sqrt(creal(pardot (r, r, nelt))) / rhn;
-		if (!rank) printf ("BiCG-STAB(%0.1f): %g\n", 0.5 + i, err);
+		if (!rank && !quiet) printf ("BiCG-STAB(%0.1f): %g\n", 0.5 + i, err);
 		if (err < tol) break;
 
 		/* Compute the next search step, t = A * r. */
@@ -140,7 +141,7 @@ int bicgstab (complex float *rhs, complex float *sol, int guess, int mit, float 
 	
 		/* Compute the scaled residual norm. */
 		err = sqrt(creal(pardot (r, r, nelt))) / rhn;
-		if (!rank) printf ("BiCG-STAB(%d): %g\n", i + 1, err);
+		if (!rank && !quiet) printf ("BiCG-STAB(%d): %g\n", i + 1, err);
 	}
 
 	free (r);

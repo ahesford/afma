@@ -3,6 +3,7 @@
 
 #include "fsgreen.h"
 #include "integrate.h"
+#include "util.h"
 
 /* Three-point (per dimension) integration of the observer. */
 complex float rcvint (float k, float *src, float *obs, float dc, ifunc grf) {

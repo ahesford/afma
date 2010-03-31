@@ -22,6 +22,7 @@ int omp_unset_lock (omp_lock_t *x) { return 0; }
 
 #ifdef _FREEBSD
 #define log2(a) (log(a) / log(2))
+double complex cexp (double complex);
 #endif /* _FREEBSD */
 
 #endif /* __UTIL_H_ */

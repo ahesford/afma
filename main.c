@@ -119,7 +119,7 @@ int main (int argc, char **argv) {
 	ScaleME_postconf ();
 
 	/* Build the root interpolation matrix for measurements. */
-	ScaleME_buildRootInterpMat (&(obsmeas.imat), 6, obsmeas.ntheta,
+	ScaleME_buildRootInterpMat (obsmeas.imat, 6, obsmeas.ntheta,
 			obsmeas.nphi, obsmeas.trange, obsmeas.prange);
 
 	MPI_Barrier (MPI_COMM_WORLD);
@@ -143,7 +143,7 @@ int main (int argc, char **argv) {
 			/* BiCG-STAB restarts if the true residual differs from
 			 * the predicted residual. */
 			for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j)
-				nit = bicgstab (rhs, sol, j, solver.maxit, solver.epscg);
+				nit = bicgstab (rhs, sol, j, solver.maxit, solver.epscg, 0);
 		}
 		cputime = (double)clock() / CLOCKS_PER_SEC - cputime;
 		wtime = MPI_Wtime() - wtime;

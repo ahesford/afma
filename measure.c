@@ -51,7 +51,7 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 	complex float fact;
 
 	/* The result must be a pointer to the pointer. */
-	if (ScaleME_evlRootFarFld (obs->imat, currents, &result)) return 0;
+	if (ScaleME_evlRootFarFld (obs->imat[0], currents, &result)) return 0;
 
 	/* The far-field pattern already has a factor of k in the front.
 	 * However, the actual integral needs (k^2 / 4 pi), so we need the
@@ -67,7 +67,7 @@ int buildlocs (measdesc *desc) {
 	float theta, dtheta, dphi, phi, rst;
 
 	/* Clear the interpolation matrix pointer. */
-	desc->imat = NULL;
+	desc->imat[0] = desc->imat[1] = NULL;
 
 	desc->count = desc->ntheta * desc->nphi;
 
@@ -97,5 +97,6 @@ void delmeas (measdesc *desc) {
 	free (desc->locations);
 
 	/* Clear the root interpolation matrix, if applicable. */
-	if (desc->imat) ScaleME_delRootInterpMat (&(desc->imat));
+	if (desc->imat[0]) ScaleME_delRootInterpMat (desc->imat);
+	if (desc->imat[1]) ScaleME_delRootInterpMat (desc->imat + 1);
 }

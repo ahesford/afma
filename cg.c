@@ -44,7 +44,7 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 			/* Build the incident field. */
 			buildrhs (ifld, src->locations + 3 * i);
 			/* Solve for the internal field. */
-			cgmres (ifld, ifld, 1, slv);
+			bicgstab (ifld, ifld, 0, slv->maxit, slv->epscg, 1);
 			/* Compute the Frechet derivative. */
 			frechet (pn, ifld, scat, obs, slv);
 			/* Compute the adjoint Frechet derivative. */
@@ -128,7 +128,7 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 			/* Build the incident field. */
 			buildrhs (ifld, src->locations + 3 * i);
 			/* Solve for the internal field. */
-			cgmres (ifld, ifld, 1, slv);
+			bicgstab (ifld, ifld, 0, slv->maxit, slv->epscg, 1);
 			/* Compute the adjoint Frechet derivative. */
 			frechadj (mptr, ifld, adjcrt, obs, slv);
 		}
@@ -147,7 +147,7 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 			/* Build the incident field. */
 			buildrhs (ifld, src->locations + 3 * i);
 			/* Solve for the internal field. */
-			cgmres (ifld, ifld, 1, slv);
+			bicgstab (ifld, ifld, 0, slv->maxit, slv->epscg, 1);
 			/* Compute the adjoint Frechet derivative. */
 			frechet (adjcrt, ifld, mptr, obs, slv);
 		}
@@ -178,7 +178,7 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 		/* Build the incident field. */
 		buildrhs (ifld, src->locations + 3 * i);
 		/* Solve for the internal field. */
-		cgmres (ifld, ifld, 1, slv);
+		bicgstab (ifld, ifld, 0, slv->maxit, slv->epscg, 1);
 		/* The contribution to the adjoint Frechet derivative. */
 		frechadj (mptr, ifld, sol, obs, slv);
 	}
