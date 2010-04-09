@@ -17,17 +17,14 @@
 #include "io.h"
 #include "cg.h"
 
-extern complex float *rcvgrf;
-
-void usage (char *);
-float dbimerr (complex float *, complex float *, complex float *,
-		solveparm *, solveparm *, measdesc *, measdesc *);
+#include "util.h"
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-l] [-o <output prefix>] -i <input prefix>\n", name);
+	fprintf (stderr, "Usage: %s [-s #] [-r #] [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
-	fprintf (stderr, "\t-l: Disable default leapfrog (Kaczmarz-like) iterations\n");
+	fprintf (stderr, "\t-s #: The number of per-leap simultaneous views (default: 1)\n");
+	fprintf (stderr, "\t-r #: The number of iterations for spectral radius estimation (default: none)\n");
 }
 
 float dbimerr (complex float *error, complex float *rn, complex float *field,
@@ -85,11 +82,18 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 	return sqrt(errnorm / errd);
 }
 
+/* Establish the regularization parameter using an adapation of the
+ * Lavarello and Oelze method described in their 2009 DBIM paper. */
+float scalereg (float fact, float mse) {
+	return fact * mse * mse * mse;
+}
+
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, nmeas, dbimit[2], q, lfrog = 1, gsize[3];
-	complex float *rn, *crt, *field, *fldptr, *error;
-	float errnorm = 0, tolerance[2], regparm[4], cgnorm, erninc, trange[2], prange[2];
+	int mpirank, mpisize, i, nmeas, dbimit[2], q, stride = 1, gsize[3], specit = 0;
+	complex float *rn, *crt, *field, *fldptr, *error, *refct;
+	float errnorm = 0, tolerance[2], regparm[4], erninc,
+	      trange[2], prange[2], crtmse = 0.0, gamma;
 	solveparm hislv, loslv;
 	measdesc obsmeas, srcmeas, ssrc;
 	long nelt, j;
@@ -102,7 +106,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:l")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:s:r:")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -110,8 +114,11 @@ int main (int argc, char **argv) {
 		case 'o':
 			outproj = optarg;
 			break;
-		case 'l':
-			lfrog = 0;
+		case's':
+			stride = atoi(optarg);
+			break;
+		case 'r':
+			specit = atoi(optarg);
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -150,7 +157,7 @@ int main (int argc, char **argv) {
 	nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 
 	/* Allocate the RHS vector, residual vector and contrast. */
-	fmaconf.contrast = malloc (3 * nelt * sizeof(complex float));
+	fmaconf.contrast = malloc (3L * nelt * sizeof(complex float));
 	rn = fmaconf.contrast + nelt;
 	crt = rn + nelt;
 
@@ -162,6 +169,19 @@ int main (int argc, char **argv) {
 	sprintf (fname, "%s.guess", inproj);
 	getcontrast (fmaconf.contrast, fname, gsize,
 			fmaconf.bslist, fmaconf.numbases, fmaconf.bspbox);
+
+	/* Read the reference contrast for the local basis set. */
+	if (!mpirank)  fprintf (stderr, "Reading local portion of reference file.\n");
+	refct = malloc (nelt * sizeof(complex float));
+	sprintf (fname, "%s.reference", inproj);
+	/* If the reference file is not found, set the reference to NULL to avoid
+	 * checking the MSE at each step. */
+	if (!getcontrast (refct, fname, gsize, fmaconf.bslist,
+				fmaconf.numbases, fmaconf.bspbox)) {
+		free (refct);
+		refct = NULL;
+	}
+
 
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc ();
@@ -194,67 +214,79 @@ int main (int argc, char **argv) {
 
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
 
-	/* One source per iteration. */
-	ssrc.count = 1;
+	/* Set the number of per-leap transmissions. */
+	ssrc.count = stride = MAX(1,stride);
+	/* Allocate the transmitter specifications. */
+	ssrc.locations = malloc(3 * ssrc.count * sizeof(float));
+	/* Blank the interpolation matrices. */
+	ssrc.imat[0] = ssrc.imat[1] = NULL;
 
-	/* The error storage vector for a single transmitter. */
-	error = malloc (obsmeas.count * sizeof(complex float));
+	/* The error storage vector for a single transmitter group. */
+	error = malloc (ssrc.count * obsmeas.count * sizeof(complex float));
+
+	/* Calculate the spectral radius, if desired. */
+	if (specit > 0) {
+		if (!mpirank) fprintf (stderr, "Spectral radius estimation (%d iterations)\n", specit);
+		gamma = specrad (specit, &loslv, &srcmeas, &obsmeas);
+		if (!mpirank) fprintf (stderr, "Spectral radius: %g\n", gamma);
+		regparm[0] *= gamma;
+		regparm[1] *= gamma;
+		regparm[2] *= gamma;
+	}
 
 	/* Start a two-pass DBIM with low tolerances first. */
 	if (!mpirank) fprintf (stderr, "First DBIM pass (%d iterations)\n", dbimit[0]);
-	for (i = 0; i < dbimit[0]; ++i) {
-		if (lfrog) {
-			/* Use the leapfrogging (Kaczmarz-like) method. */
-			for (q = 0, fldptr = field; q < srcmeas.count; ++q, fldptr += obsmeas.count) {
-				ssrc.locations = srcmeas.locations + 3 * q;
-				errnorm = dbimerr (error, NULL, fldptr, &hislv, &loslv, &ssrc, &obsmeas);
-				
-				/* Solve the system with CG for minimum norm. */
-				cgnorm = cgmn (error, crt, &loslv, &ssrc, &obsmeas, regparm[0]);
-				
-				if (!mpirank)
-					fprintf (stderr, "DBIM: %g, CG: %g (%d/%d).\n", errnorm, cgnorm, i, q);
-				
-				/* Update the background. */
-				for (j = 0; j < nelt; ++j)
-					fmaconf.contrast[j] += crt[j];
-				
-				sprintf (fname, "%s.inverse.t%03d", outproj, q);
-				prtcontrast (fname, fmaconf.contrast, gsize,
-						fmaconf.bslist, fmaconf.numbases, fmaconf.bspbox);
-			}
+	for (i = 0, gamma = regparm[0]; i < dbimit[0]; ++i) {
+		/* Use the leapfrogging (Kaczmarz-like) method. */
+		for (q = 0; q < srcmeas.count; q += stride) {
+			fldptr = field + q * obsmeas.count;
 			
-			if (!mpirank) fprintf (stderr, "Reassess DBIM error.\n");
-			errnorm = dbimerr (NULL, NULL, field, &hislv, &loslv, &srcmeas, &obsmeas);
-		} else {
-			errnorm = dbimerr (NULL, rn, field, &hislv, &loslv, &srcmeas, &obsmeas);
-			/* Solve the system with CG for least squares. */
-			cgnorm = cgls (rn, crt, &loslv, &srcmeas, &obsmeas, regparm[0]);
+			/* Don't use more transmitters than available. */
+			ssrc.count = MIN(srcmeas.count - q, stride);
+			
+			/* Set the transmitter locations. */
+			memcpy (ssrc.locations, srcmeas.locations + 3 * q, 3 * ssrc.count * sizeof(float));
+			errnorm = dbimerr (error, NULL, fldptr, &hislv, &loslv, &ssrc, &obsmeas);
+			
+			/* Solve the system with CG for minimum norm. */
+			cgmn (error, crt, &loslv, &ssrc, &obsmeas, gamma);
 			
 			/* Update the background. */
-			for (j = 0; j < nelt; ++j) fmaconf.contrast[j] += crt[j];
+			for (j = 0; j < nelt; ++j)
+				fmaconf.contrast[j] += crt[j];
+
+			if (refct) crtmse = mse (fmaconf.contrast, refct, nelt);
+			
+			if (!mpirank)
+				fprintf (stderr, "Sub-iteration %d/%d: RRE: %g, MSE: %g\n", i, q, errnorm, crtmse);
 		}
-		
+			
+		if (!mpirank) fprintf (stderr, "Reassess DBIM error.\n");
+		errnorm = dbimerr (NULL, NULL, field, &hislv, &loslv, &srcmeas, &obsmeas);
+
 		sprintf (fname, "%s.inverse.%03d", outproj, i);
 		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist,
 				fmaconf.numbases, fmaconf.bspbox);
 		
-		if (!mpirank)
-			fprintf (stderr, "DBIM relative error: %g, iteration %d.\n", errnorm, i);
+		if (refct) crtmse = mse (fmaconf.contrast, refct, nelt);
+		
+		if (!mpirank) fprintf (stderr, "Iteration %d: RRE: %g, MSE: %g\n", i, errnorm, crtmse);
 		if (errnorm < tolerance[0]) break;
 		
-		/* Scale the DBIM regularization parameter, if appropriate. */
-		if (!((i + 1) % (int)(regparm[3])) && regparm[0] > regparm[1]) {
-			regparm[0] *= regparm[2];
-			if (!mpirank)
-				fprintf (stderr, "Regularization parameter: %g\n", regparm[0]);
-		}
+		/* Skip regularization adjustment unless the skip count has
+		 * been met or the parameter is already small enough. */
+		if ((i + 1) % (int)(regparm[3]) || gamma <= regparm[1]) continue;
+	
+		/* Perform scaling of the regularization parameter. */
+		gamma = scalereg(regparm[0], errnorm);
+		if (!mpirank)
+			fprintf (stderr, "Regularization parameter: %g\n", gamma);
 	}
 
 	free (error);
 	error = NULL;
 
-	/* More iterations at high accuracy, without leapfrogging. */
+	/* Conduct non-leapfrog iterations now. */
 	if (i < dbimit[0]) ++i;
 
 	/* If the number of measurements is less than the number of pixels,
@@ -262,16 +294,16 @@ int main (int argc, char **argv) {
 	if (nmeas < fmaconf.gnumbases) error = malloc (nmeas * sizeof(complex float));
 
 	if (!mpirank) fprintf (stderr, "Second DBIM pass (%d iterations)\n", dbimit[1]);
-	for (dbimit[1] += i; i < dbimit[1]; ++i) {
-		errnorm = cgnorm = 0;
+	for (dbimit[1] += i, gamma = regparm[2]; i < dbimit[1]; ++i) {
+		errnorm = 0;
 		if (nmeas < fmaconf.gnumbases) {
 			/* Find the minimum-norm solution. */
-			errnorm = dbimerr (error, NULL, field, &hislv, &hislv, &srcmeas, &obsmeas);
-			cgnorm = cgmn (error, crt, &hislv, &srcmeas, &obsmeas, regparm[1]);
+			errnorm = dbimerr (error, NULL, field, &hislv, &loslv, &srcmeas, &obsmeas);
+			cgmn (error, crt, &loslv, &srcmeas, &obsmeas, gamma);
 		} else {
 			/* Find the least-squares solution. */
-			errnorm = dbimerr (NULL, rn, field, &hislv, &hislv, &srcmeas, &obsmeas);
-			cgnorm = cgls (rn, crt, &hislv, &srcmeas, &obsmeas, regparm[1]);
+			errnorm = dbimerr (NULL, rn, field, &hislv, &loslv, &srcmeas, &obsmeas);
+			cgls (rn, crt, &loslv, &srcmeas, &obsmeas, gamma);
 		}
 		
 		for (j = 0; j < nelt; ++j) fmaconf.contrast[j] += crt[j];
@@ -280,9 +312,19 @@ int main (int argc, char **argv) {
 		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist,
 				fmaconf.numbases, fmaconf.bspbox);
 
-		if (!mpirank)
-			fprintf (stderr, "DBIM: %g, CG: %g (%d).\n", errnorm, cgnorm, i);
+		if (refct) crtmse = mse (fmaconf.contrast, refct, nelt);
+		
+		if (!mpirank) fprintf (stderr, "Iteration %d: RRE: %g, MSE: %g\n", i, errnorm, crtmse);
 		if (errnorm < tolerance[1]) break;
+
+		/* Skip regularization adjustment unless the skip count has
+		 * been met or the parameter is already small enough. */
+		if ((i + 1) % (int)(regparm[3]) || gamma <= regparm[1]) continue;
+
+		/* Perform scaling of the regularization parameter. */
+		gamma = scalereg(regparm[2], errnorm);
+		if (!mpirank)
+			fprintf (stderr, "Regularization parameter: %g\n", gamma);
 	}
 
 	ScaleME_finalizeParHostFMA ();
@@ -295,6 +337,9 @@ int main (int argc, char **argv) {
 	if (error) free (error);
 	delmeas (&srcmeas);
 	delmeas (&obsmeas);
+	delmeas (&ssrc);
+
+	if (refct) free (refct);
 
 	MPI_Barrier (MPI_COMM_WORLD);
 	MPI_Finalize ();

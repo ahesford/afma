@@ -18,7 +18,7 @@ LFLAGS= $(OPTFLAGS) $(ARCHFLAGS)
 
 FWDOBJS= main.o
 INVOBJS= frechet.o cg.o dbim.o
-OBJS= fsgreen.o integrate.o mlfma.o itsolver.o direct.o io.o measure.o
+OBJS= fsgreen.o integrate.o mlfma.o itsolver.o direct.o io.o measure.o util.o
 
 all: adbim afma tissue
 	@echo "Building for Darwin (universal)."

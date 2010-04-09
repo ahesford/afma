@@ -14,11 +14,16 @@
 
 /* Slow computation of incident field for a single source. */
 int buildrhs (complex float *rhs, float *srcloc) {
-	int i, j, idx[3];
-	float ctr[3], off[3];
+#pragma omp parallel default(shared)
+{
 	complex float *rptr;
+	float ctr[3], off[3];
+	int i, j, idx[3];
 
-	for (rptr = rhs, i = 0; i < fmaconf.numbases; ++i) {
+#pragma omp for
+	for (i = 0; i < fmaconf.numbases; ++i) {
+		rptr = rhs + i * fmaconf.bspboxvol;
+
 		/* Find the center of the group. */
 		bscenter (fmaconf.bslist[i], off);
 
@@ -41,6 +46,7 @@ int buildrhs (complex float *rhs, float *srcloc) {
 			*rptr = fsplane (fmaconf.k0, ctr, srcloc) / (4 * M_PI);
 		}
 	}
+}
 
 	return 0;
 }

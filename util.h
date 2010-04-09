@@ -25,4 +25,6 @@ int omp_unset_lock (omp_lock_t *x) { return 0; }
 double complex cexp (double complex);
 #endif /* _FREEBSD */
 
+float mse (complex float *, complex float *, long);
+
 #endif /* __UTIL_H_ */

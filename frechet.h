@@ -10,5 +10,6 @@ int frechet (complex float *, complex float *,
 		complex float *, measdesc *, solveparm *);
 int frechadj (complex float *, complex float *,
 		complex float *, measdesc *, solveparm *);
+float specrad (int, solveparm *, measdesc *, measdesc *);
 
 #endif /* __FRECHET_H_ */
