@@ -93,7 +93,7 @@ int main (int argc, char **argv) {
 	int mpirank, mpisize, i, nmeas, dbimit[2], q, stride = 1, gsize[3], specit = 0;
 	complex float *rn, *crt, *field, *fldptr, *error, *refct;
 	float errnorm = 0, tolerance[2], regparm[4], erninc,
-	      trange[2], prange[2], crtmse = 0.0, gamma;
+	      trange[2], prange[2], crtmse = 0.0, gamma, sigma = 1.0;
 	solveparm hislv, loslv;
 	measdesc obsmeas, srcmeas, ssrc;
 	long nelt, j;
@@ -225,13 +225,13 @@ int main (int argc, char **argv) {
 	error = malloc (ssrc.count * obsmeas.count * sizeof(complex float));
 
 	/* Calculate the spectral radius, if desired. */
-	if (specit > 0) {
+	if (specit > 0 && dbimit[0] > 0) {
 		if (!mpirank) fprintf (stderr, "Spectral radius estimation (%d iterations)\n", specit);
-		gamma = specrad (specit, &loslv, &srcmeas, &obsmeas);
-		if (!mpirank) fprintf (stderr, "Spectral radius: %g\n", gamma);
-		regparm[0] *= gamma;
-		regparm[1] *= gamma;
-		regparm[2] *= gamma;
+		sigma = specrad (specit, &loslv, &srcmeas, &obsmeas);
+		if (!mpirank) fprintf (stderr, "Spectral radius: %g\n", sigma);
+		regparm[0] *= sigma;
+		regparm[1] *= sigma;
+		regparm[2] *= sigma;
 	}
 
 	/* Start a two-pass DBIM with low tolerances first. */
@@ -293,8 +293,24 @@ int main (int argc, char **argv) {
 	 * use the minimum-norm conjugate gradient. */
 	if (nmeas < fmaconf.gnumbases) error = malloc (nmeas * sizeof(complex float));
 
+	/* Recalculate the spectral radius, if desired. */
+	if (specit > 0 && dbimit[1] > 0) {
+		regparm[0] /= sigma;
+		regparm[1] /= sigma;
+		regparm[2] /= sigma;
+		if (!mpirank) fprintf (stderr, "Spectral radius estimation (%d iterations)\n", specit);
+		sigma = specrad (specit, &loslv, &srcmeas, &obsmeas);
+		if (!mpirank) fprintf (stderr, "Spectral radius: %g\n", sigma);
+		regparm[0] *= sigma;
+		regparm[1] *= sigma;
+		regparm[2] *= sigma;
+	}
+
+	/* Set the regularization parameter for the next set of iterations. */
+	gamma = scalereg(regparm[2], errnorm);
+
 	if (!mpirank) fprintf (stderr, "Second DBIM pass (%d iterations)\n", dbimit[1]);
-	for (dbimit[1] += i, gamma = regparm[2]; i < dbimit[1]; ++i) {
+	for (dbimit[1] += i; i < dbimit[1]; ++i) {
 		errnorm = 0;
 		if (nmeas < fmaconf.gnumbases) {
 			/* Find the minimum-norm solution. */
