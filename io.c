@@ -64,10 +64,10 @@ void getdbimcfg (char *fname, int *maxit, float *regparm, float *tol) {
 
 /* Read the configuration file and set parameters. */
 void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
-		measdesc *src, measdesc *obs) {
+		measdesc *src, measdesc *obs, int obscount) {
 	FILE *fp;
 	char buf[1024];
-	int nmax, nbox;
+	int nmax, nbox, i;
 
 	if (!(fp = fopen (fname, "r"))) {
 		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
@@ -150,10 +150,9 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 		sscanf (buf, "%d %d %f", &(loslv->maxit),
 				&(loslv->restart), &(loslv->epscg));
 
-	/* Read the source radius. */
+	/* Read the source radius and ignore it since plane waves are used. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f", &(src->radius));
 
 	/* Read the source theta values. */
 	skipcomments (fp);
@@ -173,28 +172,30 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	src->prange[0] *= M_PI / 180;
 	src->prange[1] *= M_PI / 180;
 
-	/* Read the observer radius. */
+	/* Read the observer radius and skip it since plane waves are used. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f", &(obs->radius));
 
-	/* Read the observer theta values. */
-	skipcomments (fp);
-	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %d", obs->trange, obs->trange + 1, &(obs->ntheta));
-
-	/* Convert the degree values to radians. */
-	obs->trange[0] *= M_PI / 180;
-	obs->trange[1] *= M_PI / 180;
-
-	/* Read the observer phi values. */
-	skipcomments (fp);
-	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %d", obs->prange, obs->prange + 1, &(obs->nphi));
-
-	/* Convert the degree values to radians. */
-	obs->prange[0] *= M_PI / 180;
-	obs->prange[1] *= M_PI / 180;
+	/* Read the specified number of observation configurations. */
+	for (i = 0; i < obscount && !feof(fp); ++i) {
+		/* Read the observer theta values. */
+		skipcomments (fp);
+		fgets (buf, 1024, fp);
+		sscanf (buf, "%f %f %d", obs[i].trange, obs[i].trange + 1, &(obs[i].ntheta));
+		
+		/* Convert the degree values to radians. */
+		obs[i].trange[0] *= M_PI / 180;
+		obs[i].trange[1] *= M_PI / 180;
+		
+		/* Read the observer phi values. */
+		skipcomments (fp);
+		fgets (buf, 1024, fp);
+		sscanf (buf, "%f %f %d", obs[i].prange, obs[i].prange + 1, &(obs[i].nphi));
+		
+		/* Convert the degree values to radians. */
+		obs[i].prange[0] *= M_PI / 180;
+		obs[i].prange[1] *= M_PI / 180;
+	}
 
 	fclose (fp);
 }
@@ -419,14 +420,18 @@ int getfields (char *inproj, complex float *field, int nobs, int nsrc, float *nr
 	complex float *fldptr;
 	int i, j;
 	float lerr;
-	char fname[1024];
+	char fname[1024], fmt[1024];
+
+	/* Find the width of the integer label in the field name. */
+	j = (int)ceil(log10(nsrc));
+	sprintf (fmt, "%%s.tx%%0%dd.field", j);
 
 	/* The initial norm of the matrix is zero, if it is desired. */
 	if (nrm) *nrm = 0;
 
 	/* Read each column of the matrix and compute the norm. */
 	for (fldptr = field, i = 0; i < nsrc; ++i, fldptr += nobs) {
-		sprintf (fname, "%s.%d.field", inproj, i);
+		sprintf (fname, fmt, inproj, i);
 		readfld (fldptr, fname, nobs);
 
 		/* If the norm isn't desired, don't comput anything else. */

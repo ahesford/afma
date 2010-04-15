@@ -14,27 +14,29 @@
 #include "measure.h"
 #include "direct.h"
 #include "mlfma.h"
+#include "util.h"
 #include "io.h"
 
 void usage (char *);
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-d] [-o <output prefix>] -i <input prefix>\n", name);
+	fprintf (stderr, "Usage: %s [-d] [-r #] [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
 	fprintf (stderr, "\t-d: Debug mode (prints RHS and induced currents)\n");
 	fprintf (stderr, "\t-g: Use GMRES instead of BiCG-STAB\n");
+	fprintf (stderr, "\t-r: Specify the number of observation configurations\n");
 }
 
 int main (int argc, char **argv) {
-	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, j, nit, gmr = 0, gsize[3];
+	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024], fldfmt[1024];
+	int mpirank, mpisize, i, j, k, nit, gmr = 0, gsize[3], obscount = 1;
 	complex float *rhs, *sol, *field;
 	double cputime, wtime;
-	int debug = 0;
+	int debug = 0, maxobs;
 	long nelt;
 
-	measdesc obsmeas, srcmeas;
+	measdesc *obsmeas, srcmeas;
 	solveparm solver;
 
 	MPI_Init (&argc, &argv);
@@ -47,7 +49,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:dg")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:dgr:")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -60,6 +62,9 @@ int main (int argc, char **argv) {
 			break;
 		case 'g':
 			gmr = 1;
+			break;
+		case 'r':
+			obscount = atoi(optarg);
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -76,14 +81,17 @@ int main (int argc, char **argv) {
 
 	if (!mpirank) fprintf (stderr, "Reading configuration file.\n");
 
+	/* Allocate the observation configurations. */
+	obsmeas = calloc (obscount, sizeof(measdesc));
+
 	/* Read the basic configuration. */
 	sprintf (fname, "%s.input", inproj);
-	getconfig (fname, &solver, NULL, &srcmeas, &obsmeas);
+	getconfig (fname, &solver, NULL, &srcmeas, obsmeas, obscount);
 
 	/* Convert the source range format to an explicit location list. */
 	buildlocs (&srcmeas);
 	/* Do the same for the observation locations. */
-	buildlocs (&obsmeas);
+	for (i = 0; i < obscount; ++i) buildlocs (obsmeas + i);
 
 	/* Initialize ScaleME and find the local basis set. */
 	ScaleME_preconf ();
@@ -96,7 +104,9 @@ int main (int argc, char **argv) {
 	/* Allocate the local portion of the contrast storage. */
 	fmaconf.contrast = malloc (nelt * sizeof(complex float));
 	/* Allocate the observation array. */
-	field = malloc (obsmeas.count * sizeof(complex float));
+	for (i = 1, maxobs = obsmeas->count; i < obscount; ++i)
+		maxobs = MAX(maxobs, obsmeas[i].count);
+	field = malloc (maxobs * sizeof(complex float));
 
 	/* Store the grid size for printing of field values. */
 	gsize[0] = fmaconf.nx; gsize[1] = fmaconf.ny; gsize[2] = fmaconf.nz;
@@ -119,14 +129,26 @@ int main (int argc, char **argv) {
 	ScaleME_postconf ();
 
 	/* Build the root interpolation matrix for measurements. */
-	ScaleME_buildRootInterpMat (obsmeas.imat, 6, obsmeas.ntheta,
-			obsmeas.nphi, obsmeas.trange, obsmeas.prange);
+	for (i = 0; i < obscount; ++i) 
+		ScaleME_buildRootInterpMat (obsmeas[i].imat, 6, obsmeas[i].ntheta,
+				obsmeas[i].nphi, obsmeas[i].trange, obsmeas[i].prange);
 
-	MPI_Barrier (MPI_COMM_WORLD);
+	/* Find the width of the integer label in the field name. */
+	i = (int)ceil(log10(srcmeas.count));
+	if (obscount < 2)
+		sprintf (fldfmt, "%%s.tx%%0%dd.field", i);
+	else {
+		j = (int)ceil(log10(obscount));
+		sprintf (fldfmt, "%%s.tx%%0%dd.rx%%0%dd.field", i, j);
+	}
 
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
 	
+	/* Ensure each process is waiting at the start of the loop. */
+	MPI_Barrier (MPI_COMM_WORLD);
+	
 	for (i = 0; i < srcmeas.count; ++i) {
+
 		if (!mpirank)
 			fprintf (stderr, "Running simulation for source %d.\n", i + 1);
 		/* Build the right-hand side for the specified location. */
@@ -165,12 +187,15 @@ int main (int argc, char **argv) {
 		/* Convert total field into contrast current. */
 		for (j = 0; j < nelt; ++j) sol[j] *= fmaconf.contrast[j];
 
-		farfield (sol, &obsmeas, field);
-
-		/* Append the field for the current transmitter. */
-		if (!mpirank) {
-			sprintf (fname, "%s.%d.field", outproj, i);
-			writefld (fname, &obsmeas, field);
+		/* Compute and write out all observation fields. */
+		for (k = 0; k < obscount; ++k) {
+			farfield (sol, obsmeas + k, field);
+			
+			/* Append the field for the current transmitter. */
+			if (!mpirank) {
+				sprintf (fname, fldfmt,  outproj, i, k);
+				writefld (fname, obsmeas + k, field);
+			}
 		}
 	}
 
@@ -178,7 +203,8 @@ int main (int argc, char **argv) {
 
 	freedircache ();
 	delmeas (&srcmeas);
-	delmeas (&obsmeas);
+	for (i = 0; i < obscount; ++i) delmeas (obsmeas + i);
+	free (obsmeas);
 
 	free (rhs);
 	free (field);

@@ -135,9 +135,9 @@ int main (int argc, char **argv) {
 
 	if (!mpirank) fprintf (stderr, "Reading configuration file.\n");
 
-	/* Read the basic configuration. */
+	/* Read the basic configuration for only one observation shell. */
 	sprintf (fname, "%s.input", inproj);
-	getconfig (fname, &hislv, &loslv, &srcmeas, &obsmeas);
+	getconfig (fname, &hislv, &loslv, &srcmeas, &obsmeas, 1);
 
 	/* Read the DBIM-specific configuration. */
 	sprintf (fname, "%s.dbimin", inproj);
