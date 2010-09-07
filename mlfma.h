@@ -2,6 +2,7 @@
 #define __MLFMA_H_
 
 #include <complex.h>
+#include <math.h>
 #include <fftw3.h>
 
 typedef struct {
@@ -10,7 +11,7 @@ typedef struct {
 	int nx, ny, nz, gnumbases, numbases;
 	int bspbox, maxlev, numbuffer, interpord, toplev, bspboxvol;
 	int fo2iterm, fo2iord, fo2iosr;
-	int *bslist, nsamp;
+	int *bslist, nsamp, acarank;
 	float k0;
 	complex float *contrast, *radpats;
 } fmadesc;

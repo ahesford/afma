@@ -25,6 +25,13 @@ int omp_unset_lock (omp_lock_t *x) { return 0; }
 double complex cexp (double complex);
 #endif /* _FREEBSD */
 
+float sinc (float);
 float mse (complex float *, complex float *, long);
+
+int sampcoords (float *, int, float *, int, int);
+int cellcoords (float *, int, int, float);
+
+int inset (int, int *, int);
+int maxind (complex float *, int, int *, int);
 
 #endif /* __UTIL_H_ */
