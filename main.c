@@ -20,12 +20,13 @@
 void usage (char *);
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-d] [-r #] [-o <output prefix>] -i <input prefix>\n", name);
+	fprintf (stderr, "Usage: %s [-d] [-r #] [-a #] [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
 	fprintf (stderr, "\t-d: Debug mode (prints RHS and induced currents)\n");
 	fprintf (stderr, "\t-g: Use GMRES instead of BiCG-STAB\n");
 	fprintf (stderr, "\t-r: Specify the number of observation configurations\n");
+	fprintf (stderr, "\t-a: Use ACA with specified tolerance for far-field transformations\n");
 }
 
 int main (int argc, char **argv) {
@@ -35,6 +36,7 @@ int main (int argc, char **argv) {
 	double cputime, wtime;
 	int debug = 0, maxobs;
 	long nelt;
+	float acatol = -1;
 
 	measdesc *obsmeas, srcmeas;
 	solveparm solver;
@@ -49,7 +51,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:dgr:")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:dgr:a:")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -65,6 +67,9 @@ int main (int argc, char **argv) {
 			break;
 		case 'r':
 			obscount = atoi(optarg);
+			break;
+		case 'a':
+			acatol = atof(optarg);
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -94,7 +99,7 @@ int main (int argc, char **argv) {
 	for (i = 0; i < obscount; ++i) buildlocs (obsmeas + i);
 
 	/* Initialize ScaleME and find the local basis set. */
-	ScaleME_preconf ();
+	ScaleME_preconf (acatol > 0);
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
 
 	nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
@@ -121,7 +126,7 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Wall time for contrast read: %0.6g\n", wtime);
 
 	/* Precalculate some values for the FMM and direct interactions. */
-	fmmprecalc ();
+	fmmprecalc (acatol);
 	i = dirprecalc ();
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
 

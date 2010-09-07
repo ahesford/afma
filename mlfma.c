@@ -33,6 +33,8 @@ fmadesc fmaconf;
 
 static int farmatrow (complex float *, float, float *, float, int);
 static int farmatcol (complex float *, float, float *, float *, int, int);
+static int acabuild (complex float **, float, float, float *, int, int, float, int);
+static int fullbuild (complex float **, float, float *, int, int, float, int);
 
 /* Computes the far-field pattern for the specified group with the specified
  * center, and stores the output in a provided vector. sgn is positive for
@@ -42,6 +44,42 @@ static int farmatcol (complex float *, float, float *, float *, int, int);
  * same affine grid. The center of the finest-level FMM group coincides with
  * the single FMM basis function contained therein. */
 void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn) {
+	complex float fact, beta = 1.0, *crt = (complex float *)vcrt,
+		*pat = *((complex float **)vpat);
+
+	if (sgn >= 0) {
+		/* Scalar factors for the matrix multiplication. */
+		fact = fmaconf.k0 * fmaconf.cellvol;
+
+		/* Don't add in the existing output vector since it should
+		 * have been zeroed anyway. */
+		beta = 0.0;
+
+		/* Perform the matrix-vector product. */
+		cblas_cgemv (CblasColMajor, CblasNoTrans, fmaconf.nsamp,
+				fmaconf.bspboxvol, &fact, fmaconf.radpats, 
+				fmaconf.nsamp, crt, 1, &beta, pat, 1);
+	} else {
+		/* Distribute the far-field patterns to the basis functions. */
+		/* Scalar factors for the matrix multiplication. */
+		fact = I * fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
+
+		/* Perform the matrix-vector product. */
+		cblas_cgemv (CblasColMajor, CblasConjTrans, fmaconf.nsamp,
+				fmaconf.bspboxvol, &fact, fmaconf.radpats,
+				fmaconf.nsamp, pat, 1, &beta, crt, 1);
+	}
+}
+
+/* Computes the far-field pattern for the specified group with the specified
+ * center, and stores the output in a provided vector. sgn is positive for
+ * radiation pattern and negative for receiving pattern. The list of "basis
+ * functions" and center are ignored, since the calling program ensures each
+ * FMM basis function is actually a single group of gridded elements with the
+ * same affine grid. The center of the finest-level FMM group coincides with
+ * the single FMM basis function contained therein. ACA is used to approximate
+ * the matrix for efficient computations. */
+void acafarpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn) {
 	complex float fact, beta = 1.0, *crt = (complex float *)vcrt,
 		*pat = *((complex float **)vpat), *work, *u, *v;
 
@@ -97,6 +135,7 @@ static int farmatcol (complex float *col, float k, float *rmc,
 {
 	float s[3];
 	int i;
+#pragma omp for
 	for (i = 0; i < nsamp; ++i) {
 		/* Compute the Cartesian coordinates of the far-field sample. */
 		sampcoords (s, i, thetas, ntheta, nphi);
@@ -130,7 +169,7 @@ static int farmatrow (complex float *row, float k, float *s, float dx, int bpd) 
 }
 
 /* Construct an ACA approximation to the far-field signature matrix. */
-int acabuild (complex float **mats, float k0, float tol, float *thetas,
+static int acabuild (complex float **mats, float k0, float tol, float *thetas,
 		int ntheta, int nphi, float dx, int bpd) {
 	int maxrank, *irow, *icol, i, j, k,
 	    nsamp = (ntheta - 2) * nphi + 2, nelt = bpd * bpd * bpd;
@@ -233,9 +272,30 @@ int acabuild (complex float **mats, float k0, float tol, float *thetas,
 	return maxrank;
 }
 
+static int fullbuild (complex float **mats, float k0, float *thetas,
+		int ntheta, int nphi, float dx, int bpd) {
+	int nsamp = (ntheta - 2) * nphi + 2, nelt = bpd * bpd * bpd, l;
+	complex float *col;
+	float dist[3];
+
+	/* Allocate the full far-field matrix. */
+	*mats = malloc(nsamp * nelt * sizeof(complex float));
+
+	/* Loop through all columns (source grid elements). */
+	for (l = 0, col = *mats; l < nelt; ++l, col += nsamp) {
+		/* The relative position of the source grid element. */
+		cellcoords (dist, l, bpd, dx);
+
+		/* Build the corresponding matrix column. */
+		farmatcol (col, k0, dist, thetas, ntheta, nphi);
+	}
+
+	return nelt * nsamp;
+}
+
 /* Precomputes the near interactions for redundant calculations and sets up
  * the wave vector directions to be used for fast calculation of far-field patterns. */
-int fmmprecalc () {
+int fmmprecalc (float acatol) {
 	float *thetas;
 	int ntheta, nphi, rank, i;
 
@@ -247,23 +307,30 @@ int fmmprecalc () {
 	thetas = malloc (ntheta * sizeof(float));
 	/* Populate the theta array. */
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, thetas, NULL);
-
-	/* Convert the theta samples to angular values rather than cosine angles. */
+	
+	/* Convert the theta samples from the cosines of the angles to the angles. */
 	for (i = 0; i < ntheta; ++i) thetas[i] = acos(thetas[i]);
 
+
 	/* Build the ACA approximation to far-field matrices. */
-	fmaconf.acarank = acabuild (&(fmaconf.radpats), fmaconf.k0, 1e-6, thetas,
-			ntheta, nphi, fmaconf.cell, fmaconf.bspbox);
+	if (acatol > 0) {
+		fmaconf.acarank = acabuild (&(fmaconf.radpats), fmaconf.k0, acatol,
+				thetas, ntheta, nphi, fmaconf.cell, fmaconf.bspbox);
+		fprintf (stderr, "Rank %d: Radiation pattern matrix rank: %d\n", rank, fmaconf.acarank);
+	} else {
+		fmaconf.acarank = 0;
+		i = fullbuild (&(fmaconf.radpats), fmaconf.k0, thetas,
+				ntheta, nphi, fmaconf.cell, fmaconf.bspbox);
+		fprintf (stderr, "Rank %d: Radiation pattern matrix element count: %d\n", rank, i);
+	}
 
 	free (thetas);
-
-	fprintf (stderr, "Rank %d: Radiation pattern matrix rank: %d\n", rank, fmaconf.acarank);
 
 	return fmaconf.acarank;
 }
 
 /* initialisation and finalisation routines for ScaleME */
-int ScaleME_preconf (void) {
+int ScaleME_preconf (int useaca) {
 	int error;
 	float len, cen[3];
 	
@@ -310,7 +377,8 @@ int ScaleME_preconf (void) {
 
 	/* Use the external near-field interactions. */
 	ScaleME_setBlockDirInterFunc (blockinteract);
-	ScaleME_useExternFarField (farpattern);
+	if (useaca) ScaleME_useExternFarField (acafarpattern);
+	else ScaleME_useExternFarField (farpattern);
 
 	/* Finish the setup with the external interactions. */
 	error = ScaleME_initSetUp (MPI_COMM_WORLD, NULL, NULL, NULL, bscenter);
