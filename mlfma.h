@@ -2,6 +2,7 @@
 #define __MLFMA_H_
 
 #include <complex.h>
+#include <math.h>
 #include <fftw3.h>
 
 typedef struct {
@@ -10,7 +11,7 @@ typedef struct {
 	int nx, ny, nz, gnumbases, numbases;
 	int bspbox, maxlev, numbuffer, interpord, toplev, bspboxvol;
 	int fo2iterm, fo2iord, fo2iosr;
-	int *bslist, nsamp;
+	int *bslist, nsamp, acarank;
 	float k0;
 	complex float *contrast, *radpats;
 } fmadesc;
@@ -33,11 +34,13 @@ static inline void bscenter (int gi, float *cen) {
 	cen[2] = fmaconf.min[2] + ((float)idx[2] + 0.5) * fmaconf.grplen;
 }
 
+void acafarpattern (int, int *, void *, void *, float *, int);
 void farpattern (int, int *, void *, void *, float *, int);
-int fmmprecalc ();
+
+int fmmprecalc (float);
 
 /* initialisation and finalisation routines for ScaleME */
-int ScaleME_preconf (void);
+int ScaleME_preconf (int);
 int ScaleME_postconf (void);
 
 #endif /* __MLFMA_H_ */

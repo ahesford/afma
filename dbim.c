@@ -20,11 +20,12 @@
 #include "util.h"
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-s #] [-r #] [-o <output prefix>] -i <input prefix>\n", name);
+	fprintf (stderr, "Usage: %s [-s #] [-r #] [-a #] [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
 	fprintf (stderr, "\t-s #: The number of per-leap simultaneous views (default: 1)\n");
 	fprintf (stderr, "\t-r #: The number of iterations for spectral radius estimation (default: none)\n");
+	fprintf (stderr, "\t-a: Use ACA with specified tolerance for far-field transformations\n");
 }
 
 float dbimerr (complex float *error, complex float *rn, complex float *field,
@@ -97,6 +98,7 @@ int main (int argc, char **argv) {
 	solveparm hislv, loslv;
 	measdesc obsmeas, srcmeas, ssrc;
 	long nelt, j;
+	float acatol = -1;
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -106,7 +108,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:s:r:")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:s:r:a:")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -119,6 +121,9 @@ int main (int argc, char **argv) {
 			break;
 		case 'r':
 			specit = atoi(optarg);
+			break;
+		case 'a':
+			acatol = atof(optarg);
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -151,7 +156,7 @@ int main (int argc, char **argv) {
 	nmeas = srcmeas.count * obsmeas.count;
 
 	/* Initialize ScaleME and find the local basis set. */
-	ScaleME_preconf ();
+	ScaleME_preconf (acatol > 0);
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
 
 	nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
@@ -184,7 +189,7 @@ int main (int argc, char **argv) {
 
 
 	/* Precalculate some values for the FMM and direct interactions. */
-	fmmprecalc ();
+	fmmprecalc (acatol);
 	i = dirprecalc ();
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
 
