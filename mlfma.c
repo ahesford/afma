@@ -258,7 +258,7 @@ static int acabuild (complex float **mats, float k0, float tol, float *thetas,
 	maxrank = i;
 
 	/* Allocate the final matrix storage. */
-	*mats = malloc (maxrank * (nelt * nsamp) * sizeof(complex float));
+	*mats = malloc (maxrank * (nelt + nsamp) * sizeof(complex float));
 	/* Copy the colum matrix in first, then the row matrix. */
 	memcpy (*mats, u, maxrank * nsamp * sizeof(complex float));
 	/* The row matrix should be conjugated for ease of application. */
