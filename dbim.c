@@ -91,7 +91,8 @@ float scalereg (float fact, float mse) {
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
-	int mpirank, mpisize, i, nmeas, dbimit[2], q, stride = 1, gsize[3], specit = 0;
+	int mpirank, mpisize, i, nmeas, dbimit[2], q, stride = 1,
+	    gsize[3], specit = 0, useaca = 0;
 	complex float *rn, *crt, *field, *fldptr, *error, *refct;
 	float errnorm = 0, tolerance[2], regparm[4], erninc,
 	      trange[2], prange[2], crtmse = 0.0, gamma, sigma = 1.0;
@@ -124,6 +125,7 @@ int main (int argc, char **argv) {
 			break;
 		case 'a':
 			acatol = atof(optarg);
+			useaca = 1;
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -156,7 +158,7 @@ int main (int argc, char **argv) {
 	nmeas = srcmeas.count * obsmeas.count;
 
 	/* Initialize ScaleME and find the local basis set. */
-	ScaleME_preconf (acatol > 0);
+	ScaleME_preconf (useaca);
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
 
 	nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
@@ -189,7 +191,7 @@ int main (int argc, char **argv) {
 
 
 	/* Precalculate some values for the FMM and direct interactions. */
-	fmmprecalc (acatol);
+	fmmprecalc (acatol, useaca);
 	i = dirprecalc ();
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
 
@@ -260,7 +262,7 @@ int main (int argc, char **argv) {
 			for (j = 0; j < nelt; ++j)
 				fmaconf.contrast[j] += crt[j];
 
-			if (refct) crtmse = mse (fmaconf.contrast, refct, nelt);
+			if (refct) crtmse = mse (fmaconf.contrast, refct, nelt, 1);
 			
 			if (!mpirank)
 				fprintf (stderr, "Sub-iteration %d/%d: RRE: %g, MSE: %g\n", i, q, errnorm, crtmse);
@@ -273,7 +275,7 @@ int main (int argc, char **argv) {
 		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist,
 				fmaconf.numbases, fmaconf.bspbox);
 		
-		if (refct) crtmse = mse (fmaconf.contrast, refct, nelt);
+		if (refct) crtmse = mse (fmaconf.contrast, refct, nelt, 1);
 		
 		if (!mpirank) fprintf (stderr, "Iteration %d: RRE: %g, MSE: %g\n", i, errnorm, crtmse);
 		if (errnorm < tolerance[0]) break;
@@ -333,7 +335,7 @@ int main (int argc, char **argv) {
 		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist,
 				fmaconf.numbases, fmaconf.bspbox);
 
-		if (refct) crtmse = mse (fmaconf.contrast, refct, nelt);
+		if (refct) crtmse = mse (fmaconf.contrast, refct, nelt, 1);
 		
 		if (!mpirank) fprintf (stderr, "Iteration %d: RRE: %g, MSE: %g\n", i, errnorm, crtmse);
 		if (errnorm < tolerance[1]) break;

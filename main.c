@@ -34,7 +34,7 @@ int main (int argc, char **argv) {
 	int mpirank, mpisize, i, j, k, nit, gmr = 0, gsize[3], obscount = 1;
 	complex float *rhs, *sol, *field;
 	double cputime, wtime;
-	int debug = 0, maxobs;
+	int debug = 0, maxobs, useaca = 0;
 	long nelt;
 	float acatol = -1;
 
@@ -51,7 +51,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:dgr:a:")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:dgr:a:h")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -66,10 +66,11 @@ int main (int argc, char **argv) {
 			gmr = 1;
 			break;
 		case 'r':
-			obscount = atoi(optarg);
+			obscount = strtol(optarg, NULL, 0);
 			break;
 		case 'a':
-			acatol = atof(optarg);
+			acatol = strtod(optarg, NULL);
+			useaca = 1;
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -99,7 +100,7 @@ int main (int argc, char **argv) {
 	for (i = 0; i < obscount; ++i) buildlocs (obsmeas + i);
 
 	/* Initialize ScaleME and find the local basis set. */
-	ScaleME_preconf (acatol > 0);
+	ScaleME_preconf (useaca);
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
 
 	nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
@@ -126,7 +127,7 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Wall time for contrast read: %0.6g\n", wtime);
 
 	/* Precalculate some values for the FMM and direct interactions. */
-	fmmprecalc (acatol);
+	fmmprecalc (acatol, useaca);
 	i = dirprecalc ();
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
 

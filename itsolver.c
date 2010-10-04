@@ -21,7 +21,7 @@
 #include "direct.h"
 #include "itsolver.h"
 
-static int matvec (complex float *out, complex float *in, complex float *cur) {
+int matvec (complex float *out, complex float *in, complex float *cur) {
 	long i, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 
 	/* Compute the contrast pressure. */

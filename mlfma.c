@@ -272,6 +272,73 @@ static int acabuild (complex float **mats, float k0, float tol, float *thetas,
 	return maxrank;
 }
 
+static int svdbuild (complex float **mats, float k0, float tol, float *thetas,
+		int ntheta, int nphi, float dx, int bpd) {
+	int nsamp = (ntheta - 2) * nphi + 2, nelt = bpd * bpd * bpd,
+	    lwork, info, mindim, rank, l, i;
+	complex float *col, *a, *u, *vt, *work, *ptr;
+	float dist[3], *s, *rwork;
+
+	/* The minimum dimension. */
+	mindim = MIN(nsamp, nelt);
+
+	/* Allocate the full matrix. */
+	a = malloc(nsamp * nelt * sizeof(complex float));
+
+	/* Allocate the singular vector matrices. */
+	u = malloc(mindim * (nsamp + nelt) * sizeof(complex float));
+	vt = u + mindim * nsamp;
+
+	/* Allocate the real workspace and the singular value array. */
+	s = malloc(6 * mindim * sizeof(float));
+	rwork = s + mindim;
+
+	/* Perform a workspace query. */
+	lwork = -1;
+	cgesvd_ ("S", "S", &nsamp, &nelt, a, &nsamp, s, u, &nsamp, vt, &mindim,
+			a, &lwork, rwork, &info);
+
+	/* Allocate the workspace. */
+	lwork = creal(a[0]);
+	work = malloc(lwork * sizeof(complex float));
+
+	/* Loop through all columns (source grid elements) and build the matrix. */
+	for (l = 0, col = a; l < nelt; ++l, col += nsamp) {
+		/* The relative position of the source grid element. */
+		cellcoords (dist, l, bpd, dx);
+
+		/* Build the corresponding matrix column. */
+		farmatcol (col, k0, dist, thetas, ntheta, nphi);
+	}
+
+	/* Perform an SVD on the matrix. */
+	cgesvd_ ("S", "S", &nsamp, &nelt, a, &nsamp, s, u, &nsamp, vt, &mindim,
+			work, &lwork, rwork, &info);
+
+	/* Find the first rank below the desired tolerance. */
+	for (rank = 0; rank < mindim; ++rank)
+		if (fabs(s[rank] / s[0]) < tol) break;
+
+	*mats = malloc (rank * (nelt + nsamp) * sizeof(complex float));
+
+	/* Multiply the left singular vector matrix by the singular values. */
+	for (l = 0, col = u, ptr = *mats; l < rank; ++l)
+		for (i = 0; i < nsamp; ++i, ++col, ++ptr)
+			*ptr = s[l] * (*col);
+
+	/* Tranpose and conjugate the right singular vector matrix. */
+	for (l = 0, ptr = *mats + rank * nsamp; l < rank; ++l)
+		for (i = 0; i < nelt; ++i)
+			ptr[i + l * nelt] = conj(vt[l + i * mindim]);
+
+	free (a);
+	free (u);
+	free (s);
+	free (work);
+
+	return rank;
+}
+
 static int fullbuild (complex float **mats, float k0, float *thetas,
 		int ntheta, int nphi, float dx, int bpd) {
 	int nsamp = (ntheta - 2) * nphi + 2, nelt = bpd * bpd * bpd, l;
@@ -295,7 +362,7 @@ static int fullbuild (complex float **mats, float k0, float *thetas,
 
 /* Precomputes the near interactions for redundant calculations and sets up
  * the wave vector directions to be used for fast calculation of far-field patterns. */
-int fmmprecalc (float acatol) {
+int fmmprecalc (float acatol, int useaca) {
 	float *thetas;
 	int ntheta, nphi, rank, i;
 
@@ -312,16 +379,24 @@ int fmmprecalc (float acatol) {
 	for (i = 0; i < ntheta; ++i) thetas[i] = acos(thetas[i]);
 
 
-	/* Build the ACA approximation to far-field matrices. */
-	if (acatol > 0) {
-		fmaconf.acarank = acabuild (&(fmaconf.radpats), fmaconf.k0, acatol,
-				thetas, ntheta, nphi, fmaconf.cell, fmaconf.bspbox);
-		fprintf (stderr, "Rank %d: Radiation pattern matrix rank: %d\n", rank, fmaconf.acarank);
-	} else {
+	if (!useaca) {
+		/* Build the direct far-field matrices. */
 		fmaconf.acarank = 0;
 		i = fullbuild (&(fmaconf.radpats), fmaconf.k0, thetas,
 				ntheta, nphi, fmaconf.cell, fmaconf.bspbox);
-		fprintf (stderr, "Rank %d: Radiation pattern matrix element count: %d\n", rank, i);
+		fprintf (stderr, "Rank %d: Far-field matrix element count: %d\n", rank, i);
+	} else {
+		/* Use ACA if the tolerance is positive, otherwise use SVD. */
+		if (acatol > 0) 
+			fmaconf.acarank = acabuild (&(fmaconf.radpats),
+					fmaconf.k0, acatol, thetas, ntheta,
+					nphi, fmaconf.cell, fmaconf.bspbox);
+		else
+			fmaconf.acarank = svdbuild (&(fmaconf.radpats),
+					fmaconf.k0, -acatol, thetas, ntheta,
+					nphi, fmaconf.cell, fmaconf.bspbox);
+		
+		fprintf (stderr, "Rank %d: Far-field matrix rank: %d\n", rank, fmaconf.acarank);
 	}
 
 	free (thetas);

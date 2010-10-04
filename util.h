@@ -26,7 +26,7 @@ double complex cexp (double complex);
 #endif /* _FREEBSD */
 
 float sinc (float);
-float mse (complex float *, complex float *, long);
+float mse (complex float *, complex float *, long, int);
 
 int sampcoords (float *, int, float *, int, int);
 int cellcoords (float *, int, int, float);

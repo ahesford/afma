@@ -7,7 +7,7 @@
 #include "util.h"
 
 /* The RMS error between a test vector and a reference. */
-float mse (complex float *test, complex float *ref, long n) {
+float mse (complex float *test, complex float *ref, long n, int nrm) {
 	long i;
 	float err[2] = {0.0, 0.0}, tmp;
 
@@ -22,7 +22,9 @@ float mse (complex float *test, complex float *ref, long n) {
 	/* Sum the local contributions. */
 	MPI_Allreduce (MPI_IN_PLACE, err, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
-	return sqrt(err[0] / err[1]);
+	/* Return the normalized MSE if desired, otherwise just the difference. */
+	if (nrm) return sqrt(err[0] / err[1]);
+	return sqrt(err[0]);
 }
 
 /* Compute the sinc of the argument. */

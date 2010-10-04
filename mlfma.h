@@ -37,7 +37,7 @@ static inline void bscenter (int gi, float *cen) {
 void acafarpattern (int, int *, void *, void *, float *, int);
 void farpattern (int, int *, void *, void *, float *, int);
 
-int fmmprecalc (float);
+int fmmprecalc (float, int);
 
 /* initialisation and finalisation routines for ScaleME */
 int ScaleME_preconf (int);
