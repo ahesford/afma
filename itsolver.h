@@ -9,7 +9,7 @@ typedef struct {
 } solveparm;
 
 int matvec (complex float *, complex float *, complex float *);
-int cgmres (complex float *, complex float *, int, solveparm *);
+int cgmres (complex float *, complex float *, int, int, solveparm *);
 int bicgstab (complex float *, complex float *, int, int, float, int);
 
 #endif /* __ITSOLVER_H_ */

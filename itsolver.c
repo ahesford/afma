@@ -148,7 +148,8 @@ int bicgstab (complex float *rhs, complex float *sol,
 	return i;
 }
 
-int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) {
+int cgmres (complex float *rhs, complex float *sol,
+		int guess, int silent, solveparm *slv) {
 	int icntl[8], irc[5], lwork, info[3], i, myRank;
 	int nelt = fmaconf.numbases * fmaconf.bspboxvol;
 	float rinfo[2], cntl[5];
@@ -176,13 +177,15 @@ int cgmres (complex float *rhs, complex float *sol, int silent, solveparm *slv) 
 	icntl[3] = 0;
 
 	icntl[4] = 0; /* Use MGS for orthogonalization. */
-	icntl[5] = 1; /* Use an initial guess: the incident field. */
+	icntl[5] = guess; /* Use an initial guess: the incident field. */
 	icntl[6] = slv->maxit; /* Set the maximum interation count. */
 
 	cntl[0] = slv->epscg;
 
-	/* Copy the initial guess: use the RHS. */
-	memcpy (zwork, rhs, nelt * sizeof(complex float));
+	/* Copy the initial guess, if it exists; otherwise zero the workspace. */
+	if (guess) memcpy (zwork, rhs, nelt * sizeof(complex float));
+	else memset (zwork, 0, nelt * sizeof(complex float));
+
 	/* Copy the RHS. */
 	memcpy (zwork + nelt, rhs, nelt * sizeof(complex float));
 

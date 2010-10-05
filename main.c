@@ -30,7 +30,8 @@ void usage (char *name) {
 }
 
 int main (int argc, char **argv) {
-	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024], fldfmt[1024];
+	char ch, *inproj = NULL, *outproj = NULL, **arglist,
+	     fname[1024], fldfmt[1024], guessfmt[1024];
 	int mpirank, mpisize, i, j, k, nit, gmr = 0, gsize[3], obscount = 1;
 	complex float *rhs, *sol, *field;
 	double cputime, wtime;
@@ -148,6 +149,8 @@ int main (int argc, char **argv) {
 		sprintf (fldfmt, "%%s.tx%%0%dd.rx%%0%dd.field", i, j);
 	}
 
+	sprintf (guessfmt, "%%s.tx%%0%dd.%%s", i);
+
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
 	
 	/* Ensure each process is waiting at the start of the loop. */
@@ -160,18 +163,20 @@ int main (int argc, char **argv) {
 		/* Build the right-hand side for the specified location. */
 		buildrhs (rhs, srcmeas.locations + 3 * i);
 
-		/* Initial first guess is zero. */
-		memset (sol, 0, nelt * sizeof(complex float));
+		/* Attempt to read an initial first guess from a file. */
+		sprintf (fname, guessfmt, inproj, i, "guess");
+		k = getcontrast (sol, fname, gsize, fmaconf.bslist,
+				fmaconf.numbases, fmaconf.bspbox);
 
 		cputime = (double)clock() / CLOCKS_PER_SEC;
 		wtime = MPI_Wtime();
 		/* Use GMRES if requested, otherwise use BiCG-STAB. */
-		if (gmr) cgmres (rhs, sol, 0, &solver);
+		if (gmr) cgmres (rhs, sol, k, 0, &solver);
 		else {
 			/* BiCG-STAB restarts if the true residual differs from
 			 * the predicted residual. */
 			for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j)
-				nit = bicgstab (rhs, sol, j, solver.maxit, solver.epscg, 0);
+				nit = bicgstab (rhs, sol, k || j, solver.maxit, solver.epscg, 0);
 		}
 		cputime = (double)clock() / CLOCKS_PER_SEC - cputime;
 		wtime = MPI_Wtime() - wtime;
@@ -183,7 +188,7 @@ int main (int argc, char **argv) {
 
 		if (debug) {
 			wtime = MPI_Wtime();
-			sprintf (fname, "%s.%d.currents", outproj, i);
+			sprintf (fname, guessfmt, outproj, i, "solution");
 			prtcontrast (fname, sol, gsize, fmaconf.bslist,
 					fmaconf.numbases, fmaconf.bspbox);
 			wtime = MPI_Wtime() - wtime;
