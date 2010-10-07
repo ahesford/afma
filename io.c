@@ -370,25 +370,22 @@ int prtcontrast (char *fname, complex float *crt, int *size,
 }
 
 /* Append the provided field to the specified field file. */
-int writefld (char *fname, measdesc *obs, complex float *field) {
+int writefld (char *fname, int nrows, int ncols, complex float *field) {
 	FILE *fp;
-	int size[2];
+	int size[2] = { nrows, ncols }, count = nrows * ncols;
 
 	if (!(fp = fopen (fname, "w"))) {
 		fprintf (stderr, "ERROR: could not write file %s.\n", fname);
 		return 0;
 	}
 
-	size[0] = obs->nphi;
-	size[1] = obs->ntheta;
-
 	/* Write the matrix size. */
 	fwrite (size, sizeof(int), 2, fp);
 	/* Write the values. */
-	fwrite (field, sizeof(complex float), obs->count, fp);
+	fwrite (field, sizeof(complex float), count, fp);
 	fclose (fp);
 
-	return obs->count;
+	return count;
 }
 
 int readfld (complex float *field, char *fname, int nobs) {

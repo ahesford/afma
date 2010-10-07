@@ -205,7 +205,7 @@ int main (int argc, char **argv) {
 			/* Append the field for the current transmitter. */
 			if (!mpirank) {
 				sprintf (fname, fldfmt,  outproj, i, k);
-				writefld (fname, obsmeas + k, field);
+				writefld (fname, obsmeas[k].nphi, obsmeas[k].ntheta, field);
 			}
 		}
 	}

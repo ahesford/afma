@@ -23,6 +23,7 @@
 
 #include "ScaleME.h"
 
+#include "io.h"
 #include "mlfma.h"
 #include "direct.h"
 #include "util.h"
@@ -35,6 +36,7 @@ static int farmatrow (complex float *, float, float *, float, int);
 static int farmatcol (complex float *, float, float *, float *, int, int);
 static int acabuild (complex float **, float, float, float *, int, int, float, int);
 static int fullbuild (complex float **, float, float *, int, int, float, int);
+static int recaca (complex float *, complex float *, int, int, int, float);
 
 /* Computes the far-field pattern for the specified group with the specified
  * center, and stores the output in a provided vector. sgn is positive for
@@ -57,7 +59,7 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 
 		/* Perform the matrix-vector product. */
 		cblas_cgemv (CblasColMajor, CblasNoTrans, fmaconf.nsamp,
-				fmaconf.bspboxvol, &fact, fmaconf.radpats, 
+				fmaconf.bspboxvol, &fact, fmaconf.radpats,
 				fmaconf.nsamp, crt, 1, &beta, pat, 1);
 	} else {
 		/* Distribute the far-field patterns to the basis functions. */
@@ -125,7 +127,7 @@ void acafarpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int s
 	free (work);
 }
 
-/* Build a column of the far-field signature for a point a distance rmc 
+/* Build a column of the far-field signature for a point a distance rmc
  * from the center of the parent box. */
 static int farmatcol (complex float *col, float k, float *rmc,
 		float *thetas, int ntheta, int nphi) {
@@ -174,9 +176,11 @@ static int acabuild (complex float **mats, float k0, float tol, float *thetas,
 	int maxrank, *irow, *icol, i, j, k,
 	    nsamp = (ntheta - 2) * nphi + 2, nelt = bpd * bpd * bpd;
 	complex float *u, *v, *uptr, *vptr, *row, *col, dpr, dpc;
-	float dist[3], s[3], err = 0;
+	float dist[3], s[3], err = 0, tolsq;
 
-	tol *= tol;
+	/* Compute the square of the tolerance and decrease by two orders
+	 * of magnitude for recompression. */
+	tolsq = tol * tol * 1e-2;
 
 	maxrank = MIN(nelt, nsamp);
 
@@ -249,7 +253,7 @@ static int acabuild (complex float **mats, float k0, float tol, float *thetas,
 
 		err += creal(dpr) * creal(dpc);
 
-		if (creal(dpr) * creal(dpc) <= tol * err) break;
+		if (creal(dpr) * creal(dpc) <= tolsq * err) break;
 
 		/* Find the next row index. */
 		irow[i + 1] = maxind (col, nsamp, irow, i + 1);
@@ -257,19 +261,104 @@ static int acabuild (complex float **mats, float k0, float tol, float *thetas,
 
 	maxrank = i;
 
+	/* Conjugate the matrix v. */
+	for (i = 0, k = maxrank * nelt; i < k; ++i) v[i] = conj(v[i]);
+
+	/* Recompress (in place) the matrices with the actual tolerance. */
+	maxrank = recaca (u, v, nsamp, nelt, maxrank, tol);
+
 	/* Allocate the final matrix storage. */
 	*mats = malloc (maxrank * (nelt + nsamp) * sizeof(complex float));
 	/* Copy the colum matrix in first, then the row matrix. */
 	memcpy (*mats, u, maxrank * nsamp * sizeof(complex float));
-	/* The row matrix should be conjugated for ease of application. */
-	for (i = 0, k = maxrank * nelt, j = maxrank * nsamp; i < k; ++i)
-		(*mats)[j + i] = conj(v[i]);
+	memcpy (*mats + maxrank * nsamp, v, maxrank * nelt * sizeof(complex float));
 
 	/* Free the work arrays. */
 	free (irow);
 	free (u);
 
 	return maxrank;
+}
+
+/* Recompress an ACA approximation using truncated singular values. */
+static int recaca (complex float *u, complex float *v, int m, int n, int k, float tol) {
+	int rank, lwork, info, i, j, l;
+	float *rwork, *ss;
+	complex float *qu, *qv, *rp, *work, *tu, *tv, *us, *vs, alpha = 1.0, beta = 0.0;
+
+	/* Allocate space for the orthogonal matrices and the outer product. */
+	qu = malloc (k * (m + n + 3 * k) * sizeof(complex float));
+	qv = qu + k * m;
+	rp = qv + k * n;
+	us = rp + k * k;
+	vs = us + k * k;
+
+	/* Allocate space for the reflector coefficients. */
+	tu = malloc (2 * k * sizeof(complex float));
+	tv = tu + k;
+
+	/* Allocate space for the singular values and real work. */
+	ss = malloc (6 * k * sizeof(float));
+	rwork = ss + k;
+
+	/* Figure out the maximum size of the work array. */
+	lwork = -1;
+	cgeqrf_ (&m, &k, qu, &m, tu, qu, &lwork, &info);
+	cgeqrf_ (&n, &k, qv, &n, tv, qu + 1, &lwork, &info);
+	cungqr_ (&m, &k, &k, qu, &m, tu, qu + 2, &lwork, &info);
+	cungqr_ (&n, &k, &k, qv, &n, tv, qu + 3, &lwork, &info);
+	cgesvd_ ("S", "S", &k, &k, rp, &k, ss, us, &k, vs, &k, qu + 4, &lwork, rwork, &info);
+
+	/* Find the maximum workspace size. */
+	for (i = 0; i < 5; ++i) lwork = MAX(lwork, (int)creal(qu[i]));
+
+	work = malloc(lwork * sizeof(complex float));
+
+	/* Copy the input matrices into the workspaces. */
+	memcpy (qu, u, (m * k) * sizeof(complex float));
+	memcpy (qv, v, (n * k) * sizeof(complex float));
+
+	/* Compute the QR factorizations of the row and column matrices. */
+	cgeqrf_ (&m, &k, qu, &m, tu, work, &lwork, &info);
+	cgeqrf_ (&n, &k, qv, &n, tv, work, &lwork, &info);
+
+	/* Compute the outer product of the triangular matrices. */
+	for (i = 0; i < k; ++i) {
+		for (j = 0; j < k; ++j) {
+			rp[i + j * k] = 0.0;
+			for (l = MAX(i,j); l < k; ++l)
+				rp[i + j * k] += qu[i + l * m] * conj(qv[j + l * n]);
+		}
+	}
+
+	/* Compute the SVD of the triangular matrix product. */	
+	cgesvd_ ("S", "S", &k, &k, rp, &k, ss, us, &k, vs, &k, work, &lwork, rwork, &info);
+
+	/* Find the truncated rank. */
+	for (rank = 0; rank < k; ++rank)
+		if (fabs(ss[rank] / ss[0]) < tol) break;
+
+	/* Multiply the singular values by the column matrix. */
+	for (i = 0; i < rank; ++i)
+		for (j = 0; j < k; ++j)
+			vs[i + k * j] *= ss[i];
+
+	/* Expand the orthogonal matrices. */
+	cungqr_ (&m, &k, &k, qu, &m, tu, work, &lwork, &info);
+	cungqr_ (&n, &k, &k, qv, &n, tv, work, &lwork, &info);
+
+	/* Compute the new row and column matrices. */
+	cblas_cgemm (CblasColMajor, CblasNoTrans, CblasNoTrans, m, rank, k,
+			&alpha, qu, m, us, k, &beta, u, m);
+	cblas_cgemm (CblasColMajor, CblasNoTrans, CblasConjTrans, n, rank, k,
+			&alpha, qv, n, vs, k, &beta, v, n);
+
+	free (qu);
+	free (tu);
+	free (ss);
+	free (work);
+
+	return rank;
 }
 
 static int svdbuild (complex float **mats, float k0, float tol, float *thetas,
@@ -387,7 +476,7 @@ int fmmprecalc (float acatol, int useaca) {
 		fprintf (stderr, "Rank %d: Far-field matrix element count: %d\n", rank, i);
 	} else {
 		/* Use ACA if the tolerance is positive, otherwise use SVD. */
-		if (acatol > 0) 
+		if (acatol > 0)
 			fmaconf.acarank = acabuild (&(fmaconf.radpats),
 					fmaconf.k0, acatol, thetas, ntheta,
 					nphi, fmaconf.cell, fmaconf.bspbox);
@@ -444,11 +533,11 @@ int ScaleME_preconf (int useaca) {
 	ScaleME_setRootBox (len, cen);
 	
 	/*  let all processes start the initialisation together */
-	MPI_Barrier(MPI_COMM_WORLD); 
+	MPI_Barrier(MPI_COMM_WORLD);
 	
 	/* open the std files */
 	MPFMA_stdout = stdout;
-	MPFMA_stderr = stderr; 
+	MPFMA_stderr = stderr;
 
 	/* Use the external near-field interactions. */
 	ScaleME_setBlockDirInterFunc (blockinteract);
