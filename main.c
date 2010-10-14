@@ -160,8 +160,15 @@ int main (int argc, char **argv) {
 
 		if (!mpirank)
 			fprintf (stderr, "Running simulation for source %d.\n", i + 1);
-		/* Build the right-hand side for the specified location. */
-		buildrhs (rhs, srcmeas.locations + 3 * i);
+
+		/* Attempt to read the pre-computed RHS from a file. 
+		 * If this fails, build the RHS directly. */
+		sprintf (fname, guessfmt, inproj, i, "rhs");
+		if (!getcontrast (rhs, fname, gsize, fmaconf.bslist,
+				fmaconf.numbases, fmaconf.bspbox)) {
+			if (!mpirank) fprintf (stderr, "Building RHS.\n");
+			buildrhs (rhs, srcmeas.locations + 3 * i);
+		}
 
 		/* Attempt to read an initial first guess from a file. */
 		sprintf (fname, guessfmt, inproj, i, "guess");

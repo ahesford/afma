@@ -122,6 +122,11 @@ int bicgstab (complex float *rhs, complex float *sol,
 		 * has been achieved. */
 		err = sqrt(creal(pardot (r, r, nelt))) / rhn;
 		if (!rank && !quiet) printf ("BiCG-STAB(%0.1f): %g\n", 0.5 + i, err);
+
+		/* Flush the output buffers. */
+		fflush (stdout);
+		fflush (stderr);
+
 		if (err < tol) break;
 
 		/* Compute the next search step, t = A * r. */
@@ -217,14 +222,19 @@ int cgmres (complex float *rhs, complex float *sol,
 			   MPI_Allreduce(MPI_IN_PLACE, tz, 2 * irc[4], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 			   break;
 		}
+
+		/* Flush output buffers to report residual errors. */
+		fflush (stdout);
+		fflush (stderr);
 	} while (irc[0]);
 
-	if (!myRank && info[0]) fprintf (stdout, "CGMRES: return value: %d\n", info[0]); 
+	if (!myRank && info[0]) printf ("CGMRES: return value: %d\n", info[0]); 
 
 	memcpy (sol, zwork, nelt * sizeof(complex float));
 	
 	if (!myRank && !silent)
-		fprintf(stdout, "CGMRES: %d iterations, %.6E PBE, %.6E BE.\n", info[1], rinfo[0], rinfo[1]);
+		printf("CGMRES: %d iterations, %.6E PBE, %.6E BE.\n",
+				info[1], rinfo[0], rinfo[1]);
 
 	free (zwork);
 	free (solbuf);
