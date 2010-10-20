@@ -182,7 +182,7 @@ int cgmres (complex float *rhs, complex float *sol,
 	icntl[3] = 0;
 
 	icntl[4] = 0; /* Use MGS for orthogonalization. */
-	icntl[5] = guess; /* Use an initial guess: the incident field. */
+	icntl[5] = guess > 0 ? 1 : 0; /* Use an initial guess, if desired. */
 	icntl[6] = slv->maxit; /* Set the maximum interation count. */
 
 	cntl[0] = slv->epscg;
