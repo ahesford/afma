@@ -147,6 +147,11 @@ int bicgstab (complex float *rhs, complex float *sol,
 		/* Compute the scaled residual norm. */
 		err = sqrt(creal(pardot (r, r, nelt))) / rhn;
 		if (!rank && !quiet) printf ("BiCG-STAB(%d): %g\n", i + 1, err);
+
+		fflush (stdout);
+		fflush (stderr);
+
+		if (err < tol) break;
 	}
 
 	free (r);
