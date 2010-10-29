@@ -4,7 +4,7 @@ LD=$(FF)
 
 LIBS= -lScaleME2 -lgmres -lfftw3f
 
-OPTFLAGS= -fopenmp -O3 -march=core2 -mtune=core2
+OPTFLAGS= -fopenmp -O3 -Xarch_x86_64 -march=core2 -Xarch_i386 -march=prescott
 ARCHFLAGS= -arch x86_64 -arch i386 -D_MACOSX
 ARCHLIBS= -framework Accelerate
 
@@ -35,7 +35,7 @@ tissue: tissue.o
 	@echo "Building $@."
 	$(LD) $(DFLAGS) $(LFLAGS) -o $@ $^ $(LIBDIR) -lm $(ARCHLIBS)
 
-darwin32: OPTFLAGS= -fopenmp -O3 -march=prescott -mtune=prescott
+darwin32: OPTFLAGS= -fopenmp -O3 -march=prescott
 darwin32: ARCHFLAGS= -arch i386 -D_MACOSX
 darwin32: afma adbim tissue
 	@echo "Building for Darwin (32 bits)."

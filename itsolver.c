@@ -194,7 +194,7 @@ int cgmres (complex float *rhs, complex float *sol,
 	cntl[0] = slv->epscg;
 
 	/* Copy the initial guess, if it exists; otherwise zero the workspace. */
-	if (guess) memcpy (zwork, rhs, nelt * sizeof(complex float));
+	if (guess) memcpy (zwork, sol, nelt * sizeof(complex float));
 	else memset (zwork, 0, nelt * sizeof(complex float));
 
 	/* Copy the RHS. */
