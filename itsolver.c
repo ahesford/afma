@@ -161,7 +161,8 @@ int bicgstab (complex float *rhs, complex float *sol,
 int cgmres (complex float *rhs, complex float *sol,
 		int guess, int silent, solveparm *slv) {
 	int icntl[8], irc[5], lwork, info[3], i, myRank;
-	int nelt = fmaconf.numbases * fmaconf.bspboxvol;
+	int nelt = fmaconf.numbases * fmaconf.bspboxvol,
+	    gnelt = fmaconf.gnumbases * fmaconf.bspboxvol;
 	float rinfo[2], cntl[5];
 	complex float *zwork, *solbuf, *tx, *ty, *tz;
 
@@ -200,9 +201,8 @@ int cgmres (complex float *rhs, complex float *sol,
 	memcpy (zwork + nelt, rhs, nelt * sizeof(complex float));
 
 	do {
-		drivecgmres_(&(fmaconf.gnumbases), &(nelt),
-				&(slv->restart), &lwork, zwork, irc,
-				icntl, cntl, info, rinfo);
+		drivecgmres_(&(gnelt), &(nelt), &(slv->restart), &lwork,
+				zwork, irc, icntl, cntl, info, rinfo);
 		if (!(info[0]) && !(irc[0])) break;
 
 		switch (irc[0]) {
