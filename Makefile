@@ -12,8 +12,8 @@ CINCDIR= -I../scaleme/include -I/usr/local/include -I/opt/local/include
 LIBDIR= -L../scaleme/fma2 -L../gmres -L/usr/local/lib -L/opt/local/lib
 
 DFLAGS=
-CFLAGS= $(OPTFLAGS) $(ARCHFLAGS) -Wall
-FFLAGS= $(OPTFLAGS) $(ARCHFLAGS) -Wall
+CFLAGS= $(OPTFLAGS) $(ARCHFLAGS)
+FFLAGS= $(OPTFLAGS) $(ARCHFLAGS)
 LFLAGS= $(OPTFLAGS) $(ARCHFLAGS)
 
 FWDOBJS= main.o
@@ -51,7 +51,14 @@ bluehive: ARCHLIBS= -lgslcblas -llapack -lblas -nofor_main
 bluehive: ARCHFLAGS= -m64 -D_LINUX -I/usr/local/gsl/1.12-gnu4.1/include/gsl \
 	-L/usr/local/gsl/1.12-gnu4.1/lib
 bluehive: afma adbim tissue
-	@echo "Building for Linux."
+	@echo "Building for BlueHive Linux."
+
+ranger: OPTFLAGS= -fastsse -mp
+ranger: ARCHFLAGS= -D_LINUX -I$(TACC_GSL_INC)/gsl -I$(TACC_FFTW3_INC) \
+	-L$(TACC_GSL_LIB) -L$(TACC_FFTW3_LIB)
+ranger: ARCHLIBS= -Mnomain -lgslcblas -llapack -lblas
+ranger: afma adbim tissue
+	@echo "Building for TACC Ranger."
 
 clean:
 	rm -f $(OBJS) $(FWDOBJS) $(INVOBJS) *.core core tissue.o
