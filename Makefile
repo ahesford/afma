@@ -46,7 +46,9 @@ bsd: ARCHFLAGS= -m64 -D_FREEBSD
 bsd: afma adbim tissue
 	@echo "Building for FreeBSD."
 
-bluehive: OPTFLAGS= -O3 -openmp -xHost -parallel -no-prec-div
+bluehive: CC= mpiicc
+bluehive: FF= mpiifort
+bluehive: OPTFLAGS= -O3 -openmp -xHost -parallel
 bluehive: ARCHLIBS= -lgslcblas -llapack -lblas -nofor_main
 bluehive: ARCHFLAGS= -m64 -D_LINUX -I/usr/local/gsl/1.12-gnu4.1/include/gsl \
 	-L/usr/local/gsl/1.12-gnu4.1/lib
