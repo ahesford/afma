@@ -159,7 +159,7 @@ int bicgstab (complex float *rhs, complex float *sol,
 }
 
 int cgmres (complex float *rhs, complex float *sol,
-		int guess, int silent, solveparm *slv) {
+		int guess, int maxit, int restart, float tol, int silent) {
 	int icntl[8], irc[5], lwork, info[3], i, myRank;
 	int nelt = fmaconf.numbases * fmaconf.bspboxvol,
 	    gnelt = fmaconf.gnumbases * fmaconf.bspboxvol;
@@ -169,10 +169,9 @@ int cgmres (complex float *rhs, complex float *sol,
 	MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 
 	/* Allocate memory for work array. */
-	lwork = slv->restart * slv->restart +
-		slv->restart * (nelt + 5) + 5 * nelt + 2;
-	zwork = calloc (lwork, sizeof(complex float));
-	solbuf = malloc (nelt * sizeof(complex float));
+	lwork = restart * restart + restart * (nelt + 5) + 6 * nelt + 2;
+	solbuf = calloc (lwork, sizeof(complex float));
+	zwork = solbuf + nelt;
 
 	/* Initialize the parameters. */
 	initcgmres_(icntl, cntl);
@@ -189,9 +188,9 @@ int cgmres (complex float *rhs, complex float *sol,
 
 	icntl[4] = 0; /* Use MGS for orthogonalization. */
 	icntl[5] = guess > 0 ? 1 : 0; /* Use an initial guess, if desired. */
-	icntl[6] = slv->maxit; /* Set the maximum interation count. */
+	icntl[6] = maxit; /* Set the maximum interation count. */
 
-	cntl[0] = slv->epscg;
+	cntl[0] = tol;
 
 	/* Copy the initial guess, if it exists; otherwise zero the workspace. */
 	if (guess) memcpy (zwork, sol, nelt * sizeof(complex float));
@@ -201,7 +200,7 @@ int cgmres (complex float *rhs, complex float *sol,
 	memcpy (zwork + nelt, rhs, nelt * sizeof(complex float));
 
 	do {
-		drivecgmres_(&(gnelt), &(nelt), &(slv->restart), &lwork,
+		drivecgmres_(&(gnelt), &(nelt), &(restart), &lwork,
 				zwork, irc, icntl, cntl, info, rinfo);
 		if (!(info[0]) && !(irc[0])) break;
 
@@ -241,7 +240,6 @@ int cgmres (complex float *rhs, complex float *sol,
 		printf("CGMRES: %d iterations, %.6E PBE, %.6E BE.\n",
 				info[1], rinfo[0], rinfo[1]);
 
-	free (zwork);
 	free (solbuf);
-	return info[1];
+	return info[1] - 1;
 }

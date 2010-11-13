@@ -177,14 +177,13 @@ int main (int argc, char **argv) {
 
 		cputime = (double)clock() / CLOCKS_PER_SEC;
 		wtime = MPI_Wtime();
-		/* Use GMRES if requested, otherwise use BiCG-STAB. */
-		if (gmr) cgmres (rhs, sol, k, 0, &solver);
-		else {
-			/* BiCG-STAB restarts if the true residual differs from
-			 * the predicted residual. */
-			for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j)
-				nit = bicgstab (rhs, sol, k || j, solver.maxit, solver.epscg, 0);
+
+		/* Restart if the true residual is not sufficiently low. */
+		for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j) {
+			if (gmr) nit = cgmres (rhs, sol, k || j, solver.maxit, solver.maxit + 1, solver.epscg, 0);
+			else nit = bicgstab (rhs, sol, k || j, solver.maxit, solver.epscg, 0);
 		}
+
 		cputime = (double)clock() / CLOCKS_PER_SEC - cputime;
 		wtime = MPI_Wtime() - wtime;
 
