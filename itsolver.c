@@ -5,13 +5,16 @@
 
 #include <mpi.h>
 
+/* Pull in the CBLAS header. */
 #ifdef _MACOSX
 #include <Accelerate/Accelerate.h>
 #else
 #ifdef _FREEBSD
 #include <cblas.h>
-#endif
-#endif
+#else
+#include <gsl_cblas.h>
+#endif /* _FREEBSD */
+#endif /* _MACOSX */
 
 /* These headers are provided by ScaleME. */
 #include "ScaleME.h"
