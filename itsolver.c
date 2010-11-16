@@ -62,7 +62,7 @@ int gmres (complex float *rhs, complex float *sol,
 	c = malloc (mit * sizeof(float));
 
 	/* Compute the norm of the RHS for residual scaling. */
-	rhn = PVNORM(rhs, nelt);
+	rhn = parnorm(rhs, nelt);
 
 	/* Compute the initial matrix-vector product for the input guess. */
 	if (guess) matvec (v, sol, mvp);
@@ -75,11 +75,11 @@ int gmres (complex float *rhs, complex float *sol,
 	if (!guess) memset (sol, 0, nelt * sizeof(complex float));
 
 	/* Find the norm of the initial residual. */
-	err = PVNORM(v, nelt);
+	err = parnorm(v, nelt);
 
 	/* Construct the initial Arnoldi vector by normalizing the residual. */
-	cr = 1 / err;
-	cblas_cscal (nelt, &cr, v, 1);
+#pragma omp parallel for default(shared) private(j)
+	for (j = 0; j < nelt; ++j) v[j] /= err;
 
 	/* Construct the vector beta for the minimization problem. */
 	beta[0] = err;
@@ -99,14 +99,14 @@ int gmres (complex float *rhs, complex float *sol,
 		/* This also builds the Hessenberg matrix column. */
 		cmgs (vp + nelt, hp, v, nelt, i + 1);
 		/* Compute the norm of the next basis vector. */
-		hp[i + 1] = PVNORM(vp + nelt, nelt);
+		hp[i + 1] = parnorm(vp + nelt, nelt);
 
 		/* Avoid breakdown. */
 		if (cabs(hp[i + 1]) <  FLT_EPSILON) break;
 
 		/* Normalize the basis vector. */
-		cr = 1. / hp[i + 1];
-		cblas_cscal (nelt, &cr, vp + nelt, 1);
+#pragma omp parallel for default(shared) private(j)
+		for (j = 0; j < nelt; ++j) vp[nelt + j] /= creal(hp[i + 1]);
 
 		/* Apply previous Givens rotations to the Hessenberg column. */
 		for (j = 0; j < i; ++j) 
@@ -163,7 +163,7 @@ int bicgstab (complex float *rhs, complex float *sol,
 	mvp = t + nelt;
 
 	/* Compute the norm of the right-hand side for residual scaling. */
-	rhn = PVNORM(rhs, nelt);
+	rhn = parnorm(rhs, nelt);
 
 	/* Compute the inital matrix-vector product for the input guess. */
 	if (guess) matvec (r, sol, mvp);
@@ -178,7 +178,7 @@ int bicgstab (complex float *rhs, complex float *sol,
 	memcpy (rhat, r, nelt * sizeof(complex float));
 
 	/* Find the norm of the initial residual. */
-	err = PVNORM(r, nelt) / rhn;
+	err = parnorm(r, nelt) / rhn;
 	if (!rank && !quiet) printf ("True residual: %g\n", err);
 
 	/* Run iterations until convergence or the maximum is reached. */
@@ -211,7 +211,7 @@ int bicgstab (complex float *rhs, complex float *sol,
 
 		/* Compute the scaled residual norm and stop if convergence
 		 * has been achieved. */
-		err = PVNORM(r, nelt) / rhn;
+		err = parnorm(r, nelt) / rhn;
 		if (!rank && !quiet) printf ("BiCG-STAB(%0.1f): %g\n", 0.5 + i, err);
 
 		/* Flush the output buffers. */
@@ -236,7 +236,7 @@ int bicgstab (complex float *rhs, complex float *sol,
 		}
 	
 		/* Compute the scaled residual norm. */
-		err = PVNORM(r, nelt) / rhn;
+		err = parnorm(r, nelt) / rhn;
 		if (!rank && !quiet) printf ("BiCG-STAB(%d): %g\n", i + 1, err);
 
 		fflush (stdout);

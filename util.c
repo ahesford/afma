@@ -10,17 +10,21 @@
  * the n-dimensional vector v orthogonal to each of the nv vectors s. The
  * projection * of the vector onto each of the basis vectors is stored in the
  * length-nv array c. */
-int cmgs (complex float *v, complex float *c, complex float *s, long n, long nv) {
-	long i;
+int cmgs (complex float *v, complex float *c, complex float *s, long n, int nv) {
+	long i, j, k;
 	complex float *sv, cv;
 
 	for (i = 0, sv = s; i < nv; ++i, sv += n) {
-		/* Compute the projection of the vector onto the current basis. */
-		c[i] = pardot (sv, v, n);
+		c[i] = 0;
+		k = 0;
 
-		/* Eliminate the parallel component of the vector. */
-		cv = -c[i];
-		cblas_caxpy (n, &cv, sv, 1,  v, 1);
+		do {
+			cv = pardot (sv, v, n);
+			c[i] += cv;
+#pragma omp parallel for default(shared) private(j)
+			for (j = 0; j < n; ++j) v[j] -= cv * sv[j];
+		} while (cabs(cv / c[i]) > IMGS_TOL && ++k < IMGS_ITS);
+		
 	}
 
 	return n;
@@ -28,14 +32,35 @@ int cmgs (complex float *v, complex float *c, complex float *s, long n, long nv)
 
 /* Compute the inner product of the distributed vectors x and y of dimension n. */
 complex float pardot (complex float *x, complex float *y, long n) {
-	complex float dp;
+	complex double dp = 0.0;
+	long i;
 
-	/* Compute the local portion. */
-	cblas_cdotc_sub (n, x, 1, y, 1, &dp);
+#pragma omp parallel for default(shared) private(i) reduction(+: dp)
+	for (i = 0; i < n; ++i) dp += conj(x[i]) * y[i];
+
 	/* Add in the contributions from other processors. */
-	MPI_Allreduce (MPI_IN_PLACE, &dp, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce (MPI_IN_PLACE, &dp, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-	return dp;
+	return (complex float)dp;
+}
+
+float parnorm (complex float *x, long n) {
+	double nrm = 0.0, nr, ni;
+	long i;
+
+#pragma omp parallel for default(shared) private(nr,ni,i) reduction(+: nrm)
+	for (i = 0; i < n; ++i) {
+		nr = creal(x[i]);
+		nr *= nr;
+		ni = cimag(x[i]);
+		ni *= ni;
+		nrm += nr + ni;
+	}
+
+	/* Sum over processors and reduce. */
+	MPI_Allreduce (MPI_IN_PLACE, &nrm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+	return (float)sqrt(nrm);
 }
 
 /* The RMS error between a test vector and a reference. */
