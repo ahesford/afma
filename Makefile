@@ -2,14 +2,14 @@ CC=mpicc
 FF=mpif90
 LD=$(FF)
 
-LIBS= -lScaleME2 -lgmres -lfftw3f
+LIBS= -lScaleME2 -lfftw3f
 
 OPTFLAGS= -fopenmp -O3 -Xarch_x86_64 -march=core2 -Xarch_i386 -march=prescott
 ARCHFLAGS= -arch x86_64 -arch i386 -D_MACOSX
 ARCHLIBS= -framework Accelerate
 
 CINCDIR= -I../scaleme/include -I/usr/local/include -I/opt/local/include
-LIBDIR= -L../scaleme/fma2 -L../gmres -L/usr/local/lib -L/opt/local/lib
+LIBDIR= -L../scaleme/fma2 -L/usr/local/lib -L/opt/local/lib
 
 DFLAGS=
 CFLAGS= $(OPTFLAGS) $(ARCHFLAGS)

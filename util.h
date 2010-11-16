@@ -10,6 +10,8 @@
 
 #define GEDIV(a,b) ((a) / (b) + ((a) % (b) == 0 ? 0 : 1))
 
+#define PVNORM(a,n) (sqrt(creal(pardot(a,a,n))))
+
 /* Define some no-op OpenMP functions if OpenMP is not used. */
 #ifndef _OPENMP
 int omp_get_max_threads () { return 1; }
@@ -34,4 +36,6 @@ int cellcoords (float *, int, int, float);
 int inset (int, int *, int);
 int maxind (complex float *, int, int *, int);
 
+complex float pardot (complex float *, complex float *, long);
+int cmgs (complex float *, complex float *, complex float *, long, long);
 #endif /* __UTIL_H_ */

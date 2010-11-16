@@ -6,6 +6,38 @@
 
 #include "util.h"
 
+/* Use the modified Gram-Schmidt process to compute (in place) the portion of
+ * the n-dimensional vector v orthogonal to each of the nv vectors s. The
+ * projection * of the vector onto each of the basis vectors is stored in the
+ * length-nv array c. */
+int cmgs (complex float *v, complex float *c, complex float *s, long n, long nv) {
+	long i;
+	complex float *sv, cv;
+
+	for (i = 0, sv = s; i < nv; ++i, sv += n) {
+		/* Compute the projection of the vector onto the current basis. */
+		c[i] = pardot (sv, v, n);
+
+		/* Eliminate the parallel component of the vector. */
+		cv = -c[i];
+		cblas_caxpy (n, &cv, sv, 1,  v, 1);
+	}
+
+	return n;
+}
+
+/* Compute the inner product of the distributed vectors x and y of dimension n. */
+complex float pardot (complex float *x, complex float *y, long n) {
+	complex float dp;
+
+	/* Compute the local portion. */
+	cblas_cdotc_sub (n, x, 1, y, 1, &dp);
+	/* Add in the contributions from other processors. */
+	MPI_Allreduce (MPI_IN_PLACE, &dp, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+
+	return dp;
+}
+
 /* The RMS error between a test vector and a reference. */
 float mse (complex float *test, complex float *ref, long n, int nrm) {
 	long i;
