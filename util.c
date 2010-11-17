@@ -10,7 +10,8 @@
  * the n-dimensional vector v orthogonal to each of the nv vectors s. The
  * projection * of the vector onto each of the basis vectors is stored in the
  * length-nv array c. */
-int cmgs (complex float *v, complex float *c, complex float *s, long n, int nv) {
+int cmgs (complex float *v, complex float *c, complex float *s,
+		long n, int nv, int imgsit, float imgstol) {
 	long i, j, k;
 	complex float *sv, cv;
 
@@ -23,7 +24,7 @@ int cmgs (complex float *v, complex float *c, complex float *s, long n, int nv) 
 			c[i] += cv;
 #pragma omp parallel for default(shared) private(j)
 			for (j = 0; j < n; ++j) v[j] -= cv * sv[j];
-		} while (cabs(cv / c[i]) > IMGS_TOL && ++k < IMGS_ITS);
+		} while (cabs(cv / c[i]) > imgstol && ++k < imgsit);
 		
 	}
 

@@ -10,9 +10,6 @@
 
 #define GEDIV(a,b) ((a) / (b) + ((a) % (b) == 0 ? 0 : 1))
 
-#define IMGS_TOL 1e-3
-#define IMGS_ITS 2
-
 /* Define some no-op OpenMP functions if OpenMP is not used. */
 #ifndef _OPENMP
 int omp_get_max_threads () { return 1; }
@@ -37,7 +34,7 @@ int cellcoords (float *, int, int, float);
 int inset (int, int *, int);
 int maxind (complex float *, int, int *, int);
 
-int cmgs (complex float *, complex float *, complex float *, long, int);
+int cmgs (complex float *, complex float *, complex float *, long, int, int, float);
 complex float pardot (complex float *, complex float *, long);
 float parnorm (complex float *, long);
 #endif /* __UTIL_H_ */

@@ -20,11 +20,12 @@
 void usage (char *);
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-d] [-r #] [-a #] [-o <output prefix>] -i <input prefix>\n", name);
+	fprintf (stderr, "Usage: %s [-d] [-r #] [-a #] [-g #,#] [-b] [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
-	fprintf (stderr, "\t-d: Debug mode (prints RHS and induced currents)\n");
-	fprintf (stderr, "\t-g: Use GMRES instead of BiCG-STAB\n");
+	fprintf (stderr, "\t-d: Debug mode (prints induced field)\n");
+	fprintf (stderr, "\t-g: Specify the number of iterations and tolerance for Gram Schmidt in GMRES\n");
+	fprintf (stderr, "\t-b: Use BiCG-STAB instead of GMRES\n");
 	fprintf (stderr, "\t-r: Specify the number of observation configurations\n");
 	fprintf (stderr, "\t-a: Use ACA with specified tolerance for far-field transformations\n");
 }
@@ -32,12 +33,12 @@ void usage (char *name) {
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist,
 	     fname[1024], fldfmt[1024], guessfmt[1024];
-	int mpirank, mpisize, i, j, k, nit, gmr = 0, gsize[3], obscount = 1;
+	int mpirank, mpisize, i, j, k, nit, gsize[3], obscount = 1;
 	complex float *rhs, *sol, *field;
 	double cputime, wtime;
-	int debug = 0, maxobs, useaca = 0;
+	int debug = 0, maxobs, useaca = 0, usebicg = 0, imgsit = 2;
 	long nelt;
-	float acatol = -1;
+	float acatol = -1, imgstol = 1e-3;
 
 	measdesc *obsmeas, srcmeas;
 	solveparm solver;
@@ -52,7 +53,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:dgr:a:h")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:dg:br:a:h")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -64,7 +65,11 @@ int main (int argc, char **argv) {
 			debug = 1;
 			break;
 		case 'g':
-			gmr = 1;
+			imgsit = strtol(strtok(optarg, ","), NULL, 0);
+			imgstol = strtod(strtok(NULL, ","), NULL);
+			break;
+		case 'b':
+			usebicg = 1;
 			break;
 		case 'r':
 			obscount = strtol(optarg, NULL, 0);
@@ -180,8 +185,10 @@ int main (int argc, char **argv) {
 			cputime = (double)clock() / CLOCKS_PER_SEC;
 			wtime = MPI_Wtime();
 
-			if (gmr) nit = gmres (rhs, sol, k || j, solver.maxit, solver.epscg, 0);
-			else nit = bicgstab (rhs, sol, k || j, solver.maxit, solver.epscg, 0);
+			if (usebicg) nit = bicgstab (rhs, sol, k || j, 
+					solver.maxit, solver.epscg, 0);
+			else nit = gmres (rhs, sol, k || j, solver.maxit,
+					solver.epscg, 0, imgsit, imgstol);
 
 			cputime = (double)clock() / CLOCKS_PER_SEC - cputime;
 			wtime = MPI_Wtime() - wtime;

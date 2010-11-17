@@ -43,8 +43,8 @@ int matvec (complex float *out, complex float *in, complex float *cur) {
 	return 0;
 }
 
-int gmres (complex float *rhs, complex float *sol,
-		int guess, int mit, float tol, int quiet) {
+int gmres (complex float *rhs, complex float *sol, int guess,
+		int mit, float tol, int quiet, int imgsit, float imgstol) {
 	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol, lwork;
 	int i, rank, one = 1;
 	complex float *h, *v, *mvp, *beta, *y;
@@ -100,7 +100,7 @@ int gmres (complex float *rhs, complex float *sol,
 		matvec (vp + nelt, vp, mvp);
 		/* Perform modified Gram-Schmidt to orthogonalize the basis. */
 		/* This also builds the Hessenberg matrix column. */
-		cmgs (vp + nelt, hp, v, nelt, i + 1);
+		cmgs (vp + nelt, hp, v, nelt, i + 1, imgsit, imgstol);
 		/* Compute the norm of the next basis vector. */
 		hp[i + 1] = parnorm(vp + nelt, nelt);
 
