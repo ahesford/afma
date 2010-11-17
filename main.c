@@ -20,11 +20,10 @@
 void usage (char *);
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-d] [-r #] [-a #] [-g #,#] [-b] [-o <output prefix>] -i <input prefix>\n", name);
+	fprintf (stderr, "Usage: %s [-d] [-r #] [-a #] [-b] [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
 	fprintf (stderr, "\t-d: Debug mode (prints induced field)\n");
-	fprintf (stderr, "\t-g: Specify the number of iterations and tolerance for Gram Schmidt in GMRES\n");
 	fprintf (stderr, "\t-b: Use BiCG-STAB instead of GMRES\n");
 	fprintf (stderr, "\t-r: Specify the number of observation configurations\n");
 	fprintf (stderr, "\t-a: Use ACA with specified tolerance for far-field transformations\n");
@@ -36,9 +35,9 @@ int main (int argc, char **argv) {
 	int mpirank, mpisize, i, j, k, nit, gsize[3], obscount = 1;
 	complex float *rhs, *sol, *field;
 	double cputime, wtime;
-	int debug = 0, maxobs, useaca = 0, usebicg = 0, imgsit = 2;
+	int debug = 0, maxobs, useaca = 0, usebicg = 0;
 	long nelt;
-	float acatol = -1, imgstol = 1e-3;
+	float acatol = -1;
 
 	measdesc *obsmeas, srcmeas;
 	solveparm solver;
@@ -53,7 +52,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:dg:br:a:h")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:dbr:a:h")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -63,10 +62,6 @@ int main (int argc, char **argv) {
 			break;
 		case 'd':
 			debug = 1;
-			break;
-		case 'g':
-			imgsit = strtol(strtok(optarg, ","), NULL, 0);
-			imgstol = strtod(strtok(NULL, ","), NULL);
 			break;
 		case 'b':
 			usebicg = 1;
@@ -187,8 +182,8 @@ int main (int argc, char **argv) {
 
 			if (usebicg) nit = bicgstab (rhs, sol, k || j, 
 					solver.maxit, solver.epscg, 0);
-			else nit = gmres (rhs, sol, k || j, solver.maxit,
-					solver.epscg, 0, imgsit, imgstol);
+			else nit = gmres (rhs, sol, k || j,
+					solver.maxit, solver.epscg, 0);
 
 			cputime = (double)clock() / CLOCKS_PER_SEC - cputime;
 			wtime = MPI_Wtime() - wtime;

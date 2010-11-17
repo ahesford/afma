@@ -9,24 +9,51 @@
 /* Use the modified Gram-Schmidt process to compute (in place) the portion of
  * the n-dimensional vector v orthogonal to each of the nv vectors s. The
  * projection * of the vector onto each of the basis vectors is stored in the
- * length-nv array c. */
-int cmgs (complex float *v, complex float *c, complex float *s,
-		long n, int nv, int imgsit, float imgstol) {
-	long i, j, k;
+ * length-nv array c. This is actually a selective reorthogonalization scheme
+ * to attempt to correct rounding errors. */
+int cmgs (complex float *v, complex float *c, complex float *s, long n, int nv) {
+	long i, j;
 	complex float *sv, cv;
+	float vnrm, lcrit;
 
-	for (i = 0, sv = s; i < nv; ++i, sv += n) {
-		c[i] = 0;
-		k = 0;
+	/* Perform the first modified Gram Schmidt orthogonalization. */
+	for (i = 0, sv = s, lcrit = 0.; i < nv; ++i, sv += n) {
+		/* The projection of the vector onto the current basis. */
+		c[i] = pardot (sv, v, n);
 
-		do {
+		/* Track the 1-norm of the projection column. */
+		lcrit += cabs(c[i]);
+
+#pragma omp parallel for default(shared) private(j)
+		for (j = 0; j < n; ++j) v[j] -= c[i] * sv[j];
+	}
+
+	/* Compute the norm of the vector. */
+	c[nv] = parnorm (v, n);
+	vnrm = creal(c[nv]);
+
+	/* Reorthogonalize if necessary. */
+	if (lcrit / vnrm > IMGS_L) {
+		for (i = 0, sv = s; i < nv; ++i, sv += n)  {
+			/* Re-project the vector onto the current basis. */
 			cv = pardot (sv, v, n);
+
+			/* Update the projection. */
 			c[i] += cv;
+
+			/* Remove the remaining parallel component. */
 #pragma omp parallel for default(shared) private(j)
 			for (j = 0; j < n; ++j) v[j] -= cv * sv[j];
-		} while (cabs(cv / c[i]) > imgstol && ++k < imgsit);
-		
+		}
+
+		/* Update the norm of the orthogonal vector. */
+		c[nv] = parnorm (v, n);
+		vnrm = creal(c[nv]);
 	}
+
+	/* Finally, normalize the newly-created vector. */
+#pragma omp parallel for default(shared) private(j)
+	for (j = 0; j < n; ++j) v[j] /= vnrm;
 
 	return n;
 }

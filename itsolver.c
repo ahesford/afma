@@ -43,8 +43,8 @@ int matvec (complex float *out, complex float *in, complex float *cur) {
 	return 0;
 }
 
-int gmres (complex float *rhs, complex float *sol, int guess,
-		int mit, float tol, int quiet, int imgsit, float imgstol) {
+int gmres (complex float *rhs, complex float *sol,
+		int guess, int mit, float tol, int quiet) {
 	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol, lwork;
 	int i, rank, one = 1;
 	complex float *h, *v, *mvp, *beta, *y;
@@ -99,17 +99,9 @@ int gmres (complex float *rhs, complex float *sol, int guess,
 		/* Compute the next expansion of the Krylov space. */
 		matvec (vp + nelt, vp, mvp);
 		/* Perform modified Gram-Schmidt to orthogonalize the basis. */
-		/* This also builds the Hessenberg matrix column. */
-		cmgs (vp + nelt, hp, v, nelt, i + 1, imgsit, imgstol);
-		/* Compute the norm of the next basis vector. */
-		hp[i + 1] = parnorm(vp + nelt, nelt);
-
-		/* Avoid breakdown. */
-		if (cabs(hp[i + 1]) <  FLT_EPSILON) break;
-
-		/* Normalize the basis vector. */
-#pragma omp parallel for default(shared) private(j)
-		for (j = 0; j < nelt; ++j) vp[nelt + j] /= creal(hp[i + 1]);
+		/* This also builds the Hessenberg matrix column, including
+		 * the 2-norm of the next basis vector. */
+		cmgs (vp + nelt, hp, v, nelt, i + 1);
 
 		/* Apply previous Givens rotations to the Hessenberg column. */
 		for (j = 0; j < i; ++j) 
