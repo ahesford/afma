@@ -175,30 +175,31 @@ int main (int argc, char **argv) {
 		k = getcontrast (sol, fname, gsize, fmaconf.bslist,
 				fmaconf.numbases, fmaconf.bspbox);
 
-		cputime = (double)clock() / CLOCKS_PER_SEC;
-		wtime = MPI_Wtime();
-
 		/* Restart if the true residual is not sufficiently low. */
 		for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j) {
+			cputime = (double)clock() / CLOCKS_PER_SEC;
+			wtime = MPI_Wtime();
+
 			if (gmr) nit = gmres (rhs, sol, k || j, solver.maxit, solver.epscg, 0);
 			else nit = bicgstab (rhs, sol, k || j, solver.maxit, solver.epscg, 0);
-		}
 
-		cputime = (double)clock() / CLOCKS_PER_SEC - cputime;
-		wtime = MPI_Wtime() - wtime;
-
-		if (!mpirank) {
-			fprintf (stderr, "CPU time for solution: %0.6g\n", cputime);
-			fprintf (stderr, "Wall time for solution: %0.6g\n", wtime);
-		}
-
-		if (debug) {
-			wtime = MPI_Wtime();
-			sprintf (fname, guessfmt, outproj, i, "solution");
-			prtcontrast (fname, sol, gsize, fmaconf.bslist,
-					fmaconf.numbases, fmaconf.bspbox);
+			cputime = (double)clock() / CLOCKS_PER_SEC - cputime;
 			wtime = MPI_Wtime() - wtime;
-			if (!mpirank) fprintf (stderr, "Wall time for field write: %0.6g\n", wtime);
+
+			if (!mpirank) {
+				fprintf (stderr, "CPU time for solution: %0.6g\n", cputime);
+				fprintf (stderr, "Wall time for solution: %0.6g\n", wtime);
+			}
+
+			/* Update the internal field before every restart. */
+			if (debug) {
+				wtime = MPI_Wtime();
+				sprintf (fname, guessfmt, outproj, i, "solution");
+				prtcontrast (fname, sol, gsize, fmaconf.bslist,
+						fmaconf.numbases, fmaconf.bspbox);
+				wtime = MPI_Wtime() - wtime;
+				if (!mpirank) fprintf (stderr, "Wall time for field write: %0.6g\n", wtime);
+			}
 		}
 
 		/* Convert total field into contrast current. */
