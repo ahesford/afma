@@ -118,6 +118,10 @@ int gmres (complex float *rhs, complex float *sol,
 		/* Estimate the RRE for this iteration. */
 		err = cabs(beta[i + 1]) / rhn;
 		if (!rank && !quiet) printf ("GMRES(%d): %g\n", i, err);
+
+		/* Flush the output buffers. */
+		fflush (stdout);
+		fflush (stderr);
 	}
 
 	/* If there were any GMRES iterations, update the solution. */
