@@ -13,7 +13,7 @@
 #define GEDIV(a,b) ((a) / (b) + ((a) % (b) == 0 ? 0 : 1))
 
 /* Condition for selective reorthogonalization, suggested by
-/* Giraud and Langou in CERFACS Tech. Report No. TR/PA/02/52,
+ * Giraud and Langou in CERFACS Tech. Report No. TR/PA/02/52,
  * "Robust selective Gram-Schmidt reorthogonalization". */
 #define IMGS_L 0.99
 

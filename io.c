@@ -203,10 +203,11 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 /* Read the gridded file into local arrays. */
 int getcontrast (complex float *contrast, char *fname, int *size,
 		int *bslist, int nbs, int bpb) {
-	long i, *bsmap, l, nelt, nnz;
-	int k, bsize[3], idx[3], gidx[3], bpbvol = bpb * bpb * bpb;
+	long i, l, nelt;
+	int k, bsize[3], idx[3], gidx[3], bpbvol = bpb * bpb * bpb, rrow;
 
 	/* MPI data types for file I/O. */
+	MPI_Offset offset;
 	MPI_Status stat;
 	MPI_Datatype cplx;
 	MPI_File fh;
@@ -233,11 +234,8 @@ int getcontrast (complex float *contrast, char *fname, int *size,
 	/* Position the file to read complex values after the header. */
 	MPI_File_set_view (fh, 3 * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
 
-	/* Allocate the map from the read order to the local storage order. */
-	bsmap = malloc (2L * nelt * sizeof(long));
-
 	/* Build a basis map for sorting. */
-	for (nnz = i = l = 0; i < nbs; ++i) {
+	for (i = l = 0; i < nbs; ++i) {
 		bsindex (bslist[i], gidx);
 
 		/* Find the starting basis index from the group index. */
@@ -245,35 +243,26 @@ int getcontrast (complex float *contrast, char *fname, int *size,
 		gidx[1] *= bpb;
 		gidx[2] *= bpb;
 
-		for (k = 0; k < bpbvol; ++k, ++l) {
+		/* Don't try to read beyond the bounds of the file. */
+		rrow = MIN(bpb, MAX(0, bsize[0] - gidx[0]));
+
+		for (k = 0; k < bpbvol; k += bpb, l += bpb) {
 			/* Compute the index of the basis within the group. */
 			GRID(idx, bpb, k);
 			idx[0] += gidx[0];
 			idx[1] += gidx[1];
 			idx[2] += gidx[2];
 
-			/* Don't read this element if it exceeds grid bounds. */
-			if (idx[0] >= bsize[0] || idx[1] >= bsize[1] || 
-					idx[2] >= bsize[2]) continue;
+			/* Don't read this row if it exceeds grid bounds. */
+			if (idx[1] >= bsize[1] || idx[2] >= bsize[2]) continue;
 
 			/* Compute the basis position. */
-			bsmap[2 * nnz] = (long)idx[0] +
-				(long)bsize[0] * (long)idx[1] + 
+			offset = (long)idx[0] + (long)bsize[0] * (long)idx[1] + 
 				(long)bsize[0] * (long)bsize[1] * (long)idx[2];
-			bsmap[2 * nnz + 1] = l;
-			++nnz;
+			MPI_File_read_at (fh, offset, contrast + l, rrow, cplx, &stat);
 		}
 	}
 
-	/* Sort the nonzero basis map entries. */
-	qsort (bsmap, nnz, 2 * sizeof(long), mapcomp);
-
-	/* Read the nonzero elements. */
-	for (i = 0; i < nnz; ++i)
-		MPI_File_read_at (fh, bsmap[2*i], contrast+bsmap[2*i+1], 1, cplx, &stat);
-
-	/* Free the sorted map and MPI complex type, and close the file. */
-	free (bsmap);
 	MPI_File_close (&fh);
 	MPI_Type_free (&cplx);
 
@@ -284,7 +273,7 @@ int getcontrast (complex float *contrast, char *fname, int *size,
 int prtcontrast (char *fname, complex float *crt, int *size,
 		int *bslist, int nbs, int bpb) {
 	int k, mpirank, bpbvol = bpb * bpb * bpb, bsize[3], gidx[3], idx[3];
-	long i, *bsmap, nelt, l;
+	long i, nelt, l;
 	
 	/* MPI data types for file I/O. */
 	MPI_Offset offset;
@@ -321,14 +310,12 @@ int prtcontrast (char *fname, complex float *crt, int *size,
 	MPI_Barrier (MPI_COMM_WORLD);
 	MPI_File_sync (fh);
 
+	/* Create the basic complex float type. */
 	MPI_Type_contiguous (2, MPI_FLOAT, &cplx);
 	MPI_Type_commit (&cplx);
 
 	/* Set the file view to skip over the grid size header. */
 	MPI_File_set_view (fh, 3 * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
-
-	/* Allocate the map from the read order to the local storage order. */
-	bsmap = malloc (2 * nelt * sizeof(long));
 
 	/* Build a basis map for sorting. */
 	for (i = l = 0; i < nbs; ++i) {
@@ -339,7 +326,7 @@ int prtcontrast (char *fname, complex float *crt, int *size,
 		gidx[1] *= bpb;
 		gidx[2] *= bpb;
 
-		for (k = 0; k < bpbvol; ++k, ++l) {
+		for (k = 0; k < bpbvol; k += bpb, l += bpb) {
 			/* Compute the index of the basis within the group. */
 			GRID(idx, bpb, k);
 			idx[0] += gidx[0];
@@ -347,22 +334,11 @@ int prtcontrast (char *fname, complex float *crt, int *size,
 			idx[2] += gidx[2];
 
 			/* Compute the basis position. */
-			bsmap[2 * l] = (long)idx[0] +
-				(long)bsize[0] * (long)idx[1] + 
+			offset = (long)idx[0] + (long)bsize[0] * (long)idx[1] + 
 				(long)bsize[0] * (long)bsize[1] * (long)idx[2];
-			bsmap[2 * l + 1] = l;
+			MPI_File_write_at (fh, offset, crt + l, bpb, cplx, &stat);
 		}
 	}
-
-	/* Sort the basis map. */
-	qsort (bsmap, nelt, 2 * sizeof(long), mapcomp);
-
-	/* Perform an ordered write of the file. */
-	for (i = 0; i < nelt; ++i)
-		MPI_File_write_at(fh, bsmap[2*i], crt+bsmap[2*i+1], 1, cplx, &stat);
-
-	/* Free the basis map. */
-	free (bsmap);
 
 	/* Free the MPI file type and close the file. */
 	MPI_File_close (&fh);

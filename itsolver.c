@@ -47,7 +47,7 @@ int gmres (complex float *rhs, complex float *sol,
 		int guess, int mit, float tol, int quiet) {
 	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol, lwork;
 	int i, rank, one = 1;
-	complex float *h, *v, *mvp, *beta, *y;
+	complex float *h, *v, *mvp, *beta;
 	complex float *vp, *hp, *s, cr, cone = 1.;
 	float rhn, err, *c;
 
