@@ -203,36 +203,23 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 /* Read the gridded file into local arrays. */
 int getcontrast (complex float *contrast, char *fname, int *size,
 		int *bslist, int nbs, int bpb) {
-	long i, l, nelt;
+	long i, l, nelt, offset;
 	int k, bsize[3], idx[3], gidx[3], bpbvol = bpb * bpb * bpb, rrow;
-
-	/* MPI data types for file I/O. */
-	MPI_Offset offset;
-	MPI_Status stat;
-	MPI_Datatype cplx;
-	MPI_File fh;
+	FILE *fh;
 
 	nelt = (long)nbs * (long)bpbvol;
 
 	/* Zero out the contrast in case nothing can be read. */
 	memset (contrast, 0, nelt * sizeof(complex float));
 
-	/* Define and commit a complex type for MPI reads. */
-	MPI_Type_contiguous (2, MPI_FLOAT, &cplx);
-	MPI_Type_commit (&cplx);
-
 	/* Open the MPI file with the specified name. */
-	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_RDONLY,
-				MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
+	if (!(fh = fopen(fname, "rb"))) {
 		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
 		return 0;
 	}
 
 	/* Read the basis grid size. */
-	MPI_File_read (fh, bsize, 3, MPI_INT, &stat);
-
-	/* Position the file to read complex values after the header. */
-	MPI_File_set_view (fh, 3 * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
+	fread (bsize, sizeof(int), 3, fh);
 
 	/* Build a basis map for sorting. */
 	for (i = l = 0; i < nbs; ++i) {
@@ -257,30 +244,25 @@ int getcontrast (complex float *contrast, char *fname, int *size,
 			if (idx[1] >= bsize[1] || idx[2] >= bsize[2]) continue;
 
 			/* Compute the basis position. */
-			offset = (long)idx[0] + (long)bsize[0] * (long)idx[1] + 
-				(long)bsize[0] * (long)bsize[1] * (long)idx[2];
-			MPI_File_read_at (fh, offset, contrast + l, rrow, cplx, &stat);
+			offset = 3L * sizeof(int) + sizeof(complex float) *
+				((long)idx[0] + (long)bsize[0] * (long)idx[1] + 
+				 (long)bsize[0] * (long)bsize[1] * (long)idx[2]);
+			fseek (fh, offset, SEEK_SET);
+			fread (contrast + l, sizeof(complex float), rrow, fh);
 		}
 	}
 
-	MPI_File_close (&fh);
-	MPI_Type_free (&cplx);
-
+	fclose (fh);
 	return nbs;
 }
 
 /* Distributed write of a gridded file into local arrays. */
 int prtcontrast (char *fname, complex float *crt, int *size,
 		int *bslist, int nbs, int bpb) {
-	int k, mpirank, bpbvol = bpb * bpb * bpb, bsize[3], gidx[3], idx[3];
-	long i, nelt, l;
+	int fd, k, mpirank, bpbvol = bpb * bpb * bpb, bsize[3], gidx[3], idx[3];
+	long i, nelt, l, offset;
+	FILE *fh;
 	
-	/* MPI data types for file I/O. */
-	MPI_Offset offset;
-	MPI_Status stat;
-	MPI_Datatype cplx;
-	MPI_File fh;
-
 	nelt = (long)nbs * (long)bpbvol;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -294,28 +276,20 @@ int prtcontrast (char *fname, complex float *crt, int *size,
 	bsize[2] = bpb * size[2];
 
 	/* Open the MPI file with the specified name. */
-	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_WRONLY | MPI_MODE_CREATE,
-				MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
+	if (!(fh = fopen(fname, "wb"))) {
 		fprintf (stderr, "ERROR: could not open %s.\n", fname);
 		return 0;
 	}
 
-	/* Set the size of the output file and set the view to write the header. */
-	MPI_File_set_size (fh, offset);
-	MPI_File_set_view (fh, 0, MPI_INT, MPI_INT, "native", MPI_INFO_NULL);
-	/* The first process should write the size header in the file. */
-	if (!mpirank) MPI_File_write (fh, bsize, 3, MPI_INT, &stat);
-	/* Ensure the write is committed and all processes should wait. */
-	MPI_File_sync (fh);
+	/* Set the size of the output file. */
+	fd = fileno (fh);
+	ftruncate (fd, offset);
+	fsync (fd);
 	MPI_Barrier (MPI_COMM_WORLD);
-	MPI_File_sync (fh);
+	fsync (fd);
 
-	/* Create the basic complex float type. */
-	MPI_Type_contiguous (2, MPI_FLOAT, &cplx);
-	MPI_Type_commit (&cplx);
-
-	/* Set the file view to skip over the grid size header. */
-	MPI_File_set_view (fh, 3 * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
+	/* The first process should write the size header in the file. */
+	if (!mpirank) fwrite (bsize, sizeof(int), 3, fh);
 
 	/* Build a basis map for sorting. */
 	for (i = l = 0; i < nbs; ++i) {
@@ -334,16 +308,16 @@ int prtcontrast (char *fname, complex float *crt, int *size,
 			idx[2] += gidx[2];
 
 			/* Compute the basis position. */
-			offset = (long)idx[0] + (long)bsize[0] * (long)idx[1] + 
-				(long)bsize[0] * (long)bsize[1] * (long)idx[2];
-			MPI_File_write_at (fh, offset, crt + l, bpb, cplx, &stat);
+			offset = 3L * sizeof(int) + sizeof(complex float) * 
+				((long)idx[0] + (long)bsize[0] * (long)idx[1] + 
+				(long)bsize[0] * (long)bsize[1] * (long)idx[2]);
+			fseek (fh, offset, SEEK_SET);
+			fwrite (crt + l, sizeof(complex float), bpb,  fh);
 		}
 	}
 
 	/* Free the MPI file type and close the file. */
-	MPI_File_close (&fh);
-	MPI_Type_free (&cplx);
-
+	fclose (fh);
 	return size[0] * size[1] * size[2];
 }
 
