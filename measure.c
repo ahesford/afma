@@ -34,9 +34,7 @@ int buildrhs (complex float *rhs, float *srcloc) {
 
 		for (j = 0; j < fmaconf.bspboxvol; ++j, ++rptr) {
 			/* The position in the local grid of the basis function. */
-			idx[0] = j / (fmaconf.bspbox * fmaconf.bspbox);
-			idx[1] = (j / fmaconf.bspbox) % fmaconf.bspbox;
-			idx[2] = j % fmaconf.bspbox;
+			GRID(idx, fmaconf.bspbox, j);
 
 			/* The center of the basis function. */
 			ctr[0] = off[0] + fmaconf.cell * (float)idx[0];

@@ -5,8 +5,10 @@
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define ABS(x) ((x) > 0 ? (x) : -(x))
 
-#define IDX(ny,nz,i,j,k) ((k) + (nz) * ((j) + (ny) * (i)))
-#define SQIDX(ny,i,j,k) IDX(ny,ny,i,j,k)
+#define IDX(nc,i,j,k) ((i) + (nc) * ((j) + (nc) * (k)))
+#define GRID(a,nc,i) { (a)[0] = (i) % (nc); \
+	(a)[1] = ((i) / (nc)) % (nc); \
+	(a)[2] = (i) / ((nc) * (nc)); }
 
 #define GEDIV(a,b) ((a) / (b) + ((a) % (b) == 0 ? 0 : 1))
 

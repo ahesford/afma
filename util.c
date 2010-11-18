@@ -156,15 +156,13 @@ int sampcoords (float *s, int i, float *th, int nt, int np) {
 
 /* Compute the relative coordinates of a cell within a group of cells. */
 int cellcoords (float *r, int l, int bpd, float dx) {
-	int i, j, k;
+	int idx[3];
 
-	k = l % bpd;
-	j = (l / bpd) % bpd;
-	i = l / (bpd * bpd);
+	GRID(idx, bpd, l);
 
-	r[0] = 0.5 * dx * (2.0 * i + 1.0 - (float)bpd);
-	r[1] = 0.5 * dx * (2.0 * j + 1.0 - (float)bpd);
-	r[2] = 0.5 * dx * (2.0 * k + 1.0 - (float)bpd);
+	r[0] = 0.5 * dx * (2.0 * idx[0] + 1.0 - (float)bpd);
+	r[1] = 0.5 * dx * (2.0 * idx[1] + 1.0 - (float)bpd);
+	r[2] = 0.5 * dx * (2.0 * idx[2] + 1.0 - (float)bpd);
 
 	return 0;
 }

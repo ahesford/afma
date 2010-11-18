@@ -23,7 +23,7 @@ typedef struct {
 /* Buffers for the RHS cache, the Green's functions, and a workspace. */
 static boxdesc *boxlist;
 static complex float *gridints, *rhsbuf;
-static int nbors, nfftprod, nfft[3], nebox;
+static int nbors, nfftprod, nfft, nebox;
 static fftwf_plan fplan, bplan;
 
 /* Compare two box indices for sorting and searching. */
@@ -162,12 +162,10 @@ complex float *cacheboxrhs (int bsl, int boxkey) {
 		/* Populate the local grid. */
 		for (i = 0; i < fmaconf.bspboxvol; ++i) {
 			/* Find the position in the local box. */
-			key.index[0] = i / (fmaconf.bspbox * fmaconf.bspbox);
-			key.index[1] = (i / fmaconf.bspbox) % fmaconf.bspbox;
-			key.index[2] = i % fmaconf.bspbox;
+			GRID(key.index, fmaconf.bspbox, i);
 
 			/* The index into the RHS array. */
-			l = SQIDX(nfft[0],key.index[0],key.index[1],key.index[2]);
+			l = IDX(nfft,key.index[0],key.index[1],key.index[2]);
 			
 			/* Fill the expanded FFT grid. */
 			bptr[l] = rhs[i];
@@ -199,8 +197,8 @@ int dirprecalc () {
 	nborsvol *= nborsvol * nborsvol;
 
 	/* The FFT size. */
-	nfft[0] = nfft[1] = nfft[2] = 2 * fmaconf.bspbox;
-	nfftprod = nfft[0] * nfft[1] * nfft[2];
+	nfft = 2 * fmaconf.bspbox;
+	nfftprod = nfft * nfft * nfft;
 
 	/* Build the expanded grid. */
 	totbpnbr = nfftprod * nborsvol;
@@ -210,31 +208,29 @@ int dirprecalc () {
 			rank, totbpnbr * sizeof(complex float));
 
 	/* The forward FFT plan transforms all boxes in one pass. */
-	fplan = fftwf_plan_dft_3d (nfft[0], nfft[1], nfft[2],
+	fplan = fftwf_plan_dft_3d (nfft, nfft, nfft,
 			gridints, gridints, FFTW_FORWARD, FFTW_MEASURE);
 	/* The inverse FFT plan only transforms a single box. */
-	bplan = fftwf_plan_dft_3d (nfft[0], nfft[1], nfft[2],
+	bplan = fftwf_plan_dft_3d (nfft, nfft, nfft,
 			gridints, gridints, FFTW_BACKWARD, FFTW_MEASURE);
 
 #pragma omp parallel default(shared)
 {
-	int off[3], l, i, j, k;
+	int off[3], l, idx[3];
 	complex float *grf;
 
 #pragma omp for
 	for (l = 0; l < nborsvol; ++l) {
-		k = l % nbors;
-		j = (l / nbors) % nbors;
-		i = l / (nbors * nbors);
+		GRID(idx, nbors, l);
 
 		grf = gridints + l * nfftprod;
 
-		off[0] = (i - fmaconf.numbuffer) * fmaconf.bspbox;
-		off[1] = (j - fmaconf.numbuffer) * fmaconf.bspbox;
-		off[2] = (k - fmaconf.numbuffer) * fmaconf.bspbox;
+		off[0] = (idx[0] - fmaconf.numbuffer) * fmaconf.bspbox;
+		off[1] = (idx[1] - fmaconf.numbuffer) * fmaconf.bspbox;
+		off[2] = (idx[2] - fmaconf.numbuffer) * fmaconf.bspbox;
 
 		/* Build the Green's function grid for this local box. */
-		greengrid (grf, fmaconf.bspbox, nfft[0], fmaconf.k0, fmaconf.cell, off);
+		greengrid (grf, fmaconf.bspbox, nfft, fmaconf.k0, fmaconf.cell, off);
 
 		/* Fourier transform the Green's function. */
 		fftwf_execute_dft (fplan, grf, grf);
@@ -286,7 +282,7 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 		idx[2] -= boxoff[2];
 
 		/* Point to the Green's function for this box. */
-		gptr = gridints + nfftprod * SQIDX(nbors,idx[0],idx[1],idx[2]);
+		gptr = gridints + nfftprod * IDX(nbors,idx[0],idx[1],idx[2]);
 
 		/* Convolve the source field with the Green's function and
 		 * augment the field at the target. */
@@ -299,12 +295,10 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 	/* Augment with output with the local convolution. */
 	/* Note that each ScaleME "basis" is actually a finest-level group. */
 	for (l = 0; l < fmaconf.bspboxvol; ++l) {
-		idx[0] = l / (fmaconf.bspbox * fmaconf.bspbox);
-		idx[1] = (l / fmaconf.bspbox) % fmaconf.bspbox;
-		idx[2] = l % fmaconf.bspbox;
+		GRID(idx, fmaconf.bspbox, l);
 
 		/* Augment the RHS. */
-		cobs[l] += buf[SQIDX(nfft[0],idx[0],idx[1],idx[2])];
+		cobs[l] += buf[IDX(nfft,idx[0],idx[1],idx[2])];
 	}
 
 	free (buf);
@@ -314,29 +308,33 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 
 /* Build the extended Green's function on an expanded cubic grid. */
 int greengrid (complex float *grf, int m, int mex, float k0, float cell, int *off) {
-	int i, j, k, ip, jp, kp;
+	int ip, jp, kp, l, mt, idx[3];
 	float dist[3], zero[3] = {0., 0., 0.}, scale, slfscale;
 
+	/* The total number of samples. */
+	mt = mex * mex * mex;
+
 	/* The scale of the integral equation solution. */
-	scale = k0 * k0 / (float)(mex * mex * mex);
+	scale = k0 * k0 / (float)mt;
 	/* Scale for the self term. */
-	slfscale = (float)(mex * mex * mex);
+	slfscale = (float)mt;
 
 	/* Compute the interactions. */
-	for (i = 0; i < mex; ++i) {
-		ip = (i < m) ? i : (i - mex);
+	for (l = 0; l < mt; ++l) {
+		GRID(idx, mex, l);
+
+		ip = (idx[0] < m) ? idx[0] : (idx[0] - mex);
 		dist[0] = (float)(ip - off[0]) * fmaconf.cell;
-		for (j = 0; j < mex; ++j) {
-			jp = (j < m) ? j : (j - mex);
-			dist[1] = (float)(jp - off[1]) * fmaconf.cell;
-			for (k = 0; k < mex; ++k) {
-				kp = (k < m) ? k : (k - mex);
-				dist[2] = (float)(kp - off[2]) * fmaconf.cell;
-				if (kp == off[2] && jp == off[1] && ip == off[0])
-					*(grf++) = selfint (k0, cell) / slfscale;
-				else *(grf++) = scale * srcint (k0, zero, dist, cell, fsgreen);
-			}
-		}
+		
+		jp = (idx[1] < m) ? idx[1] : (idx[1] - mex);
+		dist[1] = (float)(jp - off[1]) * fmaconf.cell;
+		
+		kp = (idx[2] < m) ? idx[2] : (idx[2] - mex);
+		dist[2] = (float)(kp - off[2]) * fmaconf.cell;
+		
+		if (kp == off[2] && jp == off[1] && ip == off[0])
+			*(grf++) = selfint (k0, cell) / slfscale;
+		else *(grf++) = scale * srcint (k0, zero, dist, cell, fsgreen);
 	}
 
 	return mex;
