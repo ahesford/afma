@@ -5,6 +5,8 @@
 #include <math.h>
 #include <fftw3.h>
 
+#include "util.h"
+
 typedef struct {
 	float min[3], cen[3], cell, cellvol, grplen;
 	float precision;
@@ -18,16 +20,10 @@ typedef struct {
 
 extern fmadesc fmaconf;
 
-static inline void bsindex (int gi, int *idx) {
-	idx[0] = gi % fmaconf.nx;
-	idx[1] = (gi / fmaconf.nx) % fmaconf.ny;
-	idx[2] = gi / (fmaconf.nx * fmaconf.ny);
-}
-
 static inline void bscenter (int gi, float *cen) {
 	int idx[3];
 
-	bsindex (gi, idx);
+	GRID(idx, gi, fmaconf.nx, fmaconf.ny);
 
 	cen[0] = fmaconf.min[0] + ((float)idx[0] + 0.5) * fmaconf.grplen;
 	cen[1] = fmaconf.min[1] + ((float)idx[1] + 0.5) * fmaconf.grplen;

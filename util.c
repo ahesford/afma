@@ -158,7 +158,7 @@ int sampcoords (float *s, int i, float *th, int nt, int np) {
 int cellcoords (float *r, int l, int bpd, float dx) {
 	int idx[3];
 
-	GRID(idx, bpd, l);
+	GRID(idx, l, bpd, bpd);
 
 	r[0] = 0.5 * dx * (2.0 * idx[0] + 1.0 - (float)bpd);
 	r[1] = 0.5 * dx * (2.0 * idx[1] + 1.0 - (float)bpd);

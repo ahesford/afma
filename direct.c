@@ -58,7 +58,8 @@ int mkdircache () {
 	boxidx = malloc (3 * nbs * sizeof(int));
 
 	/* Build the array of box indices. */
-	for (i = 0, idx = boxidx; i < nbs; ++i, idx += 3) bsindex (bslist[i], idx);
+	for (i = 0, idx = boxidx; i < nbs; ++i, idx += 3) 
+		GRID (idx, bslist[i], fmaconf.nx, fmaconf.ny);
 
 	/* The basis list is no longer necessary. */
 	free (bslist);
@@ -137,7 +138,7 @@ complex float *cacheboxrhs (int bsl, int boxkey) {
 	complex float *bptr, *rhs;
 
 	/* Get the index for the first basis in the box. */
-	bsindex (bsl, key.index);
+	GRID (key.index, bsl, fmaconf.nx, fmaconf.ny);
 
 	/* Search for the box index. */
 	lbox = bsearch (&key, boxlist, nebox, sizeof(boxdesc), boxcomp);
@@ -162,7 +163,7 @@ complex float *cacheboxrhs (int bsl, int boxkey) {
 		/* Populate the local grid. */
 		for (i = 0; i < fmaconf.bspboxvol; ++i) {
 			/* Find the position in the local box. */
-			GRID(key.index, fmaconf.bspbox, i);
+			GRID(key.index, i, fmaconf.bspbox, fmaconf.bspbox);
 
 			/* The index into the RHS array. */
 			l = IDX(nfft,key.index[0],key.index[1],key.index[2]);
@@ -221,7 +222,7 @@ int dirprecalc () {
 
 #pragma omp for
 	for (l = 0; l < nborsvol; ++l) {
-		GRID(idx, nbors, l);
+		GRID(idx, l, nbors, nbors);
 
 		grf = gridints + l * nfftprod;
 
@@ -258,7 +259,7 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 	cobs = (complex float *)ScaleME_getOutputVec (tkey);
 
 	/* Find the index for the first basis in the target box. */
-	bsindex (obslist[0], boxoff);
+	GRID (boxoff, obslist[0], fmaconf.nx, fmaconf.ny);
 
 	/* Find the minimum box index for near interactions. */
 	boxoff[0] -= fmaconf.numbuffer;
@@ -274,7 +275,7 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 		bptr = cacheboxrhs (srclist[0], skeys[l]);
 
 		/* Get the index fo the first basis in the source box. */
-		bsindex (srclist[0], idx);
+		GRID (idx, srclist[0], fmaconf.nx, fmaconf.ny);
 
 		/* Find the local box number. */
 		idx[0] -= boxoff[0];
@@ -295,7 +296,7 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 	/* Augment with output with the local convolution. */
 	/* Note that each ScaleME "basis" is actually a finest-level group. */
 	for (l = 0; l < fmaconf.bspboxvol; ++l) {
-		GRID(idx, fmaconf.bspbox, l);
+		GRID(idx, l, fmaconf.bspbox, fmaconf.bspbox);
 
 		/* Augment the RHS. */
 		cobs[l] += buf[IDX(nfft,idx[0],idx[1],idx[2])];
@@ -321,7 +322,7 @@ int greengrid (complex float *grf, int m, int mex, float k0, float cell, int *of
 
 	/* Compute the interactions. */
 	for (l = 0; l < mt; ++l) {
-		GRID(idx, mex, l);
+		GRID(idx, l, mex, mex);
 
 		ip = (idx[0] < m) ? idx[0] : (idx[0] - mex);
 		dist[0] = (float)(ip - off[0]) * fmaconf.cell;
