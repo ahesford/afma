@@ -2,7 +2,6 @@
 #define __DIRECT_H_
 
 #include <complex.h>
-#include <fftw3.h>
 
 int greengrid (complex float *, int, int, float, float, int *);
 int dirprecalc ();

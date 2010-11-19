@@ -17,16 +17,6 @@
  * "Robust selective Gram-Schmidt reorthogonalization". */
 #define IMGS_L 0.99
 
-/* Define some no-op OpenMP functions if OpenMP is not used. */
-#ifndef _OPENMP
-int omp_get_max_threads () { return 1; }
-int omp_get_thread_num () { return 0; }
-
-int omp_set_lock (omp_lock_t *x) { return 0; }
-int omp_init_lock (omp_lock_t *x) { return 0; }
-int omp_unset_lock (omp_lock_t *x) { return 0; }
-#endif /* _OPENMP */
-
 #ifdef _FREEBSD
 #define log2(a) (log(a) / log(2))
 double complex cexp (double complex);

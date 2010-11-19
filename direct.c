@@ -4,7 +4,17 @@
 #include <complex.h>
 #include <math.h>
 
+#include <fftw3.h>
+
+/* Define OpenMP locking functions if locking is not used. */
+#ifdef _OPENMP
 #include <omp.h>
+#else
+typedef int omp_lock_t;
+int omp_set_lock (omp_lock_t *x) { return 0; }
+int omp_init_lock (omp_lock_t *x) { return 0; }
+int omp_unset_lock (omp_lock_t *x) { return 0; }
+#endif /* _OPENMP */
 
 #include "ScaleME.h"
 

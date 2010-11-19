@@ -174,7 +174,8 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the guess contrast for the local basis set. */
 	sprintf (fname, "%s.guess", inproj);
-	getcontrast (fmaconf.contrast, fname, gsize,
+	/* First try the group-ordered file, then try the old matrix format. */
+	getctgrp (fmaconf.contrast, fname, gsize,
 			fmaconf.bslist, fmaconf.numbases, fmaconf.bspbox);
 
 	/* Read the reference contrast for the local basis set. */
@@ -182,8 +183,8 @@ int main (int argc, char **argv) {
 	refct = malloc (nelt * sizeof(complex float));
 	sprintf (fname, "%s.reference", inproj);
 	/* If the reference file is not found, set the reference to NULL to avoid
-	 * checking the MSE at each step. */
-	if (!getcontrast (refct, fname, gsize, fmaconf.bslist,
+	 * checking the MSE at each step. Try both formats. */
+	if (!getctgrp (refct, fname, gsize, fmaconf.bslist,
 				fmaconf.numbases, fmaconf.bspbox)) {
 		free (refct);
 		refct = NULL;
@@ -272,7 +273,7 @@ int main (int argc, char **argv) {
 		errnorm = dbimerr (NULL, NULL, field, &hislv, &loslv, &srcmeas, &obsmeas);
 
 		sprintf (fname, "%s.inverse.%03d", outproj, i);
-		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist,
+		prtctgrp (fname, fmaconf.contrast, gsize, fmaconf.bslist,
 				fmaconf.numbases, fmaconf.bspbox);
 		
 		if (refct) crtmse = mse (fmaconf.contrast, refct, nelt, 1);
@@ -332,7 +333,7 @@ int main (int argc, char **argv) {
 		for (j = 0; j < nelt; ++j) fmaconf.contrast[j] += crt[j];
 
 		sprintf (fname, "%s.inverse.%03d", outproj, i);
-		prtcontrast (fname, fmaconf.contrast, gsize, fmaconf.bslist,
+		prtctgrp (fname, fmaconf.contrast, gsize, fmaconf.bslist,
 				fmaconf.numbases, fmaconf.bspbox);
 
 		if (refct) crtmse = mse (fmaconf.contrast, refct, nelt, 1);

@@ -8,8 +8,6 @@
 
 #include <mpi.h>
 
-#include <omp.h>
-
 /* Pull in the CBLAS header. */
 #ifdef _MACOSX
 #include <Accelerate/Accelerate.h>

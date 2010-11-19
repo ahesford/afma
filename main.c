@@ -122,7 +122,8 @@ int main (int argc, char **argv) {
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the contrast for the local basis set. */
 	sprintf (fname, "%s.contrast", inproj);
-	getcontrast (fmaconf.contrast, fname, gsize,
+	/* Try both formats. */
+	getctgrp (fmaconf.contrast, fname, gsize,
 			fmaconf.bslist, fmaconf.numbases, fmaconf.bspbox);
 	wtime = MPI_Wtime() - wtime;
 	if (!mpirank) fprintf (stderr, "Wall time for contrast read: %0.6g\n", wtime);
@@ -164,15 +165,15 @@ int main (int argc, char **argv) {
 		/* Attempt to read the pre-computed RHS from a file. 
 		 * If this fails, build the RHS directly. */
 		sprintf (fname, guessfmt, inproj, i, "rhs");
-		if (!getcontrast (rhs, fname, gsize, fmaconf.bslist,
-				fmaconf.numbases, fmaconf.bspbox)) {
+		if (!getctgrp (rhs, fname, gsize, fmaconf.bslist,
+					fmaconf.numbases, fmaconf.bspbox)) {
 			if (!mpirank) fprintf (stderr, "Building RHS.\n");
 			buildrhs (rhs, srcmeas.locations + 3 * i);
 		}
 
 		/* Attempt to read an initial first guess from a file. */
 		sprintf (fname, guessfmt, inproj, i, "guess");
-		k = getcontrast (sol, fname, gsize, fmaconf.bslist,
+		k = getctgrp (sol, fname, gsize, fmaconf.bslist,
 				fmaconf.numbases, fmaconf.bspbox);
 
 		/* Restart if the true residual is not sufficiently low. */
@@ -197,7 +198,7 @@ int main (int argc, char **argv) {
 			if (debug) {
 				wtime = MPI_Wtime();
 				sprintf (fname, guessfmt, outproj, i, "solution");
-				prtcontrast (fname, sol, gsize, fmaconf.bslist,
+				prtctgrp (fname, sol, gsize, fmaconf.bslist,
 						fmaconf.numbases, fmaconf.bspbox);
 				wtime = MPI_Wtime() - wtime;
 				if (!mpirank) fprintf (stderr, "Wall time for field write: %0.6g\n", wtime);

@@ -9,10 +9,10 @@
 #include "util.h"
 
 /* Read the gridded file into local arrays. */
-int getcontrast (complex float *contrast, char *fname, int *size,
+int getctgrp (complex float *contrast, char *fname, int *size,
 		int *bslist, int nbs, int bpb) {
 	long i, l, nelt, offset;
-	int k, bsize[3], idx[3], gidx[3], bpbvol = bpb * bpb * bpb, rrow;
+	int k, bsize[5], idx[3], gidx[3], bpbvol = bpb * bpb * bpb, rrow;
 	FILE *fh;
 
 	nelt = (long)nbs * (long)bpbvol;
@@ -27,37 +27,26 @@ int getcontrast (complex float *contrast, char *fname, int *size,
 	}
 
 	/* Read the basis grid size. */
-	fread (bsize, sizeof(int), 3, fh);
+	fread (bsize, sizeof(int), 5, fh);
 
-	/* Build a basis map for sorting. */
-	for (i = l = 0; i < nbs; ++i) {
-		GRID (gidx, bslist[i], size[0], size[1]);
-
-		/* Find the starting basis index from the group index. */
-		gidx[0] *= bpb;
-		gidx[1] *= bpb;
-		gidx[2] *= bpb;
-
-		/* Don't try to read beyond the bounds of the file. */
-		rrow = MIN(bpb, MAX(0, bsize[0] - gidx[0]));
-
-		for (k = 0; k < bpbvol; k += bpb, l += bpb) {
-			/* Compute the index of the basis within the group. */
-			GRID(idx, k, bpb, bpb);
-			idx[0] += gidx[0];
-			idx[1] += gidx[1];
-			idx[2] += gidx[2];
-
-			/* Don't read this row if it exceeds grid bounds. */
-			if (idx[1] >= bsize[1] || idx[2] >= bsize[2]) continue;
-
-			/* Compute the basis position. */
-			offset = 3L * sizeof(int) + sizeof(complex float) *
-				((long)idx[0] + (long)bsize[0] * (long)idx[1] + 
-				 (long)bsize[0] * (long)bsize[1] * (long)idx[2]);
-			fseek (fh, offset, SEEK_SET);
-			fread (contrast + l, sizeof(complex float), rrow, fh);
-		}
+	if (bsize[0] != 0) {
+		fprintf (stderr, "ERROR: %s is not a group-ordered file.\n", fname);
+		return 0;
+	} else if (bsize[1] != size[0] || bsize[2] != size[1] || bsize[3] != size[2]) {
+		fprintf (stderr, "ERROR: %s does not match group count.\n", fname);
+		return 0;
+	} else if (bsize[4] != bpb) {
+		fprintf (stderr, "ERROR: %s does not match group size.\n", fname);
+		return 0;
+	}
+	
+	/* Perform the new, grouped read from the file. */
+	for (l = i = 0; i < nbs; ++i, l += bpbvol) {
+		/* Find the offset into the file. */
+		offset = 5L * sizeof(int) + 
+			(long)bslist[i] * (long)bpbvol * sizeof(complex float);
+		fseek (fh, offset, SEEK_SET);
+		fread (contrast + l, sizeof(complex float), bpbvol, fh);
 	}
 
 	fclose (fh);
@@ -65,11 +54,15 @@ int getcontrast (complex float *contrast, char *fname, int *size,
 }
 
 /* Distributed write of a gridded file into local arrays. */
-int prtcontrast (char *fname, complex float *crt, int *size,
+int prtctgrp (char *fname, complex float *crt, int *size,
 		int *bslist, int nbs, int bpb) {
-	int fd, k, mpirank, bpbvol = bpb * bpb * bpb, bsize[3], gidx[3], idx[3];
-	long i, nelt, l, offset;
-	FILE *fh;
+	int mpirank, bpbvol = bpb * bpb * bpb, bhdr[5];
+	long i, nelt, l;
+
+	MPI_File fh;
+	MPI_Datatype cplxgrp;
+	MPI_Status stat;
+	MPI_Offset offset;
 	
 	nelt = (long)nbs * (long)bpbvol;
 
@@ -79,53 +72,46 @@ int prtcontrast (char *fname, complex float *crt, int *size,
 	offset = (long)size[0] * (long)size[1] * (long)size[2] * 
 		(long)bpbvol * sizeof(complex float) + 3 * sizeof(int);
 
-	bsize[0] = bpb * size[0];
-	bsize[1] = bpb * size[1];
-	bsize[2] = bpb * size[2];
-
 	/* Open the MPI file with the specified name. */
-	if (!(fh = fopen(fname, "wb"))) {
+	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_WRONLY | 
+				MPI_MODE_CREATE, MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
 		fprintf (stderr, "ERROR: could not open %s.\n", fname);
 		return 0;
 	}
 
 	/* Set the size of the output file. */
-	fd = fileno (fh);
-	ftruncate (fd, offset);
-	fsync (fd);
-	MPI_Barrier (MPI_COMM_WORLD);
-	fsync (fd);
+	MPI_File_set_size (fh, offset);
+	MPI_File_set_view (fh, 0, MPI_INT, MPI_INT, "native", MPI_INFO_NULL);
+
+	/* Write the special header to note the file is group-ordered. */
+	bhdr[0] = 0;
+	bhdr[1] = size[0];
+	bhdr[2] = size[1];
+	bhdr[3] = size[2];
+	bhdr[4] = bpb;
 
 	/* The first process should write the size header in the file. */
-	if (!mpirank) fwrite (bsize, sizeof(int), 3, fh);
+	if (!mpirank) MPI_File_write (fh, bhdr, 5, MPI_INT, &stat);
 
-	/* Build a basis map for sorting. */
-	for (i = l = 0; i < nbs; ++i) {
-		GRID (gidx, bslist[i], size[0], size[1]);
+	/* Ensure the write is committed. */
+	MPI_File_sync (fh);
+	MPI_Barrier (MPI_COMM_WORLD);
+	MPI_File_sync (fh);
 
-		/* Find the starting basisindex from the group index. */
-		gidx[0] *= bpb;
-		gidx[1] *= bpb;
-		gidx[2] *= bpb;
+	/* Create the datatype storing all values in a group. */
+	MPI_Type_contiguous (2 * bpbvol, MPI_FLOAT, &cplxgrp);
+	MPI_Type_commit (&cplxgrp);
 
-		for (k = 0; k < bpbvol; k += bpb, l += bpb) {
-			/* Compute the index of the basis within the group. */
-			GRID(idx, k, bpb, bpb);
-			idx[0] += gidx[0];
-			idx[1] += gidx[1];
-			idx[2] += gidx[2];
+	/* Set the file view to skip the header and point to groups. */
+	MPI_File_set_view (fh, 5 * sizeof(int), cplxgrp, cplxgrp, "native", MPI_INFO_NULL);
 
-			/* Compute the basis position. */
-			offset = 3L * sizeof(int) + sizeof(complex float) * 
-				((long)idx[0] + (long)bsize[0] * (long)idx[1] + 
-				(long)bsize[0] * (long)bsize[1] * (long)idx[2]);
-			fseek (fh, offset, SEEK_SET);
-			fwrite (crt + l, sizeof(complex float), bpb,  fh);
-		}
-	}
+	/* Write the values for each group in one pass. */
+	for (i = l = 0; i < nbs; ++i, l += bpbvol) 
+		MPI_File_write_at (fh, bslist[i], crt + l, 1, cplxgrp, &stat);
 
 	/* Free the MPI file type and close the file. */
-	fclose (fh);
+	MPI_File_close (&fh);
+	MPI_Type_free (&cplxgrp);
 	return size[0] * size[1] * size[2];
 }
 
