@@ -20,13 +20,11 @@ void usage (char *name) {
 /* Convert an input matrix file into a grouped file
  * with bpg basis functions per group per dimension. */
 int mat2grp (FILE *matfile, FILE *grpfile, int bpg) {
-	int msize[3], grphdr[5], gidx[3], bidx[3], k, bpgvol, rrow;
-	long offset, i, ntg;
-	complex float *grpvals;
+	int msize[3], grphdr[5], bpgvol, rrow;
+	long i, grpslab, matslab;
+	complex float *grpvals, *slabvals;
 
 	bpgvol = bpg * bpg * bpg;
-
-	grpvals = malloc (bpgvol * sizeof(complex float));
 
 	/* Read the matrix size. */
 	fread (msize, sizeof(int), 3, matfile);
@@ -39,56 +37,67 @@ int mat2grp (FILE *matfile, FILE *grpfile, int bpg) {
 	grphdr[4] = bpg;
 	fwrite (grphdr, sizeof(int), 5, grpfile);
 
-	/* The total number of groups. */
-	ntg = (long)grphdr[1] * (long)grphdr[2] * (long)grphdr[3];
+	matslab = msize[0] * msize[1];
+	grpslab = grphdr[1] * grphdr[2] * bpgvol;
 
-	/* Now loop through all groups, reading the values
-	 * from matfile and writing to the group file. */
-	for (i = 0; i < ntg; ++i) {
-		/* Get the global, 3-D group index. */
-		GRID(gidx, i, grphdr[1], grphdr[2]);
-		/* Find the starting basis index from the group index. */
-		gidx[0] *= bpg;
-		gidx[1] *= bpg;
-		gidx[2] *= bpg;
+	grpvals = malloc (grpslab * sizeof(complex float));
+	slabvals = malloc (bpg * matslab * sizeof(complex float));
 
-		/* Don't try to read beyond the bounds of the file. */
-		rrow = MIN(bpg, MAX(0, msize[0] - gidx[0]));
+	for (i = 0; i < msize[2]; i += bpg) {
+		/* Read a slab of data. Watch not to run off the end. */
+		rrow = MIN(bpg, MAX(0, msize[2] - i));
+		fread (slabvals, sizeof(complex float), rrow * matslab, matfile);
 
-		/* Zero the group buffer. */
-		memset (grpvals, 0, bpgvol * sizeof(complex float));
+		/* Blank the slab of groups. */
+		memset (grpvals, 0, grpslab * sizeof(complex float));
 
-		for (k = 0; k < bpgvol; k += bpg) {
-			/* Compute the index of the basis within the group. */
+#pragma omp parallel default(shared)
+{
+		long l, j, k;
+		int gidx[3], bidx[3];
+
+		/* Now build each of the groups in the slab. */
+#pragma omp for
+		for (j = 0; j < grpslab; ++j) {
+			/* Pull out the group index and the element index. */
+			l = j / bpgvol;
+			k = j % bpgvol;
+
+			/* Find the index of the starting basis of the group. */
+			GRID(gidx, l, grphdr[1], grphdr[2]);
+			gidx[0] *= bpg;
+			gidx[1] *= bpg;
+
+			/* Find the index of the basis in the slab. */
 			GRID(bidx, k, bpg, bpg);
 			bidx[0] += gidx[0];
 			bidx[1] += gidx[1];
-			bidx[2] += gidx[2];
 
-			/* Don't read this row if it exceeds the grid bounds. */
-			if (bidx[1] >= msize[1] || bidx[2] >= msize[2]) continue;
+			/* Skip values off the end of the matrix. */
+			if (bidx[0] >= msize[0] || bidx[1] >= msize[1]
+					|| bidx[2] >= rrow) continue;
 
-			/* Compute the position of the row in the file. */
-			offset = 3L * sizeof(int) + sizeof(complex float) *
-				((long)bidx[0] + (long)msize[0] * (long)bidx[1] +
-				 (long)msize[0] * (long)msize[1] * (long)bidx[2]);
-			fseek (matfile, offset, SEEK_SET);
-			fread (grpvals + k, sizeof(complex float), rrow, matfile);
+			k = bidx[0] + msize[0] * (bidx[1] + msize[1] * bidx[2]);
+
+			/* Copy the value into position. */
+			grpvals[j] = slabvals[k];
 		}
+}
 
-		/* Write the group values in one block. */
-		fwrite (grpvals, sizeof(complex float), bpgvol, grpfile);
+		/* Write the slab of groups. */
+		fwrite (grpvals, sizeof(complex float), grpslab, grpfile);
 	}
 
 	free (grpvals);
-	return ntg;
+	free (slabvals);
+	return grphdr[1] * grphdr[2] * grphdr[3];
 }
 
 /* Convert an input grouped file into an output matrix file. */
 int grp2mat (FILE *grpfile, FILE *matfile, int *mtrunc) {
-	int msize[3], grphdr[5], gidx[3], bidx[3], k, bpgvol, rrow, fd;
-	long i, ntg, offset;
-	complex float *grpvals;
+	int msize[3], grphdr[5], bpgvol, rrow, bpg;
+	long i, grpslab, matslab;
+	complex float *grpvals, *slabvals;
 
 	/* Read the group header:
 	 * 0 Nx Ny Nz Bpg
@@ -96,65 +105,82 @@ int grp2mat (FILE *grpfile, FILE *matfile, int *mtrunc) {
 	 * Bpg is number of basis functions per group per dimension. */
 	fread (grphdr, sizeof(int), 5, grpfile);
 
-	/* Note the total number of groups. */
-	ntg = (long)grphdr[1] * (long)grphdr[2] * (long)grphdr[3];
-
-	/* Allocate a read buffer for each group. */
-	bpgvol = grphdr[4] * grphdr[4] * grphdr[4];
-	grpvals = malloc (bpgvol * sizeof(complex float));
+	/* The number of elements in a group per dimension. */
+	bpg = grphdr[4];
+	/* The total number of elements in a group. */
+	bpgvol = bpg * bpg * bpg;
 
 	/* Build the overall matrix size. */
-	msize[0] = grphdr[1] * grphdr[4];
-	msize[1] = grphdr[2] * grphdr[4];
-	msize[2] = grphdr[3] * grphdr[4];
+	msize[0] = grphdr[1] * bpg;
+	msize[1] = grphdr[2] * bpg;
+	msize[2] = grphdr[3] * bpg;
 
 	/* Don't truncate the matrix if not desired. */
 	if (!mtrunc) mtrunc = msize;
 
-	/* Truncate the output file and write the header. */
-	fd = fileno(matfile);
-	offset = 3L * sizeof(int) + ntg * (long)bpgvol * sizeof(complex float);
-	ftruncate (fd, offset);
+	/* The number of matrix elements in one z-slab. */
+	matslab = mtrunc[0] * mtrunc[1];
+	/* The number of matrix elements in one z-slab of groups. */
+	grpslab = grphdr[1] * grphdr[2] * bpgvol;
+
+	/* Allocate a slab of data for rearranging. */
+	grpvals = malloc (grpslab * sizeof(complex float));
+	slabvals = malloc (bpg * matslab * sizeof(complex float));
+
+	/* Write the matrix size header. */
 	fwrite (mtrunc, sizeof(int), 3, matfile);
 
-	/* Now loop through all groups, reading the values
-	 * from matfile and writing to the group file. */
-	for (i = 0; i < ntg; ++i) {
-		/* Get the global, 3-D group index. */
-		GRID(gidx, i, grphdr[1], grphdr[2]);
-		/* Find the starting basis index from the group index. */
-		gidx[0] *= grphdr[4];
-		gidx[1] *= grphdr[4];
-		gidx[2] *= grphdr[4];
+	/* Loop through slabs of groups to do the conversion. */
+	for (i = 0; i < mtrunc[2]; i += bpg) {
+		/* Track the number of output rows to write for this slab. */
+		rrow = MIN(bpg, MAX(0, mtrunc[2] - i));
 
-		/* Read the group values in one block. */
-		fread (grpvals, sizeof(complex float), bpgvol, grpfile);
+		/* Read the slab of groups. */
+		fread (grpvals, sizeof(complex float), grpslab, grpfile);
 
-		/* Don't try to read beyond the bounds of the file. */
-		rrow = MIN(grphdr[4], MAX(0, mtrunc[0] - gidx[0]));
+		/* Blank the matrix slab. */
+		memset (slabvals, 0, rrow * matslab * sizeof(complex float));
 
-		/* Write the values of the group. */
-		for (k = 0; k < bpgvol; k += grphdr[4]) {
-			/* Compute the index of the basis within the group. */
-			GRID(bidx, k, grphdr[4], grphdr[4]);
+#pragma omp parallel default(shared)
+{
+		long l, j, k;
+		int gidx[3], bidx[3];
+
+		/* Now build each slab. */
+#pragma omp for
+		for (j = 0; j < grpslab; ++j) {
+			/* Pull out the group and element index. */
+			l = j / bpgvol;
+			k = j % bpgvol;
+
+			/* Find the index of the starting basis of the group. */
+			GRID(gidx, l, grphdr[1], grphdr[2]);
+			gidx[0] *= bpg;
+			gidx[1] *= bpg;
+
+			/* Find the index of the basis in the slab. */
+			GRID(bidx, k, bpg, bpg);
 			bidx[0] += gidx[0];
 			bidx[1] += gidx[1];
-			bidx[2] += gidx[2];
 
-			/* Don't read this row if it exceeds the grid bounds. */
-			if (bidx[1] >= mtrunc[1] || bidx[2] >= mtrunc[2]) continue;
+			/* Don't write values that should be truncated. */
+			if (bidx[0] >= mtrunc[0] || bidx[1] >= mtrunc[1]
+					|| bidx[2] >= rrow) continue;
 
-			/* Compute the position of the row in the file. */
-			offset = 3L * sizeof(int) + sizeof(complex float) *
-				((long)bidx[0] + (long)mtrunc[0] * (long)bidx[1] +
-				 (long)mtrunc[0] * (long)mtrunc[1] * (long)bidx[2]);
-			fseek (matfile, offset, SEEK_SET);
-			fwrite (grpvals + k, sizeof(complex float), rrow, matfile);
+			k = bidx[0] + mtrunc[0] * (bidx[1] + mtrunc[1] * bidx[2]);
+
+			/* Copy the value into position. */
+			slabvals[k] = grpvals[j];
 		}
+}
+
+		/* Write the slab of the matrix. */
+		fwrite (slabvals, sizeof(complex float), rrow * matslab, matfile);
 	}
 
 	free (grpvals);
-	return ntg;
+	free (slabvals);
+	return mtrunc[0] * mtrunc[1] * mtrunc[2];
 }
 
 int main (int argc, char **argv) {
