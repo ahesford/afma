@@ -8,11 +8,13 @@
 #include "io.h"
 #include "util.h"
 
+#define HLEN 5
+
 /* Read the gridded file into local arrays. */
 int getctgrp (complex float *contrast, char *fname, int *size,
 		int *bslist, int nbs, int bpb) {
 	long i, l, nelt, offset;
-	int k, bsize[5], idx[3], gidx[3], bpbvol = bpb * bpb * bpb, rrow;
+	int k, bsize[HLEN], idx[3], gidx[3], bpbvol = bpb * bpb * bpb, rrow;
 	FILE *fh;
 
 	nelt = (long)nbs * (long)bpbvol;
@@ -27,7 +29,7 @@ int getctgrp (complex float *contrast, char *fname, int *size,
 	}
 
 	/* Read the basis grid size. */
-	fread (bsize, sizeof(int), 5, fh);
+	fread (bsize, sizeof(int), HLEN, fh);
 
 	if (bsize[0] != 0) {
 		fprintf (stderr, "ERROR: %s is not a group-ordered file.\n", fname);
@@ -56,7 +58,7 @@ int getctgrp (complex float *contrast, char *fname, int *size,
 /* Distributed write of a gridded file into local arrays. */
 int prtctgrp (char *fname, complex float *crt, int *size,
 		int *bslist, int nbs, int bpb) {
-	int mpirank, bpbvol = bpb * bpb * bpb, bhdr[5];
+	int mpirank, bpbvol = bpb * bpb * bpb, bhdr[HLEN];
 	long i, nelt, l;
 
 	MPI_File fh;
@@ -70,7 +72,7 @@ int prtctgrp (char *fname, complex float *crt, int *size,
 
 	/* Compute the output file size and store the size array. */
 	offset = (long)size[0] * (long)size[1] * (long)size[2] * 
-		(long)bpbvol * sizeof(complex float) + 3 * sizeof(int);
+		(long)bpbvol * sizeof(complex float) + HLEN * sizeof(int);
 
 	/* Open the MPI file with the specified name. */
 	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_WRONLY | 
@@ -91,7 +93,7 @@ int prtctgrp (char *fname, complex float *crt, int *size,
 	bhdr[4] = bpb;
 
 	/* The first process should write the size header in the file. */
-	if (!mpirank) MPI_File_write (fh, bhdr, 5, MPI_INT, &stat);
+	if (!mpirank) MPI_File_write (fh, bhdr, HLEN, MPI_INT, &stat);
 
 	/* Ensure the write is committed. */
 	MPI_File_sync (fh);
@@ -103,7 +105,7 @@ int prtctgrp (char *fname, complex float *crt, int *size,
 	MPI_Type_commit (&cplxgrp);
 
 	/* Set the file view to skip the header and point to groups. */
-	MPI_File_set_view (fh, 5 * sizeof(int), cplxgrp, cplxgrp, "native", MPI_INFO_NULL);
+	MPI_File_set_view (fh, HLEN * sizeof(int), cplxgrp, cplxgrp, "native", MPI_INFO_NULL);
 
 	/* Write the values for each group in one pass. */
 	for (i = l = 0; i < nbs; ++i, l += bpbvol) 
