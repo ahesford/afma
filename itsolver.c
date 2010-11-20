@@ -104,7 +104,7 @@ int gmres (complex float *rhs, complex float *sol,
 		cmgs (vp + nelt, hp, v, nelt, i + 1);
 
 		/* Apply previous Givens rotations to the Hessenberg column. */
-		for (j = 0; j < i; ++j) 
+		for (j = 0; j < i; ++j)
 			crot_ (&one, hp + j, &one, hp + j + 1, &one, c + j, s + j);
 
 		/* Compute the Givens rotation for the current iteration. */
@@ -129,7 +129,7 @@ int gmres (complex float *rhs, complex float *sol,
 		/* Compute the minimizer of the least-squares problem. */
 		cblas_ctrsv (CblasColMajor, CblasUpper, CblasNoTrans,
 				CblasNonUnit, i, h, mit + 1, beta, 1);
-		
+
 		/* Compute the update to the solution. */
 		cblas_cgemv (CblasColMajor, CblasNoTrans, nelt, i,
 				&cone, v, nelt, beta, 1, &cone, sol, 1);
@@ -172,7 +172,7 @@ int bicgstab (complex float *rhs, complex float *sol,
 	for (j = 0; j < nelt; ++j) r[j] = rhs[j] - r[j];
 
 	if (!guess) memset (sol, 0, nelt * sizeof(complex float));
-		
+
 	/* Copy the initial residual as the test vector. */
 	memcpy (rhat, r, nelt * sizeof(complex float));
 
@@ -233,7 +233,7 @@ int bicgstab (complex float *rhs, complex float *sol,
 			/* Update the residual vector. */
 			r[j] -= omega * t[j];
 		}
-	
+
 		/* Compute the scaled residual norm. */
 		err = parnorm(r, nelt) / rhn;
 		if (!rank && !quiet) printf ("BiCG-STAB(%d): %g\n", i + 1, err);

@@ -89,7 +89,7 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	/* Read the MLFMA level and fast translation configuration. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	if (sscanf (buf, "%d %d %d %d %d", &(fmaconf.bspbox), 
+	if (sscanf (buf, "%d %d %d %d %d", &(fmaconf.bspbox),
 				&(fmaconf.toplev), &(fmaconf.fo2iterm),
 				&(fmaconf.fo2iord), &(fmaconf.fo2iosr)) < 5)
 		fmaconf.fo2iterm = fmaconf.fo2iord = fmaconf.fo2iosr = 0;
@@ -174,16 +174,16 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 		skipcomments (fp);
 		fgets (buf, 1024, fp);
 		sscanf (buf, "%f %f %d", obs[i].trange, obs[i].trange + 1, &(obs[i].ntheta));
-		
+
 		/* Convert the degree values to radians. */
 		obs[i].trange[0] *= M_PI / 180;
 		obs[i].trange[1] *= M_PI / 180;
-		
+
 		/* Read the observer phi values. */
 		skipcomments (fp);
 		fgets (buf, 1024, fp);
 		sscanf (buf, "%f %f %d", obs[i].prange, obs[i].prange + 1, &(obs[i].nphi));
-		
+
 		/* Convert the degree values to radians. */
 		obs[i].prange[0] *= M_PI / 180;
 		obs[i].prange[1] *= M_PI / 180;

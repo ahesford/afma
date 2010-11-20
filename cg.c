@@ -133,7 +133,7 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 			frechadj (mptr, ifld, adjcrt, obs, slv);
 		}
 
-		for (i = 0, lrnorm = 0; i < nelt; ++i) { 
+		for (i = 0, lrnorm = 0; i < nelt; ++i) {
 			alpha = cabs (adjcrt[i]);
 			lrnorm += alpha * alpha;
 		}

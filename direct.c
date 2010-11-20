@@ -68,7 +68,7 @@ int mkdircache () {
 	boxidx = malloc (3 * nbs * sizeof(int));
 
 	/* Build the array of box indices. */
-	for (i = 0, idx = boxidx; i < nbs; ++i, idx += 3) 
+	for (i = 0, idx = boxidx; i < nbs; ++i, idx += 3)
 		GRID (idx, bslist[i], fmaconf.nx, fmaconf.ny);
 
 	/* The basis list is no longer necessary. */
@@ -169,7 +169,7 @@ complex float *cacheboxrhs (int bsl, int boxkey) {
 
 		/* Grab the local input vector for caching. */
 		rhs = (complex float *)ScaleME_getInputVec (boxkey);
-		
+
 		/* Populate the local grid. */
 		for (i = 0; i < fmaconf.bspboxvol; ++i) {
 			/* Find the position in the local box. */
@@ -177,14 +177,14 @@ complex float *cacheboxrhs (int bsl, int boxkey) {
 
 			/* The index into the RHS array. */
 			l = IDX(nfft,key.index[0],key.index[1],key.index[2]);
-			
+
 			/* Fill the expanded FFT grid. */
 			bptr[l] = rhs[i];
 		}
-		
+
 		/* Transform the cached RHS. */
 		fftwf_execute_dft (fplan, bptr, bptr);
-		
+
 		/* Mark the cache spot as full. */
 		lbox->fill = 1;
 	}
@@ -336,13 +336,13 @@ int greengrid (complex float *grf, int m, int mex, float k0, float cell, int *of
 
 		ip = (idx[0] < m) ? idx[0] : (idx[0] - mex);
 		dist[0] = (float)(ip - off[0]) * fmaconf.cell;
-		
+
 		jp = (idx[1] < m) ? idx[1] : (idx[1] - mex);
 		dist[1] = (float)(jp - off[1]) * fmaconf.cell;
-		
+
 		kp = (idx[2] < m) ? idx[2] : (idx[2] - mex);
 		dist[2] = (float)(kp - off[2]) * fmaconf.cell;
-		
+
 		if (kp == off[2] && jp == off[1] && ip == off[0])
 			*(grf++) = selfint (k0, cell) / slfscale;
 		else *(grf++) = scale * srcint (k0, zero, dist, cell, fsgreen);

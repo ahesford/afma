@@ -171,7 +171,7 @@ int cellcoords (float *r, int l, int bpd, float dx) {
 int inset (int i, int *s, int l) {
 	int j;
 
-	for (j = 0; j < l; ++j) 
+	for (j = 0; j < l; ++j)
 		if (i == s[j]) return 1;
 
 	return 0;

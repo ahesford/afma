@@ -42,26 +42,26 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 	crt = rhs + nelt;
 
 	if (rn) memset (rn, 0, nelt * sizeof(complex float));
-	
+
 	for (j = 0, fldptr = field; j < src->count; ++j, fldptr += obs->count) {
 		/* Build the right-hand side for the specified location. Use
 		 * point sources, rather than plane waves, for excitation. */
 		buildrhs (rhs, src->locations + 3 * j);
-		
+
 		MPI_Barrier (MPI_COMM_WORLD);
 		/* Run the iterative solver. The solution is stored in the RHS. */
 		for (i = 0, nit = 1; i < hislv->restart && nit > 0; ++i)
 			nit = bicgstab (rhs, crt, i, hislv->maxit, hislv->epscg, 1);
-		
+
 		/* Convert total field into contrast current. */
 		for (k = 0; k < nelt; ++k)
 			crt[k] *= fmaconf.contrast[k];
-		
+
 		MPI_Barrier (MPI_COMM_WORLD);
-		
+
 		/* Evaluate the scattered field. */
 		farfield (crt, obs, err);
-		
+
 		/* Compute the error vector. */
 		for (k = 0; k < obs->count; ++k) {
 			err[k] = fldptr[k] - err[k];
@@ -70,7 +70,7 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 			lerr = cabs(fldptr[k]);
 			errd += lerr * lerr;
 		}
-		
+
 		/* Evaluate the adjoint Frechet derivative. */
 		if (rn) frechadj (err, rhs, rn, obs, loslv);
 		/* Save this error column, if storage is available. */
@@ -248,43 +248,43 @@ int main (int argc, char **argv) {
 		/* Use the leapfrogging (Kaczmarz-like) method. */
 		for (q = 0; q < srcmeas.count; q += stride) {
 			fldptr = field + q * obsmeas.count;
-			
+
 			/* Don't use more transmitters than available. */
 			ssrc.count = MIN(srcmeas.count - q, stride);
-			
+
 			/* Set the transmitter locations. */
 			memcpy (ssrc.locations, srcmeas.locations + 3 * q, 3 * ssrc.count * sizeof(float));
 			errnorm = dbimerr (error, NULL, fldptr, &hislv, &loslv, &ssrc, &obsmeas);
-			
+
 			/* Solve the system with CG for minimum norm. */
 			cgmn (error, crt, &loslv, &ssrc, &obsmeas, gamma);
-			
+
 			/* Update the background. */
 			for (j = 0; j < nelt; ++j)
 				fmaconf.contrast[j] += crt[j];
 
 			if (refct) crtmse = mse (fmaconf.contrast, refct, nelt, 1);
-			
+
 			if (!mpirank)
 				fprintf (stderr, "Sub-iteration %d/%d: RRE: %g, MSE: %g\n", i, q, errnorm, crtmse);
 		}
-			
+
 		if (!mpirank) fprintf (stderr, "Reassess DBIM error.\n");
 		errnorm = dbimerr (NULL, NULL, field, &hislv, &loslv, &srcmeas, &obsmeas);
 
 		sprintf (fname, "%s.inverse.%03d", outproj, i);
 		prtctgrp (fname, fmaconf.contrast, gsize, fmaconf.bslist,
 				fmaconf.numbases, fmaconf.bspbox);
-		
+
 		if (refct) crtmse = mse (fmaconf.contrast, refct, nelt, 1);
-		
+
 		if (!mpirank) fprintf (stderr, "Iteration %d: RRE: %g, MSE: %g\n", i, errnorm, crtmse);
 		if (errnorm < tolerance[0]) break;
-		
+
 		/* Skip regularization adjustment unless the skip count has
 		 * been met or the parameter is already small enough. */
 		if ((i + 1) % (int)(regparm[3]) || gamma <= regparm[1]) continue;
-	
+
 		/* Perform scaling of the regularization parameter. */
 		gamma = scalereg(regparm[0], errnorm);
 		if (!mpirank)
@@ -329,7 +329,7 @@ int main (int argc, char **argv) {
 			errnorm = dbimerr (NULL, rn, field, &hislv, &loslv, &srcmeas, &obsmeas);
 			cgls (rn, crt, &loslv, &srcmeas, &obsmeas, gamma);
 		}
-		
+
 		for (j = 0; j < nelt; ++j) fmaconf.contrast[j] += crt[j];
 
 		sprintf (fname, "%s.inverse.%03d", outproj, i);
@@ -337,7 +337,7 @@ int main (int argc, char **argv) {
 				fmaconf.numbases, fmaconf.bspbox);
 
 		if (refct) crtmse = mse (fmaconf.contrast, refct, nelt, 1);
-		
+
 		if (!mpirank) fprintf (stderr, "Iteration %d: RRE: %g, MSE: %g\n", i, errnorm, crtmse);
 		if (errnorm < tolerance[1]) break;
 

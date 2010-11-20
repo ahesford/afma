@@ -17,9 +17,7 @@ typedef struct {
 
 /* Compare the map entries for sorting. */
 static int ctmapcomp (const void *left, const void *right) {
-	ctmap *lp = (ctmap *)left, *rp = (ctmap *)right;
-
-	return lp->bsi - rp->bsi;
+	return ((ctmap *)left)->bsi - ((ctmap *)right)->bsi;
 }
 
 /* Sort the contrast file according to the basis map, which will be constructed. */
@@ -110,13 +108,13 @@ int prtctgrp (char *fname, complex float *crt, int *size, int *bsl, int nbs, int
 	MPI_File fh;
 	MPI_Datatype cplx;
 	MPI_Status stat;
-	
+
 	nelt = (long)nbs * (long)bpbvol;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
 
 	/* Open the MPI file with the specified name. */
-	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_WRONLY | 
+	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_WRONLY |
 				MPI_MODE_CREATE, MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
 		fprintf (stderr, "ERROR: could not open %s.\n", fname);
 		return 0;
@@ -219,7 +217,7 @@ int getfields (char *inproj, complex float *field, int nobs, int nsrc, float *nr
 
 		/* If the norm isn't desired, don't comput anything else. */
 		if (!nrm) continue;
-		
+
 		for (j = 0; j < nobs; ++j) {
 			lerr = cabs (fldptr[j]);
 			*nrm += lerr * lerr;

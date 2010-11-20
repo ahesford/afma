@@ -220,7 +220,7 @@ static int acabuild (complex float **mats, float k0, float tol, float *thetas,
 
 		/* Find the coordinates of the source cell. */
 		cellcoords (dist, icol[i], bpd, dx);
-	
+
 		/* Construct the radiation pattern of the source cell. */
 		farmatcol (col, k0, dist, thetas, ntheta, nphi);
 
@@ -327,7 +327,7 @@ static int recaca (complex float *u, complex float *v, int m, int n, int k, floa
 		}
 	}
 
-	/* Compute the SVD of the triangular matrix product. */	
+	/* Compute the SVD of the triangular matrix product. */
 	cgesvd_ ("S", "S", &k, &k, rp, &k, ss, us, &k, vs, &k, work, &lwork, rwork, &info);
 
 	/* Find the truncated rank. */
@@ -459,7 +459,7 @@ int fmmprecalc (float acatol, int useaca) {
 	thetas = malloc (ntheta * sizeof(float));
 	/* Populate the theta array. */
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, thetas, NULL);
-	
+
 	/* Convert the theta samples from the cosines of the angles to the angles. */
 	for (i = 0; i < ntheta; ++i) thetas[i] = acos(thetas[i]);
 
@@ -480,7 +480,7 @@ int fmmprecalc (float acatol, int useaca) {
 			fmaconf.acarank = svdbuild (&(fmaconf.radpats),
 					fmaconf.k0, -acatol, thetas, ntheta,
 					nphi, fmaconf.cell, fmaconf.bspbox);
-		
+
 		fprintf (stderr, "Rank %d: Far-field matrix rank: %d\n", rank, fmaconf.acarank);
 	}
 
@@ -493,7 +493,7 @@ int fmmprecalc (float acatol, int useaca) {
 int ScaleME_preconf (int useaca) {
 	int error;
 	float len, cen[3];
-	
+
 	/* The problem and tree are both three-dimensional. */
 	ScaleME_setDimen (3);
 	ScaleME_setTreeType (3);
@@ -527,10 +527,10 @@ int ScaleME_preconf (int useaca) {
 	cen[1] = fmaconf.min[1] + 0.5 * len;
 	cen[2] = fmaconf.min[2] + 0.5 * len;
 	ScaleME_setRootBox (len, cen);
-	
+
 	/*  let all processes start the initialisation together */
 	MPI_Barrier(MPI_COMM_WORLD);
-	
+
 	/* open the std files */
 	MPFMA_stdout = stdout;
 	MPFMA_stderr = stderr;

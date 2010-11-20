@@ -75,7 +75,7 @@ int frechadj (complex float *mag, complex float *fld,
 	return fmaconf.numbases;
 }
 
-/* Estimate the square of the spectral radius of the Frechet derivative 
+/* Estimate the square of the spectral radius of the Frechet derivative
  * using power iteration on the product of the derivative and its adjoint. */
 float specrad (int maxit, solveparm *slv, measdesc *src, measdesc *obs) {
 	complex float *ifld, *adjcrt, *scat, *pn, mu = 1.0, newmu;
@@ -96,7 +96,7 @@ float specrad (int maxit, solveparm *slv, measdesc *src, measdesc *obs) {
 		tmp = cabs(pn[k]);
 		nrm += tmp * tmp;
 	}
-	MPI_Allreduce (MPI_IN_PLACE, &nrm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD); 
+	MPI_Allreduce (MPI_IN_PLACE, &nrm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 	nrm = sqrt(nrm);
 
 	/* Normalize the initial vector. */
@@ -125,8 +125,8 @@ float specrad (int maxit, solveparm *slv, measdesc *src, measdesc *obs) {
 			tmp = cabs(adjcrt[k]);
 			nrm += tmp * tmp;
 		}
-		MPI_Allreduce (MPI_IN_PLACE, &nrm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD); 
-		MPI_Allreduce (MPI_IN_PLACE, &newmu, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD); 
+		MPI_Allreduce (MPI_IN_PLACE, &nrm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce (MPI_IN_PLACE, &newmu, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 		nrm = sqrt(nrm);
 
 		/* Break if the updated singular value hasn't changed much. */

@@ -23,7 +23,7 @@ void usage (char *name) {
 	fprintf (stderr, "Usage: %s [-d] [-r #] [-a #] [-b] [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
-	fprintf (stderr, "\t-d: Debug mode (prints induced field)\n");
+	fprintf (stderr, "\t-d: Debug mode (prints induced field); specify twice to write after every restart\n");
 	fprintf (stderr, "\t-b: Use BiCG-STAB instead of GMRES\n");
 	fprintf (stderr, "\t-r: Specify the number of observation configurations\n");
 	fprintf (stderr, "\t-a: Use ACA with specified tolerance for far-field transformations\n");
@@ -61,7 +61,7 @@ int main (int argc, char **argv) {
 			outproj = optarg;
 			break;
 		case 'd':
-			debug = 1;
+			++debug;
 			break;
 		case 'b':
 			usebicg = 1;
@@ -137,7 +137,7 @@ int main (int argc, char **argv) {
 	ScaleME_postconf ();
 
 	/* Build the root interpolation matrix for measurements. */
-	for (i = 0; i < obscount; ++i) 
+	for (i = 0; i < obscount; ++i)
 		ScaleME_buildRootInterpMat (obsmeas[i].imat, 6, obsmeas[i].ntheta,
 				obsmeas[i].nphi, obsmeas[i].trange, obsmeas[i].prange);
 
@@ -153,16 +153,16 @@ int main (int argc, char **argv) {
 	sprintf (guessfmt, "%%s.tx%%0%dd.%%s", i);
 
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
-	
+
 	/* Ensure each process is waiting at the start of the loop. */
 	MPI_Barrier (MPI_COMM_WORLD);
-	
+
 	for (i = 0; i < srcmeas.count; ++i) {
 
 		if (!mpirank)
 			fprintf (stderr, "Running simulation for source %d.\n", i + 1);
 
-		/* Attempt to read the pre-computed RHS from a file. 
+		/* Attempt to read the pre-computed RHS from a file.
 		 * If this fails, build the RHS directly. */
 		sprintf (fname, guessfmt, inproj, i, "rhs");
 		if (!getctgrp (rhs, fname, gsize, fmaconf.bslist,
@@ -181,7 +181,7 @@ int main (int argc, char **argv) {
 			cputime = (double)clock() / CLOCKS_PER_SEC;
 			wtime = MPI_Wtime();
 
-			if (usebicg) nit = bicgstab (rhs, sol, k || j, 
+			if (usebicg) nit = bicgstab (rhs, sol, k || j,
 					solver.maxit, solver.epscg, 0);
 			else nit = gmres (rhs, sol, k || j,
 					solver.maxit, solver.epscg, 0);
@@ -194,8 +194,9 @@ int main (int argc, char **argv) {
 				fprintf (stderr, "Wall time for solution: %0.6g\n", wtime);
 			}
 
-			/* Update the internal field before every restart. */
-			if (debug) {
+			/* Update the internal field before every restart, but
+			 * only when the debug flag has been specified twice. */
+			if (debug > 1) {
 				wtime = MPI_Wtime();
 				sprintf (fname, guessfmt, outproj, i, "solution");
 				prtctgrp (fname, sol, gsize, fmaconf.bslist,
@@ -205,13 +206,24 @@ int main (int argc, char **argv) {
 			}
 		}
 
+		/* Update the field after all iterations, but only with a
+		 * single debug flag. Otherwise, it has already been written. */
+		if (debug == 1) {
+			wtime = MPI_Wtime();
+			sprintf (fname, guessfmt, outproj, i, "solution");
+			prtctgrp (fname, sol, gsize, fmaconf.bslist,
+					fmaconf.numbases, fmaconf.bspbox);
+			wtime = MPI_Wtime() - wtime;
+			if (!mpirank) fprintf (stderr, "Wall time for field write: %0.6g\n", wtime);
+		}
+
 		/* Convert total field into contrast current. */
 		for (j = 0; j < nelt; ++j) sol[j] *= fmaconf.contrast[j];
 
 		/* Compute and write out all observation fields. */
 		for (k = 0; k < obscount; ++k) {
 			farfield (sol, obsmeas + k, field);
-			
+
 			/* Append the field for the current transmitter. */
 			if (!mpirank) {
 				sprintf (fname, fldfmt,  outproj, i, k);

@@ -210,7 +210,7 @@ long buildmodel (FILE *output, FILE *template, FILE *avlrand, FILE *adprand,
 
 	for (i = 1; i < nz; ++i) {
 		if (!(i % 10)) fprintf (stderr, "Building model for slab %ld\n", i);
-	
+
 		/* Read the next slab of the material. */
 		modelslab (nk, nr, template, avlrand, adprand, npx, bgval,
 				ctval, avlval, adpval);
