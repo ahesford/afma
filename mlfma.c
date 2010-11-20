@@ -4,8 +4,6 @@
 #include <complex.h>
 #include <math.h>
 
-#include <fftw3.h>
-
 #include <mpi.h>
 
 /* Pull in the CBLAS header. */

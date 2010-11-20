@@ -2,8 +2,6 @@
 #define __MLFMA_H_
 
 #include <complex.h>
-#include <math.h>
-#include <fftw3.h>
 
 #include "util.h"
 

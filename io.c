@@ -10,69 +10,110 @@
 
 #define HLEN 5
 
+typedef struct {
+	int bsi;
+	long off;
+} ctmap;
+
+/* Compare the map entries for sorting. */
+static int ctmapcomp (const void *left, const void *right) {
+	ctmap *lp = (ctmap *)left, *rp = (ctmap *)right;
+
+	return lp->bsi - rp->bsi;
+}
+
+/* Sort the contrast file according to the basis map, which will be constructed. */
+static int sortbsmap (ctmap *map, int *bsl, int nbs, int bpvol) {
+	int i;
+	long l;
+
+	/* Build the contrast map. */
+	for (l = i = 0; i < nbs; ++i, l += bpvol) {
+		map[i].bsi = bsl[i];
+		map[i].off = l;
+	}
+
+	/* Sort the contrast map. */
+	qsort (map, nbs, sizeof(ctmap), ctmapcomp);
+
+	return nbs;
+}
+
 /* Read the gridded file into local arrays. */
-int getctgrp (complex float *contrast, char *fname, int *size,
-		int *bslist, int nbs, int bpb) {
-	long i, l, nelt, offset;
-	int k, bsize[HLEN], idx[3], gidx[3], bpbvol = bpb * bpb * bpb, rrow;
-	FILE *fh;
+int getctgrp (complex float *crt, char *fname, int *size, int *bsl, int nbs, int bpb) {
+	long i, l, nelt;
+	int bsize[HLEN], bpbvol = bpb * bpb * bpb;
+	ctmap *map;
+
+	MPI_File fh;
+	MPI_Datatype cplx;
+	MPI_Status stat;
 
 	nelt = (long)nbs * (long)bpbvol;
 
 	/* Zero out the contrast in case nothing can be read. */
-	memset (contrast, 0, nelt * sizeof(complex float));
+	memset (crt, 0, nelt * sizeof(complex float));
 
 	/* Open the MPI file with the specified name. */
-	if (!(fh = fopen(fname, "rb"))) {
+	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_RDONLY,
+				MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
 		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
 		return 0;
 	}
 
 	/* Read the basis grid size. */
-	fread (bsize, sizeof(int), HLEN, fh);
+	MPI_File_set_view (fh, 0, MPI_INT, MPI_INT, "native", MPI_INFO_NULL);
+	MPI_File_read (fh, bsize, HLEN, MPI_INT, &stat);
 
 	if (bsize[0] != 0) {
 		fprintf (stderr, "ERROR: %s is not a group-ordered file.\n", fname);
+		MPI_File_close (&fh);
 		return 0;
 	} else if (bsize[1] != size[0] || bsize[2] != size[1] || bsize[3] != size[2]) {
 		fprintf (stderr, "ERROR: %s does not match group count.\n", fname);
+		MPI_File_close (&fh);
 		return 0;
 	} else if (bsize[4] != bpb) {
 		fprintf (stderr, "ERROR: %s does not match group size.\n", fname);
+		MPI_File_close (&fh);
 		return 0;
 	}
-	
-	/* Perform the new, grouped read from the file. */
-	for (l = i = 0; i < nbs; ++i, l += bpbvol) {
-		/* Find the offset into the file. */
-		offset = 5L * sizeof(int) + 
-			(long)bslist[i] * (long)bpbvol * sizeof(complex float);
-		fseek (fh, offset, SEEK_SET);
-		fread (contrast + l, sizeof(complex float), bpbvol, fh);
-	}
 
-	fclose (fh);
+	/* Prepare the basis sorting map. */
+	map = malloc (nbs * sizeof(ctmap));
+	sortbsmap (map, bsl, nbs, bpbvol);
+
+	/* Create the datatype storing all values in a group. */
+	MPI_Type_contiguous (2 * bpbvol, MPI_FLOAT, &cplx);
+	MPI_Type_commit (&cplx);
+
+	/* Perform the ordered, grouped read from the file. */
+	MPI_File_set_view (fh, HLEN * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
+	for (i = 0; i < nbs; ++i)
+		MPI_File_read_at (fh, map[i].bsi, crt + map[i].off, 1, cplx, &stat);
+
+	/* Fre the MPI file type and close the file. */
+	MPI_File_close (&fh);
+	MPI_Type_free (&cplx);
+
+	free (map);
+
 	return nbs;
 }
 
 /* Distributed write of a gridded file into local arrays. */
-int prtctgrp (char *fname, complex float *crt, int *size,
-		int *bslist, int nbs, int bpb) {
+int prtctgrp (char *fname, complex float *crt, int *size, int *bsl, int nbs, int bpb) {
 	int mpirank, bpbvol = bpb * bpb * bpb, bhdr[HLEN];
 	long i, nelt, l;
+	ctmap *map;
 
 	MPI_File fh;
-	MPI_Datatype cplxgrp;
+	MPI_Datatype cplx;
 	MPI_Status stat;
-	MPI_Offset offset;
 	
 	nelt = (long)nbs * (long)bpbvol;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
-
-	/* Compute the output file size and store the size array. */
-	offset = (long)size[0] * (long)size[1] * (long)size[2] * 
-		(long)bpbvol * sizeof(complex float) + HLEN * sizeof(int);
 
 	/* Open the MPI file with the specified name. */
 	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_WRONLY | 
@@ -81,40 +122,37 @@ int prtctgrp (char *fname, complex float *crt, int *size,
 		return 0;
 	}
 
-	/* Set the size of the output file. */
-	MPI_File_set_size (fh, offset);
-	MPI_File_set_view (fh, 0, MPI_INT, MPI_INT, "native", MPI_INFO_NULL);
+	/* Re-sort the contrast map according to the group indices. */
+	map = malloc (nbs * sizeof(ctmap));
+	sortbsmap (map, bsl, nbs, bpbvol);
 
-	/* Write the special header to note the file is group-ordered. */
+	/* Create the datatype storing all values in a group. */
+	MPI_Type_contiguous (2 * bpbvol, MPI_FLOAT, &cplx);
+	MPI_Type_commit (&cplx);
+
+	/* Build the special header to note the file is group-ordered. */
 	bhdr[0] = 0;
 	bhdr[1] = size[0];
 	bhdr[2] = size[1];
 	bhdr[3] = size[2];
 	bhdr[4] = bpb;
 
-	/* The first process should write the size header in the file. */
+	/* Write the file header, if the process is the root. */
+	MPI_File_set_view (fh, 0, MPI_INT, MPI_INT, "native", MPI_INFO_NULL);
 	if (!mpirank) MPI_File_write (fh, bhdr, HLEN, MPI_INT, &stat);
 
-	/* Ensure the write is committed. */
-	MPI_File_sync (fh);
-	MPI_Barrier (MPI_COMM_WORLD);
-	MPI_File_sync (fh);
-
-	/* Create the datatype storing all values in a group. */
-	MPI_Type_contiguous (2 * bpbvol, MPI_FLOAT, &cplxgrp);
-	MPI_Type_commit (&cplxgrp);
-
-	/* Set the file view to skip the header and point to groups. */
-	MPI_File_set_view (fh, HLEN * sizeof(int), cplxgrp, cplxgrp, "native", MPI_INFO_NULL);
-
-	/* Write the values for each group in one pass. */
-	for (i = l = 0; i < nbs; ++i, l += bpbvol) 
-		MPI_File_write_at (fh, bslist[i], crt + l, 1, cplxgrp, &stat);
+	/* Write the values from the buffer in one pass. */
+	MPI_File_set_view (fh, HLEN * sizeof(int), cplx, cplx, "native", MPI_INFO_NULL);
+	for (i = 0; i < nbs; ++i)
+		MPI_File_write_at (fh, map[i].bsi, crt + map[i].off, 1, cplx, &stat);
 
 	/* Free the MPI file type and close the file. */
 	MPI_File_close (&fh);
-	MPI_Type_free (&cplxgrp);
-	return size[0] * size[1] * size[2];
+	MPI_Type_free (&cplx);
+
+	free (map);
+
+	return nbs;
 }
 
 /* Append the provided field to the specified field file. */
