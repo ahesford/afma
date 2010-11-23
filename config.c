@@ -86,13 +86,16 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	/* Set the wave number to 2 pi, since wavelength is the length unit. */
 	fmaconf.k0 = 2 * M_PI;
 
-	/* Read the MLFMA level and fast translation configuration. */
+	/* Read the MLFMA level and fast translation configuration. If the fast
+	 * O2I line isn't properly configured, just ignore fast O2I. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	if (sscanf (buf, "%d %d %d %d %d", &(fmaconf.bspbox),
-				&(fmaconf.toplev), &(fmaconf.fo2iterm),
-				&(fmaconf.fo2iord), &(fmaconf.fo2iosr)) < 5)
-		fmaconf.fo2iterm = fmaconf.fo2iord = fmaconf.fo2iosr = 0;
+	if (sscanf (buf, "%d %d %d %d %d %d", &(fmaconf.bspbox),
+				&(fmaconf.toplev), &(fmaconf.fo2itxlev),
+				&(fmaconf.fo2ibclev), &(fmaconf.fo2iord),
+				&(fmaconf.fo2iosr)) < 6)
+		fmaconf.fo2itxlev = fmaconf.fo2ibclev = 
+			fmaconf.fo2iord = fmaconf.fo2iosr = 0;
 
 	/* The total number of basis functions in a box. */
 	fmaconf.bspboxvol = fmaconf.bspbox * fmaconf.bspbox * fmaconf.bspbox;
@@ -113,6 +116,12 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 
 	/* Compute the maximum FMM level for the desired finest level density. */
 	for (fmaconf.maxlev = 2, nbox = 4; nbox < nmax; nbox <<= 1, ++fmaconf.maxlev);
+
+	/* Set defaults for fast, compressed O2I level designations. */
+	/* Specifying a negative maximum expansion level means expand all. */
+	if (fmaconf.fo2itxlev < 0) fmaconf.fo2itxlev = fmaconf.toplev;
+	/* Specifying a negative minimum compression level means compress all. */
+	if (fmaconf.fo2ibclev < 0) fmaconf.fo2ibclev = fmaconf.maxlev;
 
 	/* Read the number of MLFMA buffer boxes. */
 	skipcomments (fp);

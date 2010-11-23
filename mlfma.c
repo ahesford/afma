@@ -515,9 +515,11 @@ int ScaleME_preconf (int useaca) {
 
 	ScaleME_setRHSDataWidth (fmaconf.bspboxvol);
 
-	if (fmaconf.fo2iterm > 0) {
+	/* Enable fast O2I if desired. */
+	if (fmaconf.fo2itxlev > 0 && fmaconf.fo2ibclev > 0) {
 		ScaleME_useFastO2IGhosts (1);
-		ScaleME_selectFastO2I (fmaconf.fo2iterm, fmaconf.fo2iord, fmaconf.fo2iosr);
+		ScaleME_selectFastO2I (fmaconf.fo2itxlev, fmaconf.fo2ibclev,
+				fmaconf.fo2iord, fmaconf.fo2iosr);
 	}
 
 	/* Set the root box length. */
