@@ -66,6 +66,15 @@ ranger: ARCHLIBS= -Mnomain -lgslcblas -llapack -lblas
 ranger: all
 	@echo "Building for TACC Ranger."
 
+kraken: CC= cc
+kraken: FF= ftn
+kraken: OPTFLAGS= -fastsse -mp
+kraken: ARCHFLAGS= -D_LINUX -I$(GSL_DIR)/include/gsl -I$(FFTW_INC) \
+	-L$(GSL_DIR)/lib -L$(FFTW_DIR)
+kraken: ARCHLIBS= -Mnomain -lgslcblas -llapack -lblas
+kraken: all
+	@echo "Building for NICS Kraken."
+
 clean:
 	rm -f $(OBJS) $(FWDOBJS) $(INVOBJS) *.core core \
 		tissue.o mat2grp.o afma adbim tissue mat2grp
