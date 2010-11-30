@@ -20,24 +20,26 @@
 void usage (char *);
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-d] [-r #] [-a #] [-b] [-o <output prefix>] -i <input prefix>\n", name);
+	fprintf (stderr, "Usage: %s [-d] [-l #] [-r #] [-a #] [-b] [-o <output prefix>] -i <input prefix>\n", name);
 	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
 	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
 	fprintf (stderr, "\t-d: Debug mode (prints induced field); specify twice to write after every restart\n");
 	fprintf (stderr, "\t-b: Use BiCG-STAB instead of GMRES\n");
 	fprintf (stderr, "\t-r: Specify the number of observation configurations\n");
 	fprintf (stderr, "\t-a: Use ACA with specified tolerance for far-field transformations\n");
+	fprintf (stderr, "\t-l: Use loose GMRES with the specified number of augmented vectors\n");
 }
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist,
 	     fname[1024], fldfmt[1024], guessfmt[1024];
 	int mpirank, mpisize, i, j, k, nit, gsize[3], obscount = 1;
-	complex float *rhs, *sol, *field;
+	complex float *rhs, *sol, *field, *z = NULL, *az = NULL;
 	double cputime, wtime;
-	int debug = 0, maxobs, useaca = 0, usebicg = 0;
+	int debug = 0, maxobs, useaca = 0, usebicg = 0, useloose = 0;
 	long nelt;
 	float acatol = -1;
+	augspace aug;
 
 	measdesc *obsmeas, srcmeas;
 	solveparm solver;
@@ -52,7 +54,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:dbr:a:h")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:dbr:a:hl:")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -72,6 +74,9 @@ int main (int argc, char **argv) {
 		case 'a':
 			acatol = strtod(optarg, NULL);
 			useaca = 1;
+			break;
+		case 'l':
+			useloose = strtol(optarg, NULL, 0);
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -157,6 +162,15 @@ int main (int argc, char **argv) {
 	/* Ensure each process is waiting at the start of the loop. */
 	MPI_Barrier (MPI_COMM_WORLD);
 
+	/* Initialize the loose GMRES buffer. */
+	if (useloose > 0) {
+		aug.start = -1;
+		aug.nmax = useloose;
+		aug.ntot = 0;
+		aug.z = malloc(2 * aug.nmax * nelt * sizeof(complex float));
+		aug.az = aug.z + aug.nmax * nelt;
+	}
+
 	for (i = 0; i < srcmeas.count; ++i) {
 
 		if (!mpirank)
@@ -183,8 +197,8 @@ int main (int argc, char **argv) {
 
 			if (usebicg) nit = bicgstab (rhs, sol, k || j,
 					solver.maxit, solver.epscg, 0);
-			else nit = gmres (rhs, sol, k || j,
-					solver.maxit, solver.epscg, 0);
+			else nit = gmres (rhs, sol, k || j, solver.maxit,
+					solver.epscg, 0, useloose > 0 ? &aug : NULL);
 
 			cputime = (double)clock() / CLOCKS_PER_SEC - cputime;
 			wtime = MPI_Wtime() - wtime;
@@ -238,6 +252,8 @@ int main (int argc, char **argv) {
 	delmeas (&srcmeas);
 	for (i = 0; i < obscount; ++i) delmeas (obsmeas + i);
 	free (obsmeas);
+
+	if (useloose > 0) free (aug.z);
 
 	free (rhs);
 	free (field);

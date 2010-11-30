@@ -43,12 +43,12 @@ int matvec (complex float *out, complex float *in, complex float *cur) {
 	return 0;
 }
 
-int gmres (complex float *rhs, complex float *sol,
-		int guess, int mit, float tol, int quiet) {
+int gmres (complex float *rhs, complex float *sol, int guess,
+		int mit, float tol, int quiet, augspace *aug) {
 	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol, lwork;
-	int i, rank, one = 1;
-	complex float *h, *v, *mvp, *beta;
-	complex float *vp, *hp, *s, cr, cone = 1.;
+	int i, rank, one = 1, mred = mit;
+	complex float *h, *v, *mvp, *beta, *vp, *hp, *s, cr,
+		cone = 1., czero = 0., *azp, *zp;
 	float rhn, err, *c;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
@@ -91,17 +91,31 @@ int gmres (complex float *rhs, complex float *sol,
 	err /= rhn;
 	if (!rank && !quiet) printf ("True residual: %g\n", err);
 
+	/* The reduced number of iterations, if the space is augmented. */
+	if (aug) mred = mit - aug->ntot;
+
 	for (i = 0; i < mit && err > tol; ++i) {
 		/* Point to the working space for this iteration. */
 		vp = v + i * nelt;
 		hp = h + i * (mit + 1);
 
 		/* Compute the next expansion of the Krylov space. */
-		matvec (vp + nelt, vp, mvp);
+		if (!aug || i < mred) matvec (vp + nelt, vp, mvp);
+		else {
+			/* Update with the next augmented vector. */
+			azp = aug->az + nelt * 
+				((aug->nmax + aug->start + mred - i) % aug->nmax);
+			/* Use the augmented space. */
+			memcpy (vp + nelt, azp, nelt * sizeof(complex float));
+		}
+
 		/* Perform modified Gram-Schmidt to orthogonalize the basis. */
 		/* This also builds the Hessenberg matrix column, including
 		 * the 2-norm of the next basis vector. */
 		cmgs (vp + nelt, hp, v, nelt, i + 1);
+
+		/* Watch for breakdown. */
+		if (cabs(hp[i + 1]) < FLT_EPSILON) break;
 
 		/* Apply previous Givens rotations to the Hessenberg column. */
 		for (j = 0; j < i; ++j)
@@ -125,12 +139,49 @@ int gmres (complex float *rhs, complex float *sol,
 	}
 
 	/* If there were any GMRES iterations, update the solution. */
-	if (i > 0) {
+	if (i > 0 && aug) {
+		/* Compute the optimum solution in the Krylov basis. */
+		complex float *ys;
+		ys = malloc(i * sizeof(complex float));
+		memcpy (ys, beta, i * sizeof(complex float));
+		cblas_ctrsv (CblasColMajor, CblasUpper, CblasNoTrans,
+				CblasNonUnit, i, h, mit + 1, ys, 1);
+
+		/* Compute the next Krylov vector in the augmented space. */
+		aug->start = (aug->start + 1) % aug->nmax;
+		if (aug->ntot < aug->nmax) ++(aug->ntot);
+		azp = aug->az + nelt * aug->start;
+
+		beta[i] = 0;
+		for (j = i - 1; j >= 0; --j) {
+			/* Invert the Givens rotations. */
+			s[j] = -s[j];
+			crot_ (&one, beta + j, &one, beta + j + 1, &one, c + j, s + j);
+		}
+		cblas_cgemv (CblasColMajor, CblasNoTrans, nelt, i + 1,
+				&cone, v, nelt, beta, 1, &czero, azp, 1);
+
+		/* Overwrite the Krylov subspace with the augmented subspace.
+		 * The start pointer has already been incremented! */
+		for (j = mred; j < i; ++j) {
+			zp = aug->z + nelt * 
+				((aug->nmax + aug->start + mred - j - 1) % aug->nmax);
+			memcpy(v + j * nelt, zp, nelt * sizeof(complex float));
+		}
+
+		/* Compute the solution update. */
+		zp = aug->z + nelt * aug->start;
+		cblas_cgemv (CblasColMajor, CblasNoTrans, nelt, i,
+				&cone, v, nelt, ys, 1, &czero, zp, 1);
+		for (j = 0; j < nelt; ++j) sol[j] += zp[j];
+
+		free(ys);
+	} else if (i > 0) {
 		/* Compute the minimizer of the least-squares problem. */
 		cblas_ctrsv (CblasColMajor, CblasUpper, CblasNoTrans,
 				CblasNonUnit, i, h, mit + 1, beta, 1);
 
-		/* Compute the update to the solution. */
+		/* Compute the solution update in place. */
 		cblas_cgemv (CblasColMajor, CblasNoTrans, nelt, i,
 				&cone, v, nelt, beta, 1, &cone, sol, 1);
 	}
