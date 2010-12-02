@@ -9,12 +9,12 @@
 
 /* Print the usage. */
 void usage (char *name) {
-	printf ("USAGE: %s <-n bpg | -r [-t Nx,Ny,Nz]> <-i input> <-o output>\n", name);
-	printf ("\t-n: Number of basis functions per group per dimension\n");
-	printf ("\t-r: Reverse the mapping to build a matrix file\n");
-	printf ("\t-t: Truncate the matrix when reverse mapping is used\n");
-	printf ("\t-i: Input file name (default: stdin)\n");
-	printf ("\t-o: Output file name (default: stdout)\n");
+	fprintf (stderr, "USAGE: %s <-n bpg | -r [-t Nx,Ny,Nz]> [input [output]]\n", name);
+	fprintf (stderr, "\t-n: Number of basis functions per group per dimension\n");
+	fprintf (stderr, "\t-r: Reverse the mapping to build a matrix file\n");
+	fprintf (stderr, "\t-t: Truncate the matrix when reverse mapping is used\n");
+	fprintf (stderr, "\tInput file name may be '-' or omitted for stdin\n");
+	fprintf (stderr, "\tOutput file name may be '-' or omitted for stdout\n");
 }
 
 /* Convert an input matrix file into a grouped file
@@ -184,12 +184,15 @@ int grp2mat (FILE *grpfile, FILE *matfile, int *mtrunc) {
 }
 
 int main (int argc, char **argv) {
-	char ch, *inname = NULL, *outname = NULL;
+	char ch, *progname;
 	int bpg = 0, rev = 0, trunc[3], usetrunc = 0;
 	FILE *input = NULL, *output = NULL;
 
+	/* Store the name used to invoke the program. */
+	progname = argv[0];
+
 	/* Process the input arguments. */
-	while ((ch = getopt (argc, argv, "rn:i:o:t:")) != -1) {
+	while ((ch = getopt (argc, argv, "rn:t:h")) != -1) {
 		switch (ch)  {
 		case 'r':
 			rev = 1;
@@ -197,37 +200,39 @@ int main (int argc, char **argv) {
 		case 'n':
 			bpg = strtol(optarg, NULL, 0);
 			break;
-		case 'i':
-			inname = optarg;
-			break;
-		case 'o':
-			outname = optarg;
-			break;
 		case 't':
 			usetrunc = 1;
 			trunc[0] = strtol(strtok(optarg, ","), NULL, 0);
 			trunc[1] = strtol(strtok(NULL, ","), NULL, 0);
 			trunc[2] = strtol(strtok(NULL, ","), NULL, 0);
 		default:
-			usage (argv[0]);
+			usage (progname);
 			exit (EXIT_FAILURE);
 		}
 	}
 
+	/* Point argv to the input and output specifications. */
+	argc -= optind;
+	argv += optind;
+
 	/* Respect the mutual exclusivity of -n and -r, and require one.
 	 * Also ensure that an input and output file have both been specified. */
-	if ((rev && bpg > 0) || (!rev && bpg < 1) || !inname || !outname) {
-		usage (argv[0]);
+	if ((rev && bpg > 0) || (!rev && bpg < 1)) {
+		usage (progname);
 		exit (EXIT_FAILURE);
 	}
 
-	if (!(input = fopen(inname, "rb"))) {
-		fprintf (stderr, "ERROR: Could not open %s\n", inname);
+	/* Use stdin or open an input file. */
+	if (argc < 1 || !strcmp("-", argv[0])) input = stdin;
+	else if (!(input = fopen(argv[0], "rb"))) {
+		fprintf (stderr, "ERROR: Could not open %s\n", argv[0]);
 		exit (EXIT_FAILURE);
 	}
 
-	if (!(output = fopen(outname, "wb"))) {
-		fprintf (stderr, "ERROR: Could not open %s\n", outname);
+	/* Use stdout or open an output file. */
+	if (argc < 2 || !strcmp("-", argv[1])) output = stdout;
+	else if (!(output = fopen(argv[1], "wb"))) {
+		fprintf (stderr, "ERROR: Could not open %s\n", argv[1]);
 		exit (EXIT_FAILURE);
 	}
 
