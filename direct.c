@@ -134,9 +134,9 @@ void clrdircache () {
 
 /* Free the allocated memory in the direct-interaction cache structure. */
 void freedircache () {
-	free (rhsbuf);
+	fftwf_free (rhsbuf);
+	fftwf_free (gridints);
 	free (boxlist);
-	free (gridints);
 }
 
 /* Check the cache for the given RHS. If it exists, return the pre-cached copy.
@@ -312,7 +312,7 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 		cobs[l] += buf[IDX(nfft,idx[0],idx[1],idx[2])];
 	}
 
-	free (buf);
+	fftwf_free (buf);
 
 	return;
 }
