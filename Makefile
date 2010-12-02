@@ -20,7 +20,9 @@ FWDOBJS= main.o
 INVOBJS= frechet.o cg.o dbim.o
 OBJS= fsgreen.o integrate.o mlfma.o itsolver.o direct.o io.o measure.o util.o config.o
 
-all: adbim afma tissue mat2grp
+EXECS= adbim afma tissue mat2grp
+
+all: $(EXECS)
 	@echo "Building for Darwin (universal)."
 
 afma: $(FWDOBJS) $(OBJS)
@@ -76,8 +78,8 @@ kraken: all
 	@echo "Building for NICS Kraken."
 
 clean:
-	rm -f $(OBJS) $(FWDOBJS) $(INVOBJS) *.core core \
-		tissue.o mat2grp.o afma adbim tissue mat2grp
+	rm -f $(OBJS) $(FWDOBJS) $(INVOBJS) $(EXECS) tissue.o mat2grp.o
+	rm -f *.core core 
 
 .SUFFIXES: .o .f .c
 
