@@ -51,6 +51,9 @@ int cmgs (complex float *v, complex float *c, complex float *s, long n, int nv) 
 		vnrm = creal(c[nv]);
 	}
 
+	/* Don't normalize if the norm is vanishing. */
+	if (vnrm < FLT_EPSILON) return n;
+
 	/* Finally, normalize the newly-created vector. */
 #pragma omp parallel for default(shared) private(j)
 	for (j = 0; j < n; ++j) v[j] /= vnrm;
