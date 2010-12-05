@@ -115,7 +115,10 @@ int gmres (complex float *rhs, complex float *sol, int guess,
 		cmgs (vp + nelt, hp, v, nelt, i + 1);
 
 		/* Watch for breakdown. */
-		if (cabs(hp[i + 1]) < FLT_EPSILON) break;
+		if (cabs(hp[i + 1]) < FLT_EPSILON) {
+			++i;
+			break;
+		}
 
 		/* Apply previous Givens rotations to the Hessenberg column. */
 		for (j = 0; j < i; ++j)
