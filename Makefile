@@ -60,6 +60,7 @@ bluehive: ARCHFLAGS= -m64 -D_LINUX -I$(GSL_DIR)/include -L$(GSL_DIR)/lib
 bluehive: all
 	@echo "Building for BlueHive Linux."
 
+ranger: LD= mpif77
 ranger: OPTFLAGS= -fastsse -mp
 ranger: ARCHFLAGS= -D_LINUX -I$(TACC_GSL_INC)/gsl -I$(TACC_FFTW3_INC)
 ranger: ARCHLIBS= -L$(TACC_GSL_LIB) -L$(TACC_FFTW3_LIB) \
