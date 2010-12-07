@@ -56,14 +56,14 @@ complex float srcint (float k, float *src, float *obs, float dc, ifunc grf) {
 
 /* Use either the singularity-extracted approximation to the self-integration
  * term, with four-point source integration; or use an analytic approximation. */
-complex float selfint (float k, float dc, int analytic) {
+complex float selfint (float k, float dc, int singex) {
 	complex float ikr;
 	float r, zero[3] = {0., 0., 0.};
 
 	r = cbrt (3. / (4. * M_PI)) * dc;
 
 	/* Sum the contributions of the smooth and singular parts. */
-	if (!analytic) return srcint (k, zero, zero, dc, fsgrnsmooth) + 0.5 * r * r;
+	if (singex) return srcint (k, zero, zero, dc, fsgrnsmooth) + 0.5 * r * r;
 
 	/* Otherwise use the analytic approximation. */
 	ikr = I * k * r;
