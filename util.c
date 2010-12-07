@@ -200,3 +200,60 @@ int maxind (complex float *set, int n, int *excl, int nex) {
 
 	return mi;
 }
+
+/* Calculate the Legendre polynomial of order m and its derivative at a point t. */
+static int legendre (float *p, float *dp, float t, int m) {
+	float p0 = 1.0, p1 = t;
+	int k;
+
+	/* Handle low orders explicitly. */
+	if (m < 1) {
+		*p = 1.0;
+		*dp = 0.0;
+		return m;
+	} else if (m < 2) {
+		*p = t;
+		*dp = 1.0;
+		return m;
+	}
+
+	/* Otherwise, calculate the function values recursively. */
+	for (k = 1; k < m; ++k) {
+		*p = ((2.0 * k + 1.0) * t * p1 - k * p0) / (1.0 + k);
+		p0 = p1; p1 = *p;
+	}
+
+	*dp = m * (p0 - t * p1) / (1.0 - t * t);
+
+	return m;
+}
+
+/* Compute Gaussian quadrature nodes and weights. */
+int gaussleg (float *nodes, float *weights, int m) {
+	int i, j, nroots = (m + 1) / 2;
+	float t, p, dp, dt;
+	const float tol = 1e-7;
+	const int maxit = 100;
+
+	for (i = 0; i < nroots; ++i) {
+		/* Use the Chebyshev roots as an initial guess. */
+		t = cos (M_PI * (i + 0.75) / (m + 0.5));
+		for (j = 0; j < maxit; ++j) {
+			/* Compute the value of the Legendre polynomial. */
+			legendre (&p, &dp, t, m);
+			/* Perform a Newton-Raphson update. */
+			dt = -p / dp; t += dt;
+
+			/* Break if convergence detected. */
+			if (fabs(dt) < tol) break;
+		}
+
+		/* Update the nodes and weights. */
+		nodes[i] = t;
+		nodes[m - i - 1] = -t;
+		weights[i] = 2.0 / (1.0 - t * t) / (dp * dp);
+		weights[m - i - 1] = weights[i];
+	}
+
+	return 0;
+}

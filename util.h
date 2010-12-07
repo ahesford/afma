@@ -34,4 +34,6 @@ int maxind (complex float *, int, int *, int);
 int cmgs (complex float *, complex float *, complex float *, long, int);
 complex float pardot (complex float *, complex float *, long);
 float parnorm (complex float *, long);
+
+int gaussleg (float *, float *, int);
 #endif /* __UTIL_H_ */

@@ -13,6 +13,7 @@
 #include "measure.h"
 #include "frechet.h"
 #include "direct.h"
+#include "config.h"
 #include "mlfma.h"
 #include "io.h"
 #include "cg.h"
@@ -20,12 +21,15 @@
 #include "util.h"
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-s #] [-r #] [-a #] [-o <output prefix>] -i <input prefix>\n", name);
-	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
-	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
+	fprintf (stderr, "Usage: %s [-s #] [-r #] [-a #] [-n #] [-x] [-o <prefix>] -i <prefix>\n", name);
+	fprintf (stderr, "\t-i: Specify input file prefix\n");
+	fprintf (stderr, "\t-o: Specify output file prefix (defaults to input prefix)\n");
 	fprintf (stderr, "\t-s #: The number of per-leap simultaneous views (default: 1)\n");
 	fprintf (stderr, "\t-r #: The number of iterations for spectral radius estimation (default: none)\n");
 	fprintf (stderr, "\t-a: Use ACA with specified tolerance for far-field transformations\n");
+	fprintf (stderr, "\t-n: Specify number of points for near-field integration\n");
+	fprintf (stderr, "\t-x: Use singularity extraction for self terms\n");
+
 }
 
 float dbimerr (complex float *error, complex float *rn, complex float *field,
@@ -92,7 +96,7 @@ float scalereg (float fact, float mse) {
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i, nmeas, dbimit[2], q, stride = 1,
-	    gsize[3], specit = 0, useaca = 0;
+	    gsize[3], specit = 0, useaca = 0, singex = 0, numsrcpts = 4;
 	complex float *rn, *crt, *field, *fldptr, *error, *refct;
 	float errnorm = 0, tolerance[2], regparm[4], erninc,
 	      trange[2], prange[2], crtmse = 0.0, gamma, sigma = 1.0;
@@ -109,7 +113,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:s:r:a:")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:s:r:a:n:x")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -118,14 +122,20 @@ int main (int argc, char **argv) {
 			outproj = optarg;
 			break;
 		case's':
-			stride = atoi(optarg);
+			stride = strtol(optarg, NULL, 0);
 			break;
 		case 'r':
-			specit = atoi(optarg);
+			specit = strtol(optarg, NULL, 0);
 			break;
 		case 'a':
-			acatol = atof(optarg);
+			acatol = strtod(optarg, NULL);
 			useaca = 1;
+			break;
+		case 'x':
+			singex = 1;
+			break;
+		case 'n':
+			numsrcpts = strtol(optarg, NULL, 0);
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -193,7 +203,7 @@ int main (int argc, char **argv) {
 
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc (acatol, useaca);
-	i = dirprecalc ();
+	i = dirprecalc (numsrcpts, singex);
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
 
 	/* Finish the ScaleME initialization. */

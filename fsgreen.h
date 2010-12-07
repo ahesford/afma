@@ -4,6 +4,7 @@
 #include <complex.h>
 
 complex float fsgreen (float, float *, float *);
+complex float fsgrnsmooth (float, float *, float *);
 complex float fsplane (float, float *, float *);
 
 #endif /* __UTILITY_H_ */

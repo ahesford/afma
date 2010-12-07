@@ -39,7 +39,7 @@ static int sortbsmap (ctmap *map, int *bsl, int nbs, int bpvol) {
 
 /* Read the gridded file into local arrays. */
 int getctgrp (complex float *crt, char *fname, int *size, int *bsl, int nbs, int bpb) {
-	long i, l, nelt;
+	long i, nelt;
 	int bsize[HLEN], bpbvol = bpb * bpb * bpb;
 	ctmap *map;
 
@@ -102,7 +102,7 @@ int getctgrp (complex float *crt, char *fname, int *size, int *bsl, int nbs, int
 /* Distributed write of a gridded file into local arrays. */
 int prtctgrp (char *fname, complex float *crt, int *size, int *bsl, int nbs, int bpb) {
 	int mpirank, bpbvol = bpb * bpb * bpb, bhdr[HLEN];
-	long i, nelt, l;
+	long i, nelt;
 	ctmap *map;
 
 	MPI_File fh;

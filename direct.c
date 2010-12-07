@@ -197,7 +197,7 @@ complex float *cacheboxrhs (int bsl, int boxkey) {
 }
 
 /* Precompute some values for the direct interactions. */
-int dirprecalc () {
+int dirprecalc (int numsrcpts, int singex) {
 	int totbpnbr, nborsvol, rank;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
@@ -241,7 +241,8 @@ int dirprecalc () {
 		off[2] = (idx[2] - fmaconf.numbuffer) * fmaconf.bspbox;
 
 		/* Build the Green's function grid for this local box. */
-		greengrid (grf, fmaconf.bspbox, nfft, fmaconf.k0, fmaconf.cell, off);
+		greengrid (grf, fmaconf.bspbox, nfft, fmaconf.k0,
+				fmaconf.cell, off, numsrcpts, singex);
 
 		/* Fourier transform the Green's function. */
 		fftwf_execute_dft (fplan, grf, grf);
@@ -318,17 +319,19 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 }
 
 /* Build the extended Green's function on an expanded cubic grid. */
-int greengrid (complex float *grf, int m, int mex, float k0, float cell, int *off) {
+int greengrid (complex float *grf, int m, int mex, float k0,
+		float cell, int *off, int numsrcpts, int singex) {
 	int ip, jp, kp, l, mt, idx[3];
-	float dist[3], zero[3] = {0., 0., 0.}, scale, slfscale;
+	float dist[3], zero[3] = {0., 0., 0.}, scale;
 
 	/* The total number of samples. */
 	mt = mex * mex * mex;
 
 	/* The scale of the integral equation solution. */
 	scale = k0 * k0 / (float)mt;
-	/* Scale for the self term. */
-	slfscale = (float)mt;
+
+	/* Initialize the integration rules for direct interations. */
+	bldintrules (numsrcpts, 0);
 
 	/* Compute the interactions. */
 	for (l = 0; l < mt; ++l) {
@@ -344,9 +347,12 @@ int greengrid (complex float *grf, int m, int mex, float k0, float cell, int *of
 		dist[2] = (float)(kp - off[2]) * fmaconf.cell;
 
 		if (kp == off[2] && jp == off[1] && ip == off[0])
-			*(grf++) = selfint (k0, cell) / slfscale;
+			*(grf++) = scale * selfint (k0, cell, singex);
 		else *(grf++) = scale * srcint (k0, zero, dist, cell, fsgreen);
 	}
+
+	/* Destroy the integration rules. */
+	delintrules ();
 
 	return mex;
 }

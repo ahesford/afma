@@ -13,6 +13,7 @@
 #include "itsolver.h"
 #include "measure.h"
 #include "direct.h"
+#include "config.h"
 #include "mlfma.h"
 #include "util.h"
 #include "io.h"
@@ -20,23 +21,26 @@
 void usage (char *);
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-d] [-l #] [-r #] [-a #] [-b] [-o <output prefix>] -i <input prefix>\n", name);
-	fprintf (stderr, "\t-i <input prefix>: Specify input file prefix\n");
-	fprintf (stderr, "\t-o <output prefix>: Specify output file prefix (defaults to input prefix)\n");
+	fprintf (stderr, "Usage: %s [-d] [-l #] [-r #] [-a #] [-n #] [-x] [-b] [-o <prefix>] -i <prefix>\n", name);
+	fprintf (stderr, "\t-i: Specify input file prefix\n");
+	fprintf (stderr, "\t-o: Specify output file prefix (defaults to input prefix)\n");
 	fprintf (stderr, "\t-d: Debug mode (prints induced field); specify twice to write after every restart\n");
 	fprintf (stderr, "\t-b: Use BiCG-STAB instead of GMRES\n");
 	fprintf (stderr, "\t-r: Specify the number of observation configurations\n");
-	fprintf (stderr, "\t-a: Use ACA with specified tolerance for far-field transformations\n");
+	fprintf (stderr, "\t-a: Use ACA far-field transformations, or SVD when tolerance is negative\n");
 	fprintf (stderr, "\t-l: Use loose GMRES with the specified number of augmented vectors\n");
+	fprintf (stderr, "\t-n: Specify number of points for near-field integration\n");
+	fprintf (stderr, "\t-x: Use singularity extraction for self terms\n");
 }
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist,
 	     fname[1024], fldfmt[1024], guessfmt[1024];
 	int mpirank, mpisize, i, j, k, nit, gsize[3], obscount = 1;
-	complex float *rhs, *sol, *field, *z = NULL, *az = NULL;
-	double cputime, wtime;
 	int debug = 0, maxobs, useaca = 0, usebicg = 0, useloose = 0;
+	int numsrcpts = 4, singex = 0;
+	complex float *rhs, *sol, *field;
+	double cputime, wtime;
 	long nelt;
 	float acatol = -1;
 	augspace aug;
@@ -54,7 +58,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:dbr:a:hl:")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:dbr:a:hl:xn:")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -77,6 +81,12 @@ int main (int argc, char **argv) {
 			break;
 		case 'l':
 			useloose = strtol(optarg, NULL, 0);
+			break;
+		case 'x':
+			singex = 1;
+			break;
+		case 'n':
+			numsrcpts = strtol(optarg, NULL, 0);
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -135,7 +145,7 @@ int main (int argc, char **argv) {
 
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc (acatol, useaca);
-	i = dirprecalc ();
+	i = dirprecalc (numsrcpts, singex);
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
 
 	/* Finish the ScaleME initialization. */
