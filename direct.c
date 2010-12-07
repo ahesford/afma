@@ -225,6 +225,9 @@ int dirprecalc (int numsrcpts, int singex) {
 	bplan = fftwf_plan_dft_3d (nfft, nfft, nfft,
 			gridints, gridints, FFTW_BACKWARD, FFTW_MEASURE);
 
+	/* Initialize the integration rules for direct interations. */
+	bldintrules (numsrcpts, 0);
+
 #pragma omp parallel default(shared)
 {
 	int off[3], l, idx[3];
@@ -241,13 +244,16 @@ int dirprecalc (int numsrcpts, int singex) {
 		off[2] = (idx[2] - fmaconf.numbuffer) * fmaconf.bspbox;
 
 		/* Build the Green's function grid for this local box. */
-		greengrid (grf, fmaconf.bspbox, nfft, fmaconf.k0,
-				fmaconf.cell, off, numsrcpts, singex);
+		greengrid (grf, fmaconf.bspbox, nfft,
+				fmaconf.k0, fmaconf.cell, off, singex);
 
 		/* Fourier transform the Green's function. */
 		fftwf_execute_dft (fplan, grf, grf);
 	}
 }
+
+	/* Destroy the integration rules. */
+	delintrules ();
 
 	/* Allocate the local cache structure. */
 	mkdircache ();
@@ -319,8 +325,8 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 }
 
 /* Build the extended Green's function on an expanded cubic grid. */
-int greengrid (complex float *grf, int m, int mex, float k0,
-		float cell, int *off, int numsrcpts, int singex) {
+int greengrid (complex float *grf, int m, int mex,
+		float k0, float cell, int *off, int singex) {
 	int ip, jp, kp, l, mt, idx[3];
 	float dist[3], zero[3] = {0., 0., 0.}, scale;
 
@@ -329,9 +335,6 @@ int greengrid (complex float *grf, int m, int mex, float k0,
 
 	/* The scale of the integral equation solution. */
 	scale = k0 * k0 / (float)mt;
-
-	/* Initialize the integration rules for direct interations. */
-	bldintrules (numsrcpts, 0);
 
 	/* Compute the interactions. */
 	for (l = 0; l < mt; ++l) {
@@ -350,9 +353,6 @@ int greengrid (complex float *grf, int m, int mex, float k0,
 			*(grf++) = scale * selfint (k0, cell, singex);
 		else *(grf++) = scale * srcint (k0, zero, dist, cell, fsgreen);
 	}
-
-	/* Destroy the integration rules. */
-	delintrules ();
 
 	return mex;
 }

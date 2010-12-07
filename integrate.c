@@ -36,15 +36,15 @@ complex float rcvint (float k, float *src, float *obs, float dc, ifunc grf) {
 complex float srcint (float k, float *src, float *obs, float dc, ifunc grf) {
 	complex float ans = 0, val;
 	int i, j, l;
-	float srcpt[3];
+	float spt[3];
 
 	for (i = 0; i < numsrcpts; ++i) {
-		srcpt[0] = src[0] + 0.5 * dc * srcpts[i];
+		spt[0] = src[0] + 0.5 * dc * srcpts[i];
 		for (j = 0; j < numsrcpts; ++j) {
-			srcpt[1] = src[1] + 0.5 * dc * srcpts[j];
+			spt[1] = src[1] + 0.5 * dc * srcpts[j];
 			for (l = 0; l < numsrcpts; ++l) {
-				srcpt[2] = src[2] + 0.5 * dc * srcpts[l];
-				val = grf (k, srcpt, obs);
+				spt[2] = src[2] + 0.5 * dc * srcpts[l];
+				val = grf (k, spt, obs);
 				ans += srcwts[i] * srcwts[j] * srcwts[l] * val;
 			}
 		}

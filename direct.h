@@ -3,7 +3,7 @@
 
 #include <complex.h>
 
-int greengrid (complex float *, int, int, float, float, int *, int, int);
+int greengrid (complex float *, int, int, float, float, int *, int);
 int dirprecalc (int, int);
 
 complex float *cacheboxrhs (int, int);
