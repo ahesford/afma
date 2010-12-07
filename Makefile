@@ -1,7 +1,7 @@
 CC=mpicc
-LD=$(CC)
+LD=mpif90
 
-LIBS= -lScaleME2 -lfftw3f -lm
+LIBS= -lScaleME2 -lfftw3f
 
 OPTFLAGS= -fopenmp -O3 -Xarch_x86_64 -march=core2 -Xarch_i386 -march=prescott
 ARCHFLAGS= -arch x86_64 -arch i386 -D_MACOSX
@@ -51,8 +51,9 @@ bsd: all
 	@echo "Building for FreeBSD."
 
 bluehive: CC= mpiicc
+bluehive: LD= mpiifort
 bluehive: OPTFLAGS= -O3 -openmp -xHost -parallel
-bluehive: ARCHLIBS= -lgslcblas -llapack -lblas
+bluehive: ARCHLIBS= -lgslcblas -llapack -lblas -nofor_main
 bluehive: ARCHFLAGS= -m64 -D_LINUX -I/usr/local/gsl/1.12-gnu4.1/include/gsl \
 	-L/usr/local/gsl/1.12-gnu4.1/lib
 bluehive: all
@@ -61,15 +62,16 @@ bluehive: all
 ranger: OPTFLAGS= -fastsse -mp
 ranger: ARCHFLAGS= -D_LINUX -I$(TACC_GSL_INC)/gsl -I$(TACC_FFTW3_INC) \
 	-L$(TACC_GSL_LIB) -L$(TACC_FFTW3_LIB)
-ranger: ARCHLIBS= -lgslcblas -llapack -lblas
+ranger: ARCHLIBS= -Mnomain -lgslcblas -llapack -lblas
 ranger: all
 	@echo "Building for TACC Ranger."
 
 kraken: CC= cc
+kraken: LD= ftn
 kraken: OPTFLAGS= -fastsse -mp
 kraken: ARCHFLAGS= -D_LINUX -I$(GSL_DIR)/include/gsl -I$(FFTW_INC) \
 	-L$(GSL_DIR)/lib -L$(FFTW_DIR)
-kraken: ARCHLIBS= -lgslcblas -llapack -lblas
+kraken: ARCHLIBS= -Mnomain -lgslcblas -llapack -lblas
 kraken: all
 	@echo "Building for NICS Kraken."
 
