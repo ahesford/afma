@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 #include <mpi.h>
+
+#include "precision.h"
 
 #include "io.h"
 #include "util.h"
@@ -38,7 +39,7 @@ static int sortbsmap (ctmap *map, int *bsl, int nbs, int bpvol) {
 }
 
 /* Read the gridded file into local arrays. */
-int getctgrp (complex float *crt, char *fname, int *size, int *bsl, int nbs, int bpb) {
+int getctgrp (cplx *crt, char *fname, int *size, int *bsl, int nbs, int bpb) {
 	long i, nelt;
 	int bsize[HLEN], bpbvol = bpb * bpb * bpb;
 	ctmap *map;
@@ -50,7 +51,7 @@ int getctgrp (complex float *crt, char *fname, int *size, int *bsl, int nbs, int
 	nelt = (long)nbs * (long)bpbvol;
 
 	/* Zero out the contrast in case nothing can be read. */
-	memset (crt, 0, nelt * sizeof(complex float));
+	memset (crt, 0, nelt * sizeof(cplx));
 
 	/* Open the MPI file with the specified name. */
 	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_RDONLY,
@@ -82,7 +83,7 @@ int getctgrp (complex float *crt, char *fname, int *size, int *bsl, int nbs, int
 	sortbsmap (map, bsl, nbs, bpbvol);
 
 	/* Create the datatype storing all values in a group. */
-	MPI_Type_contiguous (2 * bpbvol, MPI_FLOAT, &cplx);
+	MPI_Type_contiguous (2 * bpbvol, MPIREAL, &cplx);
 	MPI_Type_commit (&cplx);
 
 	/* Perform the ordered, grouped read from the file. */
@@ -100,7 +101,7 @@ int getctgrp (complex float *crt, char *fname, int *size, int *bsl, int nbs, int
 }
 
 /* Distributed write of a gridded file into local arrays. */
-int prtctgrp (char *fname, complex float *crt, int *size, int *bsl, int nbs, int bpb) {
+int prtctgrp (char *fname, cplx *crt, int *size, int *bsl, int nbs, int bpb) {
 	int mpirank, bpbvol = bpb * bpb * bpb, bhdr[HLEN];
 	long i, nelt;
 	ctmap *map;
@@ -125,7 +126,7 @@ int prtctgrp (char *fname, complex float *crt, int *size, int *bsl, int nbs, int
 	sortbsmap (map, bsl, nbs, bpbvol);
 
 	/* Create the datatype storing all values in a group. */
-	MPI_Type_contiguous (2 * bpbvol, MPI_FLOAT, &cplx);
+	MPI_Type_contiguous (2 * bpbvol, MPIREAL, &cplx);
 	MPI_Type_commit (&cplx);
 
 	/* Build the special header to note the file is group-ordered. */
@@ -154,7 +155,7 @@ int prtctgrp (char *fname, complex float *crt, int *size, int *bsl, int nbs, int
 }
 
 /* Append the provided field to the specified field file. */
-int writefld (char *fname, int nrows, int ncols, complex float *field) {
+int writefld (char *fname, int nrows, int ncols, cplx *field) {
 	FILE *fp;
 	int size[2] = { nrows, ncols }, count = nrows * ncols;
 
@@ -166,13 +167,13 @@ int writefld (char *fname, int nrows, int ncols, complex float *field) {
 	/* Write the matrix size. */
 	fwrite (size, sizeof(int), 2, fp);
 	/* Write the values. */
-	fwrite (field, sizeof(complex float), count, fp);
+	fwrite (field, sizeof(cplx), count, fp);
 	fclose (fp);
 
 	return count;
 }
 
-int readfld (complex float *field, char *fname, int nobs) {
+int readfld (cplx *field, char *fname, int nobs) {
 	FILE *fp;
 	int size[2];
 
@@ -191,16 +192,16 @@ int readfld (complex float *field, char *fname, int nobs) {
 	}
 
 	/* Read the values. */
-	fread (field, sizeof(complex float), nobs, fp);
+	fread (field, sizeof(cplx), nobs, fp);
 	fclose (fp);
 
 	return nobs;
 }
 
-int getfields (char *inproj, complex float *field, int nobs, int nsrc, float *nrm) {
-	complex float *fldptr;
+int getfields (char *inproj, cplx *field, int nobs, int nsrc, real *nrm) {
+	cplx *fldptr;
 	int i, j;
-	float lerr;
+	real lerr;
 	char fname[1024], fmt[1024];
 
 	/* Find the width of the integer label in the field name. */

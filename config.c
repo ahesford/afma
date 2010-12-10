@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
+
+#include "precision.h"
 
 #include "config.h"
 #include "mlfma.h"
@@ -24,9 +25,10 @@ void skipcomments (FILE *fp) {
 }
 
 /* Read the DBIM configuration. */
-void getdbimcfg (char *fname, int *maxit, float *regparm, float *tol) {
+void getdbimcfg (char *fname, int *maxit, real *regparm, real *tol) {
 	FILE *fp;
 	char buf[1024];
+	double rbuf[4];
 
 	if (!(fp = fopen (fname, "r"))) {
 		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
@@ -41,15 +43,26 @@ void getdbimcfg (char *fname, int *maxit, float *regparm, float *tol) {
 	/* Read the regularization bounds, step and skip. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
+
 	/* The skip defaults to 1, if none is provided. */
-	if (sscanf (buf, "%f %f %f %f", regparm, regparm + 1,
-				regparm + 2, regparm + 3) < 4)
-		regparm[3] = 1;
+	if (sscanf (buf, "%lf %lf %lf %lf", rbuf, rbuf + 1, rbuf + 2, rbuf + 3) < 4)
+		regparm[3] = 1.0;
+	else regparm[3] = (real) rbuf[3];
+	/* Copy the remaining regularization parameters. */
+	regparm[0] = (real) rbuf[0];
+	regparm[1] = (real) rbuf[1];
+	regparm[2] = (real) rbuf[2];
 
 	/* Read the DBIM tolerance. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	if (sscanf (buf, "%f %f", tol, tol + 1) < 2) tol[1] = tol[2] / 10;
+	if (sscanf (buf, "%lf %lf", rbuf, rbuf + 1) < 2) {
+		tol[0] = (real) rbuf[0];
+		tol[1] = tol[0] / 10.;
+	} else {
+		tol[0] = (real) rbuf[0];
+		tol[1] = (real) rbuf[1];
+	}
 
 	fclose (fp);
 }
@@ -60,6 +73,7 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	FILE *fp;
 	char buf[1024];
 	int nmax, nbox, i;
+	double rbuf[4];
 
 	if (!(fp = fopen (fname, "r"))) {
 		fprintf (stderr, "ERROR: unable to open %s.\n", fname);
@@ -74,12 +88,15 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	/* Read the lower corner of the domain. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %f %f", fmaconf.cen, fmaconf.cen + 1,
-			fmaconf.cen + 2, &(fmaconf.cell));
+	sscanf (buf, "%lf %lf %lf %lf", rbuf, rbuf + 1, rbuf + 2, rbuf + 3);
+	fmaconf.cen[0] = (real) rbuf[0];
+	fmaconf.cen[1] = (real) rbuf[1];
+	fmaconf.cen[2] = (real) rbuf[2];
+	fmaconf.cell = (real) rbuf[3];
 
-	fmaconf.min[0] = fmaconf.cen[0] - 0.5 * (float)(fmaconf.nx) * fmaconf.cell;
-	fmaconf.min[1] = fmaconf.cen[1] - 0.5 * (float)(fmaconf.ny) * fmaconf.cell;
-	fmaconf.min[2] = fmaconf.cen[2] - 0.5 * (float)(fmaconf.nz) * fmaconf.cell;
+	fmaconf.min[0] = fmaconf.cen[0] - 0.5 * (real)(fmaconf.nx) * fmaconf.cell;
+	fmaconf.min[1] = fmaconf.cen[1] - 0.5 * (real)(fmaconf.ny) * fmaconf.cell;
+	fmaconf.min[2] = fmaconf.cen[2] - 0.5 * (real)(fmaconf.nz) * fmaconf.cell;
 
 	fmaconf.cellvol = fmaconf.cell * fmaconf.cell * fmaconf.cell;
 
@@ -131,7 +148,8 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	/* Read the MLFMA precision. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f", &(fmaconf.precision));
+	sscanf (buf, "%lf", rbuf);
+	fmaconf.precision = (real) rbuf[0];
 
 	/* Read the MLFMA interpolation order. */
 	skipcomments (fp);
@@ -141,15 +159,16 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	/* Read the high-accuracy iterative solver configuration. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%d %d %f", &(hislv->maxit),
-			&(hislv->restart), &(hislv->epscg));
+	sscanf (buf, "%d %d %lf", &(hislv->maxit), &(hislv->restart), rbuf);
+	hislv->epscg = (real) rbuf[0];
 
 	/* Read the low-accuracy iterative solver configuration, if desired. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	if (loslv)
-		sscanf (buf, "%d %d %f", &(loslv->maxit),
-				&(loslv->restart), &(loslv->epscg));
+	if (loslv) {
+		sscanf (buf, "%d %d %lf", &(loslv->maxit), &(loslv->restart), rbuf);
+		loslv->epscg = (real) rbuf[0];
+	}
 
 	/* Read the source radius and ignore it since plane waves are used. */
 	skipcomments (fp);
@@ -158,7 +177,9 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	/* Read the source theta values. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %d", src->trange, src->trange + 1, &(src->ntheta));
+	sscanf (buf, "%lf %lf %d", rbuf, rbuf + 1, &(src->ntheta));
+	src->trange[0] = (real) rbuf[0];
+	src->trange[1] = (real) rbuf[1];
 
 	/* Convert the degree values to radians. */
 	src->trange[0] *= M_PI / 180;
@@ -167,7 +188,9 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	/* Read the source phi values. */
 	skipcomments (fp);
 	fgets (buf, 1024, fp);
-	sscanf (buf, "%f %f %d", src->prange, src->prange + 1, &(src->nphi));
+	sscanf (buf, "%lf %lf %d", rbuf, rbuf + 1, &(src->nphi));
+	src->prange[0] = (real) rbuf[0];
+	src->prange[1] = (real) rbuf[1];
 
 	/* Convert the degree values to radians. */
 	src->prange[0] *= M_PI / 180;
@@ -182,7 +205,9 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 		/* Read the observer theta values. */
 		skipcomments (fp);
 		fgets (buf, 1024, fp);
-		sscanf (buf, "%f %f %d", obs[i].trange, obs[i].trange + 1, &(obs[i].ntheta));
+		sscanf (buf, "%lf %lf %d", rbuf, rbuf + 1, &(obs[i].ntheta));
+		obs[i].trange[0] = (real) rbuf[0];
+		obs[i].trange[1] = (real) rbuf[1]; 
 
 		/* Convert the degree values to radians. */
 		obs[i].trange[0] *= M_PI / 180;
@@ -191,7 +216,9 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 		/* Read the observer phi values. */
 		skipcomments (fp);
 		fgets (buf, 1024, fp);
-		sscanf (buf, "%f %f %d", obs[i].prange, obs[i].prange + 1, &(obs[i].nphi));
+		sscanf (buf, "%lf %lf %d", rbuf, rbuf + 1, &(obs[i].nphi));
+		obs[i].prange[0] = (real) rbuf[0];
+		obs[i].prange[1] = (real) rbuf[1]; 
 
 		/* Convert the degree values to radians. */
 		obs[i].prange[0] *= M_PI / 180;

@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <complex.h>
+#include "precision.h"
 
 #include "util.h"
 
@@ -22,7 +22,7 @@ void usage (char *name) {
 int mat2grp (FILE *matfile, FILE *grpfile, int bpg) {
 	int msize[3], grphdr[5], bpgvol, rrow;
 	long i, grpslab, matslab;
-	complex float *grpvals, *slabvals;
+	cplx *grpvals, *slabvals;
 
 	bpgvol = bpg * bpg * bpg;
 
@@ -40,16 +40,16 @@ int mat2grp (FILE *matfile, FILE *grpfile, int bpg) {
 	matslab = msize[0] * msize[1];
 	grpslab = grphdr[1] * grphdr[2] * bpgvol;
 
-	grpvals = malloc (grpslab * sizeof(complex float));
-	slabvals = malloc (bpg * matslab * sizeof(complex float));
+	grpvals = malloc (grpslab * sizeof(cplx));
+	slabvals = malloc (bpg * matslab * sizeof(cplx));
 
 	for (i = 0; i < msize[2]; i += bpg) {
 		/* Read a slab of data. Watch not to run off the end. */
 		rrow = MIN(bpg, MAX(0, msize[2] - i));
-		fread (slabvals, sizeof(complex float), rrow * matslab, matfile);
+		fread (slabvals, sizeof(cplx), rrow * matslab, matfile);
 
 		/* Blank the slab of groups. */
-		memset (grpvals, 0, grpslab * sizeof(complex float));
+		memset (grpvals, 0, grpslab * sizeof(cplx));
 
 #pragma omp parallel default(shared)
 {
@@ -85,7 +85,7 @@ int mat2grp (FILE *matfile, FILE *grpfile, int bpg) {
 }
 
 		/* Write the slab of groups. */
-		fwrite (grpvals, sizeof(complex float), grpslab, grpfile);
+		fwrite (grpvals, sizeof(cplx), grpslab, grpfile);
 	}
 
 	free (grpvals);
@@ -97,7 +97,7 @@ int mat2grp (FILE *matfile, FILE *grpfile, int bpg) {
 int grp2mat (FILE *grpfile, FILE *matfile, int *mtrunc) {
 	int msize[3], grphdr[5], bpgvol, rrow, bpg;
 	long i, grpslab, matslab;
-	complex float *grpvals, *slabvals;
+	cplx *grpvals, *slabvals;
 
 	/* Read the group header:
 	 * 0 Nx Ny Nz Bpg
@@ -124,8 +124,8 @@ int grp2mat (FILE *grpfile, FILE *matfile, int *mtrunc) {
 	grpslab = grphdr[1] * grphdr[2] * bpgvol;
 
 	/* Allocate a slab of data for rearranging. */
-	grpvals = malloc (grpslab * sizeof(complex float));
-	slabvals = malloc (bpg * matslab * sizeof(complex float));
+	grpvals = malloc (grpslab * sizeof(cplx));
+	slabvals = malloc (bpg * matslab * sizeof(cplx));
 
 	/* Write the matrix size header. */
 	fwrite (mtrunc, sizeof(int), 3, matfile);
@@ -136,10 +136,10 @@ int grp2mat (FILE *grpfile, FILE *matfile, int *mtrunc) {
 		rrow = MIN(bpg, MAX(0, mtrunc[2] - i));
 
 		/* Read the slab of groups. */
-		fread (grpvals, sizeof(complex float), grpslab, grpfile);
+		fread (grpvals, sizeof(cplx), grpslab, grpfile);
 
 		/* Blank the matrix slab. */
-		memset (slabvals, 0, rrow * matslab * sizeof(complex float));
+		memset (slabvals, 0, rrow * matslab * sizeof(cplx));
 
 #pragma omp parallel default(shared)
 {
@@ -175,7 +175,7 @@ int grp2mat (FILE *grpfile, FILE *matfile, int *mtrunc) {
 }
 
 		/* Write the slab of the matrix. */
-		fwrite (slabvals, sizeof(complex float), rrow * matslab, matfile);
+		fwrite (slabvals, sizeof(cplx), rrow * matslab, matfile);
 	}
 
 	free (grpvals);

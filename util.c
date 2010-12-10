@@ -1,8 +1,6 @@
-#include <complex.h>
-#include <math.h>
-#include <float.h>
-
 #include <mpi.h>
+
+#include "precision.h"
 
 #include "util.h"
 
@@ -11,10 +9,10 @@
  * projection * of the vector onto each of the basis vectors is stored in the
  * length-nv array c. This is actually a selective reorthogonalization scheme
  * to attempt to correct rounding errors. */
-int cmgs (complex float *v, complex float *c, complex float *s, long n, int nv) {
+int cmgs (cplx *v, cplx *c, cplx *s, long n, int nv) {
 	long i, j;
-	complex float *sv, cv;
-	float vnrm, lcrit;
+	cplx *sv, cv;
+	real vnrm, lcrit;
 
 	/* Perform the first modified Gram Schmidt orthogonalization. */
 	for (i = 0, sv = s, lcrit = 0.; i < nv; ++i, sv += n) {
@@ -52,7 +50,7 @@ int cmgs (complex float *v, complex float *c, complex float *s, long n, int nv) 
 	}
 
 	/* Don't normalize if the norm is vanishing. */
-	if (vnrm < FLT_EPSILON) return n;
+	if (vnrm < REAL_EPSILON) return n;
 
 	/* Finally, normalize the newly-created vector. */
 #pragma omp parallel for default(shared) private(j)
@@ -62,7 +60,8 @@ int cmgs (complex float *v, complex float *c, complex float *s, long n, int nv) 
 }
 
 /* Compute the inner product of the distributed vectors x and y of dimension n. */
-complex float pardot (complex float *x, complex float *y, long n) {
+cplx pardot (cplx *x, cplx *y, long n) {
+	/* Always compute the product in double precision to avoid rounding errors. */
 	complex double dp = 0.0;
 	long i;
 
@@ -72,10 +71,11 @@ complex float pardot (complex float *x, complex float *y, long n) {
 	/* Add in the contributions from other processors. */
 	MPI_Allreduce (MPI_IN_PLACE, &dp, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-	return (complex float)dp;
+	return (cplx)dp;
 }
 
-float parnorm (complex float *x, long n) {
+real parnorm (cplx *x, long n) {
+	/* Always compute the norm in double precision to avoid rounding errors. */
 	double nrm = 0.0, nr, ni;
 	long i;
 
@@ -91,13 +91,13 @@ float parnorm (complex float *x, long n) {
 	/* Sum over processors and reduce. */
 	MPI_Allreduce (MPI_IN_PLACE, &nrm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-	return (float)sqrt(nrm);
+	return (real)sqrt(nrm);
 }
 
 /* The RMS error between a test vector and a reference. */
-float mse (complex float *test, complex float *ref, long n, int nrm) {
+real mse (cplx *test, cplx *ref, long n, int nrm) {
 	long i;
-	float err[2] = {0.0, 0.0}, tmp;
+	real err[2] = {0.0, 0.0}, tmp;
 
 	/* Calculate local contributions to the mean-squared error. */
 	for (i = 0; i < n; ++i) {
@@ -108,7 +108,7 @@ float mse (complex float *test, complex float *ref, long n, int nrm) {
 	}
 
 	/* Sum the local contributions. */
-	MPI_Allreduce (MPI_IN_PLACE, err, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce (MPI_IN_PLACE, err, 2, MPIREAL, MPI_SUM, MPI_COMM_WORLD);
 
 	/* Return the normalized MSE if desired, otherwise just the difference. */
 	if (nrm) return sqrt(err[0] / err[1]);
@@ -116,14 +116,14 @@ float mse (complex float *test, complex float *ref, long n, int nrm) {
 }
 
 /* Compute the sinc of the argument. */
-float sinc (float x) {
-	return ((fabs(x) < FLT_EPSILON) ? 1.0 : (sin (M_PI * x) / (M_PI * x)));
+real sinc (real x) {
+	return ((fabs(x) < REAL_EPSILON) ? 1.0 : (sin (M_PI * x) / (M_PI * x)));
 }
 
 /* Compute the coordinates of the indexed far-field sample. */
-int sampcoords (float *s, int i, float *th, int nt, int np) {
+int sampcoords (real *s, int i, real *th, int nt, int np) {
 	int pi, ti;
-	float st, theta, phi;
+	real st, theta, phi;
 
 	/* The first sample is the south pole.
 	 * No further computation is required. */
@@ -145,7 +145,7 @@ int sampcoords (float *s, int i, float *th, int nt, int np) {
 	}
 
 	/* Compute the angular position from the sample indices. */
-	phi = 2 * M_PI * pi / (float)np;
+	phi = 2 * M_PI * pi / (real)np;
 	theta = th[ti];
 
 	/* Compute the cartesian position. */
@@ -158,14 +158,14 @@ int sampcoords (float *s, int i, float *th, int nt, int np) {
 }
 
 /* Compute the relative coordinates of a cell within a group of cells. */
-int cellcoords (float *r, int l, int bpd, float dx) {
+int cellcoords (real *r, int l, int bpd, real dx) {
 	int idx[3];
 
 	GRID(idx, l, bpd, bpd);
 
-	r[0] = 0.5 * dx * (2.0 * idx[0] + 1.0 - (float)bpd);
-	r[1] = 0.5 * dx * (2.0 * idx[1] + 1.0 - (float)bpd);
-	r[2] = 0.5 * dx * (2.0 * idx[2] + 1.0 - (float)bpd);
+	r[0] = 0.5 * dx * (2.0 * idx[0] + 1.0 - (real)bpd);
+	r[1] = 0.5 * dx * (2.0 * idx[1] + 1.0 - (real)bpd);
+	r[2] = 0.5 * dx * (2.0 * idx[2] + 1.0 - (real)bpd);
 
 	return 0;
 }
@@ -182,8 +182,8 @@ int inset (int i, int *s, int l) {
 
 /* Find the index of the maximum value in set of length n, ignoring indices in
  * the set excl of length nex. */
-int maxind (complex float *set, int n, int *excl, int nex) {
-	float mv, cv;
+int maxind (cplx *set, int n, int *excl, int nex) {
+	real mv, cv;
 	int mi, i;
 
 	for (i = 0, mv = -1.0, mi = -1; i < n; ++i) {
@@ -202,8 +202,8 @@ int maxind (complex float *set, int n, int *excl, int nex) {
 }
 
 /* Calculate the Legendre polynomial of order m and its derivative at a point t. */
-static int legendre (float *p, float *dp, float t, int m) {
-	float p0 = 1.0, p1 = t;
+static int legendre (real *p, real *dp, real t, int m) {
+	real p0 = 1.0, p1 = t;
 	int k;
 
 	/* Handle low orders explicitly. */
@@ -229,10 +229,10 @@ static int legendre (float *p, float *dp, float t, int m) {
 }
 
 /* Compute Gaussian quadrature nodes and weights. */
-int gaussleg (float *nodes, float *weights, int m) {
+int gaussleg (real *nodes, real *weights, int m) {
 	int i, j, nroots = (m + 1) / 2;
-	float t, p, dp, dt;
-	const float tol = 1e-7;
+	real t, p, dp, dt;
+	const real tol = REAL_EPSILON;
 	const int maxit = 100;
 
 	for (i = 0; i < nroots; ++i) {

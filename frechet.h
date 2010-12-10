@@ -1,15 +1,13 @@
 #ifndef __FRECHET_H_
 #define __FRECHET_H_
 
-#include <complex.h>
+#include "precision.h"
 
 #include "measure.h"
 #include "itsolver.h"
 
-int frechet (complex float *, complex float *,
-		complex float *, measdesc *, solveparm *);
-int frechadj (complex float *, complex float *,
-		complex float *, measdesc *, solveparm *);
-float specrad (int, solveparm *, measdesc *, measdesc *);
+int frechet (cplx *, cplx *, cplx *, measdesc *, solveparm *);
+int frechadj (cplx *, cplx *, cplx *, measdesc *, solveparm *);
+real specrad (int, solveparm *, measdesc *, measdesc *);
 
 #endif /* __FRECHET_H_ */

@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <complex.h>
 #include <string.h>
 
 #include <mpi.h>
@@ -19,12 +18,14 @@
 /* These headers are provided by ScaleME. */
 #include "ScaleME.h"
 
+#include "precision.h"
+
 #include "mlfma.h"
 #include "direct.h"
 #include "itsolver.h"
 #include "util.h"
 
-int matvec (complex float *out, complex float *in, complex float *cur) {
+int matvec (cplx *out, cplx *in, cplx *cur) {
 	long i, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 
 	/* Compute the contrast pressure. */
@@ -43,26 +44,26 @@ int matvec (complex float *out, complex float *in, complex float *cur) {
 	return 0;
 }
 
-int gmres (complex float *rhs, complex float *sol, int guess,
-		int mit, float tol, int quiet, augspace *aug) {
+int gmres (cplx *rhs, cplx *sol, int guess,
+		int mit, real tol, int quiet, augspace *aug) {
 	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol, lwork;
 	int i, rank, one = 1, mred = mit;
-	complex float *h, *v, *mvp, *beta, *vp, *hp, *s, cr,
+	cplx *h, *v, *mvp, *beta, *vp, *hp, *s, cr,
 		cone = 1., czero = 0., *azp, *zp;
-	float rhn, err, *c;
+	real rhn, err, *c;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
 
 	/* Allocate space for all required complex vectors. */
 	lwork = (mit + 1) * (mit + nelt + 1) + nelt + mit;
-	v = calloc (lwork, sizeof(complex float));	/* The Krylov subspace. */
+	v = calloc (lwork, sizeof(cplx));	/* The Krylov subspace. */
 	beta = v + nelt * (mit + 1);		/* The least-squares RHS. */
 	mvp = beta + mit + 1;			/* Buffer for matrix-vector product. */
 	h = mvp + nelt;				/* The upper Hessenberg matrix. */
 	s = h + (mit + 1) * mit;		/* Givens rotation sines. */
 
 	/* Allocate space for the Givens rotation cosines. */
-	c = malloc (mit * sizeof(float));
+	c = malloc (mit * sizeof(real));
 
 	/* Compute the norm of the RHS for residual scaling. */
 	rhn = parnorm(rhs, nelt);
@@ -75,7 +76,7 @@ int gmres (complex float *rhs, complex float *sol, int guess,
 	for (j = 0; j < nelt; ++j) v[j] = rhs[j] - v[j];
 
 	/* Zero the initial guess if one wasn't provided. */
-	if (!guess) memset (sol, 0, nelt * sizeof(complex float));
+	if (!guess) memset (sol, 0, nelt * sizeof(cplx));
 
 	/* Find the norm of the initial residual. */
 	err = parnorm(v, nelt);
@@ -106,7 +107,7 @@ int gmres (complex float *rhs, complex float *sol, int guess,
 			azp = aug->az + nelt * 
 				((aug->nmax + aug->start + mred - i) % aug->nmax);
 			/* Use the augmented space. */
-			memcpy (vp + nelt, azp, nelt * sizeof(complex float));
+			memcpy (vp + nelt, azp, nelt * sizeof(cplx));
 		}
 
 		/* Perform modified Gram-Schmidt to orthogonalize the basis. */
@@ -115,22 +116,22 @@ int gmres (complex float *rhs, complex float *sol, int guess,
 		cmgs (vp + nelt, hp, v, nelt, i + 1);
 
 		/* Watch for breakdown. */
-		if (cabs(hp[i + 1]) < FLT_EPSILON) {
+		if (cabs(hp[i + 1]) < REAL_EPSILON) {
 			++i;
 			break;
 		}
 
 		/* Apply previous Givens rotations to the Hessenberg column. */
 		for (j = 0; j < i; ++j)
-			crot_ (&one, hp + j, &one, hp + j + 1, &one, c + j, s + j);
+			ROT (&one, hp + j, &one, hp + j + 1, &one, c + j, s + j);
 
 		/* Compute the Givens rotation for the current iteration. */
-		clartg_ (hp + i, hp + i + 1, c + i, s + i, &cr);
+		LARTG (hp + i, hp + i + 1, c + i, s + i, &cr);
 		/* Apply the current Givens rotation to the Hessenberg column. */
 		hp[i] = cr;
 		hp[i + 1] = 0;
 		/* Perform the rotation on the vector beta. */
-		crot_ (&one, beta + i, &one, beta + i + 1, &one, c + i, s + i);
+		ROT (&one, beta + i, &one, beta + i + 1, &one, c + i, s + i);
 
 		/* Estimate the RRE for this iteration. */
 		err = cabs(beta[i + 1]) / rhn;
@@ -144,10 +145,10 @@ int gmres (complex float *rhs, complex float *sol, int guess,
 	/* If there were any GMRES iterations, update the solution. */
 	if (i > 0 && aug) {
 		/* Compute the optimum solution in the Krylov basis. */
-		complex float *ys;
-		ys = malloc(i * sizeof(complex float));
-		memcpy (ys, beta, i * sizeof(complex float));
-		cblas_ctrsv (CblasColMajor, CblasUpper, CblasNoTrans,
+		cplx *ys;
+		ys = malloc(i * sizeof(cplx));
+		memcpy (ys, beta, i * sizeof(cplx));
+		TRSV (CblasColMajor, CblasUpper, CblasNoTrans,
 				CblasNonUnit, i, h, mit + 1, ys, 1);
 
 		/* Compute the next Krylov vector in the augmented space. */
@@ -159,9 +160,9 @@ int gmres (complex float *rhs, complex float *sol, int guess,
 		for (j = i - 1; j >= 0; --j) {
 			/* Invert the Givens rotations. */
 			s[j] = -s[j];
-			crot_ (&one, beta + j, &one, beta + j + 1, &one, c + j, s + j);
+			ROT (&one, beta + j, &one, beta + j + 1, &one, c + j, s + j);
 		}
-		cblas_cgemv (CblasColMajor, CblasNoTrans, nelt, i + 1,
+		GEMV (CblasColMajor, CblasNoTrans, nelt, i + 1,
 				&cone, v, nelt, beta, 1, &czero, azp, 1);
 
 		/* Overwrite the Krylov subspace with the augmented subspace.
@@ -169,23 +170,23 @@ int gmres (complex float *rhs, complex float *sol, int guess,
 		for (j = mred; j < i; ++j) {
 			zp = aug->z + nelt * 
 				((aug->nmax + aug->start + mred - j - 1) % aug->nmax);
-			memcpy(v + j * nelt, zp, nelt * sizeof(complex float));
+			memcpy(v + j * nelt, zp, nelt * sizeof(cplx));
 		}
 
 		/* Compute the solution update. */
 		zp = aug->z + nelt * aug->start;
-		cblas_cgemv (CblasColMajor, CblasNoTrans, nelt, i,
+		GEMV (CblasColMajor, CblasNoTrans, nelt, i,
 				&cone, v, nelt, ys, 1, &czero, zp, 1);
 		for (j = 0; j < nelt; ++j) sol[j] += zp[j];
 
 		free(ys);
 	} else if (i > 0) {
 		/* Compute the minimizer of the least-squares problem. */
-		cblas_ctrsv (CblasColMajor, CblasUpper, CblasNoTrans,
+		TRSV (CblasColMajor, CblasUpper, CblasNoTrans,
 				CblasNonUnit, i, h, mit + 1, beta, 1);
 
 		/* Compute the solution update in place. */
-		cblas_cgemv (CblasColMajor, CblasNoTrans, nelt, i,
+		GEMV (CblasColMajor, CblasNoTrans, nelt, i,
 				&cone, v, nelt, beta, 1, &cone, sol, 1);
 	}
 
@@ -195,20 +196,20 @@ int gmres (complex float *rhs, complex float *sol, int guess,
 	return i;
 }
 
-int bicgstab (complex float *rhs, complex float *sol,
-		int guess, int mit, float tol, int quiet) {
+int bicgstab (cplx *rhs, cplx *sol,
+		int guess, int mit, real tol, int quiet) {
 	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 	int i, rank;
-	complex float *r, *rhat, *v, *p, *mvp, *t;
-	complex float rho, alpha, omega, beta;
-	float err, rhn;
+	cplx *r, *rhat, *v, *p, *mvp, *t;
+	cplx rho, alpha, omega, beta;
+	real err, rhn;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
 
 	rho = alpha = omega = 1.;
 
 	/* Allocate and zero the work arrays. */
-	r = calloc (6L * nelt, sizeof(complex float));
+	r = calloc (6L * nelt, sizeof(cplx));
 	rhat = r + nelt;
 	v = rhat + nelt;
 	p = v + nelt;
@@ -225,10 +226,10 @@ int bicgstab (complex float *rhs, complex float *sol,
 #pragma omp parallel for default(shared) private(j)
 	for (j = 0; j < nelt; ++j) r[j] = rhs[j] - r[j];
 
-	if (!guess) memset (sol, 0, nelt * sizeof(complex float));
+	if (!guess) memset (sol, 0, nelt * sizeof(cplx));
 
 	/* Copy the initial residual as the test vector. */
-	memcpy (rhat, r, nelt * sizeof(complex float));
+	memcpy (rhat, r, nelt * sizeof(cplx));
 
 	/* Find the norm of the initial residual. */
 	err = parnorm(r, nelt) / rhn;

@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <complex.h>
-#include <math.h>
 
 #include <mpi.h>
 
@@ -19,6 +17,8 @@
 
 #include "ScaleME.h"
 
+#include "precision.h"
+
 #include "io.h"
 #include "mlfma.h"
 #include "direct.h"
@@ -28,11 +28,11 @@
 
 fmadesc fmaconf;
 
-static int farmatrow (complex float *, float, float *, float, int);
-static int farmatcol (complex float *, float, float *, float *, int, int);
-static int acabuild (complex float **, float, float, float *, int, int, float, int);
-static int fullbuild (complex float **, float, float *, int, int, float, int);
-static int recaca (complex float *, complex float *, int, int, int, float);
+static int farmatrow (cplx *, real, real *, real, int);
+static int farmatcol (cplx *, real, real *, real *, int, int);
+static int acabuild (cplx **, real, real, real *, int, int, real, int);
+static int fullbuild (cplx **, real, real *, int, int, real, int);
+static int recaca (cplx *, cplx *, int, int, int, real);
 
 /* Computes the far-field pattern for the specified group with the specified
  * center, and stores the output in a provided vector. sgn is positive for
@@ -41,9 +41,9 @@ static int recaca (complex float *, complex float *, int, int, int, float);
  * FMM basis function is actually a single group of gridded elements with the
  * same affine grid. The center of the finest-level FMM group coincides with
  * the single FMM basis function contained therein. */
-void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn) {
-	complex float fact, beta = 1.0, *crt = (complex float *)vcrt,
-		*pat = *((complex float **)vpat);
+void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, real *cen, int sgn) {
+	cplx fact, beta = 1.0, *crt = (cplx *)vcrt,
+		*pat = *((cplx **)vpat);
 
 	if (sgn >= 0) {
 		/* Scalar factors for the matrix multiplication. */
@@ -54,7 +54,7 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 		beta = 0.0;
 
 		/* Perform the matrix-vector product. */
-		cblas_cgemv (CblasColMajor, CblasNoTrans, fmaconf.nsamp,
+		GEMV (CblasColMajor, CblasNoTrans, fmaconf.nsamp,
 				fmaconf.bspboxvol, &fact, fmaconf.radpats,
 				fmaconf.nsamp, crt, 1, &beta, pat, 1);
 	} else {
@@ -63,7 +63,7 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
 		fact = I * fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
 
 		/* Perform the matrix-vector product. */
-		cblas_cgemv (CblasColMajor, CblasConjTrans, fmaconf.nsamp,
+		GEMV (CblasColMajor, CblasConjTrans, fmaconf.nsamp,
 				fmaconf.bspboxvol, &fact, fmaconf.radpats,
 				fmaconf.nsamp, pat, 1, &beta, crt, 1);
 	}
@@ -77,20 +77,20 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn)
  * same affine grid. The center of the finest-level FMM group coincides with
  * the single FMM basis function contained therein. ACA is used to approximate
  * the matrix for efficient computations. */
-void acafarpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int sgn) {
-	complex float fact, beta = 1.0, *crt = (complex float *)vcrt,
-		*pat = *((complex float **)vpat), *work, *u, *v;
+void acafarpattern (int nbs, int *bsl, void *vcrt, void *vpat, real *cen, int sgn) {
+	cplx fact, beta = 1.0, *crt = (cplx *)vcrt,
+		*pat = *((cplx **)vpat), *work, *u, *v;
 
 	u = fmaconf.radpats;
 	v = fmaconf.radpats + fmaconf.acarank * fmaconf.nsamp;
 
-	work = malloc (fmaconf.acarank * sizeof(complex float));
+	work = malloc (fmaconf.acarank * sizeof(cplx));
 
 	if (sgn >= 0) {
 		beta = 0.0;
 		fact = 1.0;
 
-		cblas_cgemv (CblasColMajor, CblasConjTrans, fmaconf.bspboxvol,
+		GEMV (CblasColMajor, CblasConjTrans, fmaconf.bspboxvol,
 				fmaconf.acarank, &fact, v, fmaconf.bspboxvol,
 				crt, 1, &beta, work, 1);
 
@@ -98,14 +98,14 @@ void acafarpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int s
 		fact = fmaconf.k0 * fmaconf.cellvol;
 
 		/* Perform the matrix-vector product. */
-		cblas_cgemv (CblasColMajor, CblasNoTrans, fmaconf.nsamp,
+		GEMV (CblasColMajor, CblasNoTrans, fmaconf.nsamp,
 				fmaconf.acarank, &fact, u, fmaconf.nsamp,
 				work, 1, &beta, pat, 1);
 	} else {
 		beta = 0.0;
 		fact = 1.0;
 
-		cblas_cgemv (CblasColMajor, CblasConjTrans, fmaconf.nsamp,
+		GEMV (CblasColMajor, CblasConjTrans, fmaconf.nsamp,
 				fmaconf.acarank, &fact, u, fmaconf.nsamp,
 				pat, 1, &beta, work, 1);
 
@@ -115,7 +115,7 @@ void acafarpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int s
 		beta = 1.0;
 
 		/* Perform the matrix-vector product. */
-		cblas_cgemv (CblasColMajor, CblasNoTrans, fmaconf.bspboxvol,
+		GEMV (CblasColMajor, CblasNoTrans, fmaconf.bspboxvol,
 				fmaconf.acarank, &fact, v, fmaconf.bspboxvol,
 				work, 1, &beta, crt, 1);
 	}
@@ -125,13 +125,13 @@ void acafarpattern (int nbs, int *bsl, void *vcrt, void *vpat, float *cen, int s
 
 /* Build a column of the far-field signature for a point a distance rmc
  * from the center of the parent box. */
-static int farmatcol (complex float *col, float k, float *rmc,
-		float *thetas, int ntheta, int nphi) {
+static int farmatcol (cplx *col, real k, real *rmc,
+		real *thetas, int ntheta, int nphi) {
 	int nsamp = nphi * (ntheta - 2) + 2;
 
 #pragma omp parallel default(shared)
 {
-	float s[3];
+	real s[3];
 	int i;
 #pragma omp for
 	for (i = 0; i < nsamp; ++i) {
@@ -146,13 +146,13 @@ static int farmatcol (complex float *col, float k, float *rmc,
 }
 
 /* Build a row of the far-field signature for a fixed field sample s. */
-static int farmatrow (complex float *row, float k, float *s, float dx, int bpd) {
+static int farmatrow (cplx *row, real k, real *s, real dx, int bpd) {
 	int bptot = bpd * bpd * bpd;
 
 #pragma omp parallel default(shared)
 {
 	int l;
-	float dist[3];
+	real dist[3];
 
 #pragma omp for
 	for (l = 0; l < bptot; ++l) {
@@ -167,12 +167,12 @@ static int farmatrow (complex float *row, float k, float *s, float dx, int bpd) 
 }
 
 /* Construct an ACA approximation to the far-field signature matrix. */
-static int acabuild (complex float **mats, float k0, float tol, float *thetas,
-		int ntheta, int nphi, float dx, int bpd) {
+static int acabuild (cplx **mats, real k0, real tol, real *thetas,
+		int ntheta, int nphi, real dx, int bpd) {
 	int maxrank, *irow, *icol, i, j, k,
 	    nsamp = (ntheta - 2) * nphi + 2, nelt = bpd * bpd * bpd;
-	complex float *u, *v, *uptr, *vptr, *row, *col, dpr, dpc;
-	float dist[3], s[3], err = 0, tolsq;
+	cplx *u, *v, *uptr, *vptr, *row, *col, dpr, dpc;
+	real dist[3], s[3], err = 0, tolsq;
 
 	/* Compute the square of the tolerance and decrease by two orders
 	 * of magnitude for recompression. */
@@ -187,7 +187,7 @@ static int acabuild (complex float **mats, float k0, float tol, float *thetas,
 	icol = irow + maxrank + 1;
 
 	/* Allocate the workspace for the row and column matrices. */
-	u = malloc(maxrank * (nelt + nsamp) * sizeof(complex float));
+	u = malloc(maxrank * (nelt + nsamp) * sizeof(cplx));
 	v = u + nsamp * maxrank;
 
 	/* Start with the first row of the matrix. */
@@ -236,16 +236,16 @@ static int acabuild (complex float **mats, float k0, float tol, float *thetas,
 
 		/* Update the error approximation. */
 		for (k = 0, uptr = u, vptr = v; k < i; ++k) {
-			cblas_cdotu_sub (nelt, vptr, 1, row, 1, &dpr);
-			cblas_cdotu_sub (nsamp, uptr, 1, col, 1, &dpc);
+			DOTU_SUB (nelt, vptr, 1, row, 1, &dpr);
+			DOTU_SUB (nsamp, uptr, 1, col, 1, &dpc);
 			uptr += nsamp;
 			vptr += nelt;
 
 			err += 2.0 * cabs(dpr) * cabs(dpc);
 		}
 
-		cblas_cdotc_sub (nelt, row, 1, row, 1, &dpr);
-		cblas_cdotc_sub (nsamp, col, 1, col, 1, &dpc);
+		DOTC_SUB (nelt, row, 1, row, 1, &dpr);
+		DOTC_SUB (nsamp, col, 1, col, 1, &dpc);
 
 		err += creal(dpr) * creal(dpc);
 
@@ -264,10 +264,10 @@ static int acabuild (complex float **mats, float k0, float tol, float *thetas,
 	maxrank = recaca (u, v, nsamp, nelt, maxrank, tol);
 
 	/* Allocate the final matrix storage. */
-	*mats = malloc (maxrank * (nelt + nsamp) * sizeof(complex float));
+	*mats = malloc (maxrank * (nelt + nsamp) * sizeof(cplx));
 	/* Copy the colum matrix in first, then the row matrix. */
-	memcpy (*mats, u, maxrank * nsamp * sizeof(complex float));
-	memcpy (*mats + maxrank * nsamp, v, maxrank * nelt * sizeof(complex float));
+	memcpy (*mats, u, maxrank * nsamp * sizeof(cplx));
+	memcpy (*mats + maxrank * nsamp, v, maxrank * nelt * sizeof(cplx));
 
 	/* Free the work arrays. */
 	free (irow);
@@ -277,46 +277,46 @@ static int acabuild (complex float **mats, float k0, float tol, float *thetas,
 }
 
 /* Recompress an ACA approximation using truncated singular values. */
-static int recaca (complex float *u, complex float *v, int m, int n, int k, float tol) {
+static int recaca (cplx *u, cplx *v, int m, int n, int k, real tol) {
 	int rank, lwork, info, i, j, l;
-	float *rwork, *ss;
-	complex float *qu, *qv, *rp, *work, *tu, *tv, *us, *vs, alpha = 1.0, beta = 0.0;
+	real *rwork, *ss;
+	cplx *qu, *qv, *rp, *work, *tu, *tv, *us, *vs, alpha = 1.0, beta = 0.0;
 
 	/* Allocate space for the orthogonal matrices and the outer product. */
-	qu = malloc (k * (m + n + 3 * k) * sizeof(complex float));
+	qu = malloc (k * (m + n + 3 * k) * sizeof(cplx));
 	qv = qu + k * m;
 	rp = qv + k * n;
 	us = rp + k * k;
 	vs = us + k * k;
 
 	/* Allocate space for the reflector coefficients. */
-	tu = malloc (2 * k * sizeof(complex float));
+	tu = malloc (2 * k * sizeof(cplx));
 	tv = tu + k;
 
 	/* Allocate space for the singular values and real work. */
-	ss = malloc (6 * k * sizeof(float));
+	ss = malloc (6 * k * sizeof(real));
 	rwork = ss + k;
 
 	/* Figure out the maximum size of the work array. */
 	lwork = -1;
-	cgeqrf_ (&m, &k, qu, &m, tu, qu, &lwork, &info);
-	cgeqrf_ (&n, &k, qv, &n, tv, qu + 1, &lwork, &info);
-	cungqr_ (&m, &k, &k, qu, &m, tu, qu + 2, &lwork, &info);
-	cungqr_ (&n, &k, &k, qv, &n, tv, qu + 3, &lwork, &info);
-	cgesvd_ ("S", "S", &k, &k, rp, &k, ss, us, &k, vs, &k, qu + 4, &lwork, rwork, &info);
+	GEQRF (&m, &k, qu, &m, tu, qu, &lwork, &info);
+	GEQRF (&n, &k, qv, &n, tv, qu + 1, &lwork, &info);
+	UNGQR (&m, &k, &k, qu, &m, tu, qu + 2, &lwork, &info);
+	UNGQR (&n, &k, &k, qv, &n, tv, qu + 3, &lwork, &info);
+	GESVD ("S", "S", &k, &k, rp, &k, ss, us, &k, vs, &k, qu + 4, &lwork, rwork, &info);
 
 	/* Find the maximum workspace size. */
 	for (i = 0; i < 5; ++i) lwork = MAX(lwork, (int)creal(qu[i]));
 
-	work = malloc(lwork * sizeof(complex float));
+	work = malloc(lwork * sizeof(cplx));
 
 	/* Copy the input matrices into the workspaces. */
-	memcpy (qu, u, (m * k) * sizeof(complex float));
-	memcpy (qv, v, (n * k) * sizeof(complex float));
+	memcpy (qu, u, (m * k) * sizeof(cplx));
+	memcpy (qv, v, (n * k) * sizeof(cplx));
 
 	/* Compute the QR factorizations of the row and column matrices. */
-	cgeqrf_ (&m, &k, qu, &m, tu, work, &lwork, &info);
-	cgeqrf_ (&n, &k, qv, &n, tv, work, &lwork, &info);
+	GEQRF (&m, &k, qu, &m, tu, work, &lwork, &info);
+	GEQRF (&n, &k, qv, &n, tv, work, &lwork, &info);
 
 	/* Compute the outer product of the triangular matrices. */
 	for (i = 0; i < k; ++i) {
@@ -328,7 +328,7 @@ static int recaca (complex float *u, complex float *v, int m, int n, int k, floa
 	}
 
 	/* Compute the SVD of the triangular matrix product. */
-	cgesvd_ ("S", "S", &k, &k, rp, &k, ss, us, &k, vs, &k, work, &lwork, rwork, &info);
+	GESVD ("S", "S", &k, &k, rp, &k, ss, us, &k, vs, &k, work, &lwork, rwork, &info);
 
 	/* Find the truncated rank. */
 	for (rank = 0; rank < k; ++rank)
@@ -340,13 +340,13 @@ static int recaca (complex float *u, complex float *v, int m, int n, int k, floa
 			vs[i + k * j] *= ss[i];
 
 	/* Expand the orthogonal matrices. */
-	cungqr_ (&m, &k, &k, qu, &m, tu, work, &lwork, &info);
-	cungqr_ (&n, &k, &k, qv, &n, tv, work, &lwork, &info);
+	UNGQR (&m, &k, &k, qu, &m, tu, work, &lwork, &info);
+	UNGQR (&n, &k, &k, qv, &n, tv, work, &lwork, &info);
 
 	/* Compute the new row and column matrices. */
-	cblas_cgemm (CblasColMajor, CblasNoTrans, CblasNoTrans, m, rank, k,
+	GEMM (CblasColMajor, CblasNoTrans, CblasNoTrans, m, rank, k,
 			&alpha, qu, m, us, k, &beta, u, m);
-	cblas_cgemm (CblasColMajor, CblasNoTrans, CblasConjTrans, n, rank, k,
+	GEMM (CblasColMajor, CblasNoTrans, CblasConjTrans, n, rank, k,
 			&alpha, qv, n, vs, k, &beta, v, n);
 
 	free (qu);
@@ -357,35 +357,35 @@ static int recaca (complex float *u, complex float *v, int m, int n, int k, floa
 	return rank;
 }
 
-static int svdbuild (complex float **mats, float k0, float tol, float *thetas,
-		int ntheta, int nphi, float dx, int bpd) {
+static int svdbuild (cplx **mats, real k0, real tol, real *thetas,
+		int ntheta, int nphi, real dx, int bpd) {
 	int nsamp = (ntheta - 2) * nphi + 2, nelt = bpd * bpd * bpd,
 	    lwork, info, mindim, rank, l, i;
-	complex float *col, *a, *u, *vt, *work, *ptr;
-	float dist[3], *s, *rwork;
+	cplx *col, *a, *u, *vt, *work, *ptr;
+	real dist[3], *s, *rwork;
 
 	/* The minimum dimension. */
 	mindim = MIN(nsamp, nelt);
 
 	/* Allocate the full matrix. */
-	a = malloc(nsamp * nelt * sizeof(complex float));
+	a = malloc(nsamp * nelt * sizeof(cplx));
 
 	/* Allocate the singular vector matrices. */
-	u = malloc(mindim * (nsamp + nelt) * sizeof(complex float));
+	u = malloc(mindim * (nsamp + nelt) * sizeof(cplx));
 	vt = u + mindim * nsamp;
 
 	/* Allocate the real workspace and the singular value array. */
-	s = malloc(6 * mindim * sizeof(float));
+	s = malloc(6 * mindim * sizeof(real));
 	rwork = s + mindim;
 
 	/* Perform a workspace query. */
 	lwork = -1;
-	cgesvd_ ("S", "S", &nsamp, &nelt, a, &nsamp, s, u, &nsamp, vt, &mindim,
+	GESVD ("S", "S", &nsamp, &nelt, a, &nsamp, s, u, &nsamp, vt, &mindim,
 			a, &lwork, rwork, &info);
 
 	/* Allocate the workspace. */
 	lwork = creal(a[0]);
-	work = malloc(lwork * sizeof(complex float));
+	work = malloc(lwork * sizeof(cplx));
 
 	/* Loop through all columns (source grid elements) and build the matrix. */
 	for (l = 0, col = a; l < nelt; ++l, col += nsamp) {
@@ -397,14 +397,14 @@ static int svdbuild (complex float **mats, float k0, float tol, float *thetas,
 	}
 
 	/* Perform an SVD on the matrix. */
-	cgesvd_ ("S", "S", &nsamp, &nelt, a, &nsamp, s, u, &nsamp, vt, &mindim,
+	GESVD ("S", "S", &nsamp, &nelt, a, &nsamp, s, u, &nsamp, vt, &mindim,
 			work, &lwork, rwork, &info);
 
 	/* Find the first rank below the desired tolerance. */
 	for (rank = 0; rank < mindim; ++rank)
 		if (fabs(s[rank] / s[0]) < tol) break;
 
-	*mats = malloc (rank * (nelt + nsamp) * sizeof(complex float));
+	*mats = malloc (rank * (nelt + nsamp) * sizeof(cplx));
 
 	/* Multiply the left singular vector matrix by the singular values. */
 	for (l = 0, col = u, ptr = *mats; l < rank; ++l)
@@ -424,14 +424,14 @@ static int svdbuild (complex float **mats, float k0, float tol, float *thetas,
 	return rank;
 }
 
-static int fullbuild (complex float **mats, float k0, float *thetas,
-		int ntheta, int nphi, float dx, int bpd) {
+static int fullbuild (cplx **mats, real k0, real *thetas,
+		int ntheta, int nphi, real dx, int bpd) {
 	int nsamp = (ntheta - 2) * nphi + 2, nelt = bpd * bpd * bpd, l;
-	complex float *col;
-	float dist[3];
+	cplx *col;
+	real dist[3];
 
 	/* Allocate the full far-field matrix. */
-	*mats = malloc(nsamp * nelt * sizeof(complex float));
+	*mats = malloc(nsamp * nelt * sizeof(cplx));
 
 	/* Loop through all columns (source grid elements). */
 	for (l = 0, col = *mats; l < nelt; ++l, col += nsamp) {
@@ -447,8 +447,8 @@ static int fullbuild (complex float **mats, float k0, float *thetas,
 
 /* Precomputes the near interactions for redundant calculations and sets up
  * the wave vector directions to be used for fast calculation of far-field patterns. */
-int fmmprecalc (float acatol, int useaca) {
-	float *thetas;
+int fmmprecalc (real acatol, int useaca) {
+	real *thetas;
 	int ntheta, nphi, rank, i;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
@@ -456,7 +456,7 @@ int fmmprecalc (float acatol, int useaca) {
 	/* Get the finest level parameters. */
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, NULL, NULL);
 	/* Allocate the theta array. */
-	thetas = malloc (ntheta * sizeof(float));
+	thetas = malloc (ntheta * sizeof(real));
 	/* Populate the theta array. */
 	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, thetas, NULL);
 
@@ -492,7 +492,7 @@ int fmmprecalc (float acatol, int useaca) {
 /* initialisation and finalisation routines for ScaleME */
 int ScaleME_preconf (int useaca) {
 	int error;
-	float len, cen[3];
+	real len, cen[3];
 
 	/* The problem and tree are both three-dimensional. */
 	ScaleME_setDimen (3);

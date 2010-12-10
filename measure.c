@@ -1,11 +1,10 @@
 #include <string.h>
-#include <math.h>
-#include <complex.h>
-#include <float.h>
 
 #include <mpi.h>
 
 #include "ScaleME.h"
+
+#include "precision.h"
 
 #include "measure.h"
 #include "fsgreen.h"
@@ -13,11 +12,11 @@
 #include "util.h"
 
 /* Slow computation of incident field for a single source. */
-int buildrhs (complex float *rhs, float *srcloc) {
+int buildrhs (cplx *rhs, real *srcloc) {
 #pragma omp parallel default(shared)
 {
-	complex float *rptr;
-	float ctr[3], off[3];
+	cplx *rptr;
+	real ctr[3], off[3];
 	int i, j, idx[3];
 
 #pragma omp for
@@ -37,9 +36,9 @@ int buildrhs (complex float *rhs, float *srcloc) {
 			GRID(idx, j, fmaconf.bspbox, fmaconf.bspbox);
 
 			/* The center of the basis function. */
-			ctr[0] = off[0] + fmaconf.cell * (float)idx[0];
-			ctr[1] = off[1] + fmaconf.cell * (float)idx[1];
-			ctr[2] = off[2] + fmaconf.cell * (float)idx[2];
+			ctr[0] = off[0] + fmaconf.cell * (real)idx[0];
+			ctr[1] = off[1] + fmaconf.cell * (real)idx[1];
+			ctr[2] = off[2] + fmaconf.cell * (real)idx[2];
 
 			*rptr = fsplane (fmaconf.k0, ctr, srcloc) / (4 * M_PI);
 		}
@@ -50,9 +49,9 @@ int buildrhs (complex float *rhs, float *srcloc) {
 }
 
 /* Fast FMM computation of the far-field pattern using interpolation. */
-int farfield (complex float *currents, measdesc *obs, complex float *result) {
+int farfield (cplx *currents, measdesc *obs, cplx *result) {
 	int i;
-	complex float fact;
+	cplx fact;
 
 	/* The result must be a pointer to the pointer. */
 	if (ScaleME_evlRootFarFld (obs->imat[0], currents, &result)) return 0;
@@ -68,7 +67,7 @@ int farfield (complex float *currents, measdesc *obs, complex float *result) {
 
 int buildlocs (measdesc *desc) {
 	int i, j, k;
-	float theta, dtheta, dphi, phi, rst;
+	real theta, dtheta, dphi, phi, rst;
 
 	/* Clear the interpolation matrix pointer. */
 	desc->imat[0] = desc->imat[1] = NULL;
@@ -81,7 +80,7 @@ int buildlocs (measdesc *desc) {
 	dphi = (desc->prange[1] - desc->prange[0]);
 	dphi /= MAX (desc->nphi, 1);
 
-	desc->locations = malloc (3 * desc->count * sizeof(float));
+	desc->locations = malloc (3 * desc->count * sizeof(real));
 
 	for (i = 0, k = 0; i < desc->ntheta; ++i) {
 		theta = desc->trange[0] + (i + 1) * dtheta;

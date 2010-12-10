@@ -1,9 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <complex.h>
-#include <math.h>
-
 #include <fftw3.h>
 
 /* Define OpenMP locking functions if locking is not used. */
@@ -18,6 +15,8 @@ int omp_unset_lock (omp_lock_t *x) { return 0; }
 
 #include "ScaleME.h"
 
+#include "precision.h"
+
 #include "direct.h"
 #include "util.h"
 #include "fsgreen.h"
@@ -27,14 +26,14 @@ int omp_unset_lock (omp_lock_t *x) { return 0; }
 typedef struct {
 	int index[3], fill;
 	omp_lock_t lock;
-	complex float *rhs;
+	cplx *rhs;
 } boxdesc;
 
 /* Buffers for the RHS cache, the Green's functions, and a workspace. */
 static boxdesc *boxlist;
-static complex float *gridints, *rhsbuf;
+static cplx *gridints, *rhsbuf;
 static int nbors, nfftprod, nfft, nebox;
-static fftwf_plan fplan, bplan;
+static FFTW_PLAN fplan, bplan;
 
 /* Compare two box indices for sorting and searching. */
 int idxcomp (const void *vl, const void *vr) {
@@ -56,7 +55,7 @@ int boxcomp (const void *vl, const void *vr) {
 
 /* Initialize the direct-interaction cache structure. */
 int mkdircache () {
-	complex float *rhsptr;
+	cplx *rhsptr;
 	int nbs, *bslist, i, *idx, *boxidx, rank;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
@@ -89,10 +88,10 @@ int mkdircache () {
 	boxlist = calloc (nebox, sizeof(boxdesc));
 
 	/* Allocate the backend array. */
-	rhsptr = rhsbuf = fftwf_malloc (nebox * nfftprod * sizeof(complex float));
+	rhsptr = rhsbuf = FFTW_MALLOC (nebox * nfftprod * sizeof(cplx));
 
 	fprintf (stderr, "Rank %d: Expanded FFT buffer size size: %ld bytes\n",
-			rank, nebox * nfftprod * sizeof(complex float));
+			rank, nebox * nfftprod * sizeof(cplx));
 
 	/* Set up the first box structure. */
 	memcpy (boxlist[0].index, boxidx, 3 * sizeof(int));
@@ -134,18 +133,18 @@ void clrdircache () {
 
 /* Free the allocated memory in the direct-interaction cache structure. */
 void freedircache () {
-	fftwf_free (rhsbuf);
-	fftwf_free (gridints);
+	FFTW_FREE (rhsbuf);
+	FFTW_FREE (gridints);
 	free (boxlist);
 }
 
 /* Check the cache for the given RHS. If it exists, return the pre-cached copy.
  * Otherwise, cache the provided copy and take the DFT before returning a pointer
  * to the cache bin. */
-complex float *cacheboxrhs (int bsl, int boxkey) {
+cplx *cacheboxrhs (int bsl, int boxkey) {
 	int l, i;
 	boxdesc key, *lbox;
-	complex float *bptr, *rhs;
+	cplx *bptr, *rhs;
 
 	/* Get the index for the first basis in the box. */
 	GRID (key.index, bsl, fmaconf.nx, fmaconf.ny);
@@ -165,10 +164,10 @@ complex float *cacheboxrhs (int bsl, int boxkey) {
 	/* Cache miss. Fill the box. */
 	if (!(lbox->fill)) {
 		/* Clear the cache storage. */
-		memset (bptr, 0, nfftprod * sizeof(complex float));
+		memset (bptr, 0, nfftprod * sizeof(cplx));
 
 		/* Grab the local input vector for caching. */
-		rhs = (complex float *)ScaleME_getInputVec (boxkey);
+		rhs = (cplx *)ScaleME_getInputVec (boxkey);
 
 		/* Populate the local grid. */
 		for (i = 0; i < fmaconf.bspboxvol; ++i) {
@@ -183,7 +182,7 @@ complex float *cacheboxrhs (int bsl, int boxkey) {
 		}
 
 		/* Transform the cached RHS. */
-		fftwf_execute_dft (fplan, bptr, bptr);
+		FFTW_EXECUTE_DFT (fplan, bptr, bptr);
 
 		/* Mark the cache spot as full. */
 		lbox->fill = 1;
@@ -213,16 +212,16 @@ int dirprecalc (int numsrcpts, int singex) {
 
 	/* Build the expanded grid. */
 	totbpnbr = nfftprod * nborsvol;
-	gridints = fftwf_malloc (totbpnbr * sizeof(complex float));
+	gridints = FFTW_MALLOC (totbpnbr * sizeof(cplx));
 
 	fprintf (stderr, "Rank %d: Green's function grid size: %ld bytes\n",
-			rank, totbpnbr * sizeof(complex float));
+			rank, totbpnbr * sizeof(cplx));
 
 	/* The forward FFT plan transforms all boxes in one pass. */
-	fplan = fftwf_plan_dft_3d (nfft, nfft, nfft,
+	fplan = FFTW_PLAN_DFT_3D (nfft, nfft, nfft,
 			gridints, gridints, FFTW_FORWARD, FFTW_MEASURE);
 	/* The inverse FFT plan only transforms a single box. */
-	bplan = fftwf_plan_dft_3d (nfft, nfft, nfft,
+	bplan = FFTW_PLAN_DFT_3D (nfft, nfft, nfft,
 			gridints, gridints, FFTW_BACKWARD, FFTW_MEASURE);
 
 	/* Initialize the integration rules for direct interations. */
@@ -231,7 +230,7 @@ int dirprecalc (int numsrcpts, int singex) {
 #pragma omp parallel default(shared)
 {
 	int off[3], l, idx[3];
-	complex float *grf;
+	cplx *grf;
 
 #pragma omp for
 	for (l = 0; l < nborsvol; ++l) {
@@ -248,7 +247,7 @@ int dirprecalc (int numsrcpts, int singex) {
 				fmaconf.k0, fmaconf.cell, off, singex);
 
 		/* Fourier transform the Green's function. */
-		fftwf_execute_dft (fplan, grf, grf);
+		FFTW_EXECUTE_DFT (fplan, grf, grf);
 	}
 }
 
@@ -264,16 +263,16 @@ int dirprecalc (int numsrcpts, int singex) {
 /* Evaluate at a group of observers the fields due to a group of sources. */
 void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 	int i, l, boxoff[3], idx[3], *obslist, *srclist;
-	complex float *buf, *gptr, *bptr;
-	complex float *cobs;
+	cplx *buf, *gptr, *bptr;
+	cplx *cobs;
 
 	/* Clear the local output buffer. */
-	buf = fftwf_malloc (nfftprod * sizeof(complex float));
-	memset (buf, 0, nfftprod * sizeof(complex float));
+	buf = FFTW_MALLOC (nfftprod * sizeof(cplx));
+	memset (buf, 0, nfftprod * sizeof(cplx));
 
 	/* Find the output vector segment and the target basis list. */
 	obslist = ScaleME_getBasisList (tkey);
-	cobs = (complex float *)ScaleME_getOutputVec (tkey);
+	cobs = (cplx *)ScaleME_getOutputVec (tkey);
 
 	/* Find the index for the first basis in the target box. */
 	GRID (boxoff, obslist[0], fmaconf.nx, fmaconf.ny);
@@ -308,7 +307,7 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 	}
 
 	/* Inverse transform the grid in place. */
-	fftwf_execute_dft (bplan, buf, buf);
+	FFTW_EXECUTE_DFT (bplan, buf, buf);
 
 	/* Augment with output with the local convolution. */
 	/* Note that each ScaleME "basis" is actually a finest-level group. */
@@ -319,35 +318,35 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 		cobs[l] += buf[IDX(nfft,idx[0],idx[1],idx[2])];
 	}
 
-	fftwf_free (buf);
+	FFTW_FREE (buf);
 
 	return;
 }
 
 /* Build the extended Green's function on an expanded cubic grid. */
-int greengrid (complex float *grf, int m, int mex,
-		float k0, float cell, int *off, int singex) {
+int greengrid (cplx *grf, int m, int mex,
+		real k0, real cell, int *off, int singex) {
 	int ip, jp, kp, l, mt, idx[3];
-	float dist[3], zero[3] = {0., 0., 0.}, scale;
+	real dist[3], zero[3] = {0., 0., 0.}, scale;
 
 	/* The total number of samples. */
 	mt = mex * mex * mex;
 
 	/* The scale of the integral equation solution. */
-	scale = k0 * k0 / (float)mt;
+	scale = k0 * k0 / (real)mt;
 
 	/* Compute the interactions. */
 	for (l = 0; l < mt; ++l) {
 		GRID(idx, l, mex, mex);
 
 		ip = (idx[0] < m) ? idx[0] : (idx[0] - mex);
-		dist[0] = (float)(ip - off[0]) * fmaconf.cell;
+		dist[0] = (real)(ip - off[0]) * fmaconf.cell;
 
 		jp = (idx[1] < m) ? idx[1] : (idx[1] - mex);
-		dist[1] = (float)(jp - off[1]) * fmaconf.cell;
+		dist[1] = (real)(jp - off[1]) * fmaconf.cell;
 
 		kp = (idx[2] < m) ? idx[2] : (idx[2] - mex);
-		dist[2] = (float)(kp - off[2]) * fmaconf.cell;
+		dist[2] = (real)(kp - off[2]) * fmaconf.cell;
 
 		if (kp == off[2] && jp == off[1] && ip == off[0])
 			*(grf++) = scale * selfint (k0, cell, singex);

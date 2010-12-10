@@ -1,9 +1,11 @@
 #include <stdlib.h>
-#include <math.h>
 #include <complex.h>
+#include <math.h>
 #include <string.h>
 
 #include <mpi.h>
+
+#include "precision.h"
 
 #include "frechet.h"
 #include "measure.h"
@@ -11,18 +13,18 @@
 #include "cg.h"
 
 /* Least-squares solution using CG. The residual must be precomputed. */
-float cgls (complex float *rn, complex float *sol, solveparm *slv,
-		measdesc *src, measdesc *obs, float regparm) {
+real cgls (cplx *rn, cplx *sol, solveparm *slv,
+		measdesc *src, measdesc *obs, real regparm) {
 	long i, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 	int j, k;
-	complex float *ifld, *pn, *scat, *adjcrt;
-	float rnorm, pnorm, lrnorm, lpnorm, alpha, beta, rninc;
+	cplx *ifld, *pn, *scat, *adjcrt;
+	real rnorm, pnorm, lrnorm, lpnorm, alpha, beta, rninc;
 
-	ifld = malloc (3L * nelt * sizeof(complex float));
+	ifld = malloc (3L * nelt * sizeof(cplx));
 	pn = ifld + nelt;
 	adjcrt = pn + nelt;
 
-	scat = malloc (obs->count * sizeof(complex float));
+	scat = malloc (obs->count * sizeof(cplx));
 
 	/* Initialize some values. */
 	rnorm = 0;
@@ -34,11 +36,11 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 	}
 
 	/* Reduce the local norms into a global norm. */
-	MPI_Allreduce (MPI_IN_PLACE, &rnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce (MPI_IN_PLACE, &rnorm, 1, MPIREAL, MPI_SUM, MPI_COMM_WORLD);
 	pnorm = (rninc = rnorm);
 
 	for (j = 0; j < slv->maxit; ++j) {
-		memset (adjcrt, 0, nelt * sizeof(complex float));
+		memset (adjcrt, 0, nelt * sizeof(cplx));
 		alpha = 0;
 		for (i = 0; i < src->count; ++i) {
 			/* Build the incident field. */
@@ -67,7 +69,7 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 		}
 
 		/* Reduce the new residual norm. */
-		MPI_Allreduce (&lrnorm, &rnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce (&lrnorm, &rnorm, 1, MPIREAL, MPI_SUM, MPI_COMM_WORLD);
 
 		beta = rnorm / beta;
 
@@ -82,7 +84,7 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 		}
 
 		/* Reduce the new search norm. */
-		MPI_Allreduce (&lpnorm, &pnorm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce (&lpnorm, &pnorm, 1, MPIREAL, MPI_SUM, MPI_COMM_WORLD);
 
 		if (sqrt(rnorm / rninc) < slv->epscg) break;
 	}
@@ -93,19 +95,19 @@ float cgls (complex float *rn, complex float *sol, solveparm *slv,
 	return sqrt(rnorm / rninc);
 }
 
-float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
-		measdesc *src, measdesc *obs, float regparm) {
+real cgmn (cplx *rhs, cplx *sol, solveparm *slv,
+		measdesc *src, measdesc *obs, real regparm) {
 	long i, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 	int j, nmeas;
-	complex float *ifld, *mptr, *rn, *pn, *scat, *adjcrt, *asol;
-	float rnorm, pnorm, lrnorm, alpha, beta, rninc;
+	cplx *ifld, *mptr, *rn, *pn, *scat, *adjcrt, *asol;
+	real rnorm, pnorm, lrnorm, alpha, beta, rninc;
 
 	nmeas = src->count * obs->count;
 
-	ifld = malloc (2L * nelt * sizeof(complex float));
+	ifld = malloc (2L * nelt * sizeof(cplx));
 	adjcrt = ifld + nelt;
 
-	scat = malloc (4 * nmeas * sizeof(complex float));
+	scat = malloc (4 * nmeas * sizeof(cplx));
 	rn = scat + nmeas;
 	pn = rn + nmeas;
 	asol = pn + nmeas;
@@ -123,7 +125,7 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 
 	for (j = 0; j < slv->maxit; ++j) {
 		alpha = 0;
-		memset (adjcrt, 0, nelt * sizeof(complex float));
+		memset (adjcrt, 0, nelt * sizeof(cplx));
 		for (i = 0, mptr = pn; i < src->count; ++i, mptr += obs->count) {
 			/* Build the incident field. */
 			buildrhs (ifld, src->locations + 3 * i);
@@ -138,7 +140,7 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 			lrnorm += alpha * alpha;
 		}
 
-		MPI_Allreduce (&lrnorm, &alpha, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce (&lrnorm, &alpha, 1, MPIREAL, MPI_SUM, MPI_COMM_WORLD);
 
 		alpha  = rnorm / (alpha + regparm * pnorm);
 		beta = rnorm;
@@ -172,7 +174,7 @@ float cgmn (complex float *rhs, complex float *sol, solveparm *slv,
 		if (sqrt(rnorm / rninc) < slv->epscg) break;
 	}
 
-	memset (sol, 0, nelt * sizeof(complex float));
+	memset (sol, 0, nelt * sizeof(cplx));
 	/* Compute the adjoint acting on the RHS. */
 	for (i = 0, mptr = asol; i < src->count; ++i, mptr += obs->count) {
 		/* Build the incident field. */

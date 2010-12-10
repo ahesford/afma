@@ -1,20 +1,19 @@
 #include <stdlib.h>
 
-#include <math.h>
-#include <complex.h>
+#include "precision.h"
 
 #include "fsgreen.h"
 #include "integrate.h"
 #include "util.h"
 
-static float *rcvpts = NULL, *rcvwts = NULL, *srcpts = NULL, *srcwts = NULL;
+static real *rcvpts = NULL, *rcvwts = NULL, *srcpts = NULL, *srcwts = NULL;
 static int numrcvpts = 0, numsrcpts = 0;
 
 /* Three-point (per dimension) integration of the observer. */
-complex float rcvint (float k, float *src, float *obs, float dc, ifunc grf) {
-	complex float ans = 0, val;
+cplx rcvint (real k, real *src, real *obs, real dc, ifunc grf) {
+	cplx ans = 0, val;
 	int i, j, l;
-	float obspt[3];
+	real obspt[3];
 
 	for (i = 0; i < numrcvpts; ++i) {
 		obspt[0] = obs[0] + 0.5 * dc * rcvpts[i];
@@ -33,10 +32,10 @@ complex float rcvint (float k, float *src, float *obs, float dc, ifunc grf) {
 }
 
 /* Four-point (per dimension) integration of the source. */
-complex float srcint (float k, float *src, float *obs, float dc, ifunc grf) {
-	complex float ans = 0, val;
+cplx srcint (real k, real *src, real *obs, real dc, ifunc grf) {
+	cplx ans = 0, val;
 	int i, j, l;
-	float spt[3];
+	real spt[3];
 
 	for (i = 0; i < numsrcpts; ++i) {
 		spt[0] = src[0] + 0.5 * dc * srcpts[i];
@@ -56,9 +55,9 @@ complex float srcint (float k, float *src, float *obs, float dc, ifunc grf) {
 
 /* Use either the singularity-extracted approximation to the self-integration
  * term, with four-point source integration; or use an analytic approximation. */
-complex float selfint (float k, float dc, int singex) {
-	complex float ikr;
-	float r, zero[3] = {0., 0., 0.};
+cplx selfint (real k, real dc, int singex) {
+	cplx ikr;
+	real r, zero[3] = {0., 0., 0.};
 
 	r = cbrt (3. / (4. * M_PI)) * dc;
 
@@ -72,13 +71,13 @@ complex float selfint (float k, float dc, int singex) {
 
 void bldintrules (int nspts, int nrpts) {
 	if (nspts > 0) {
-		srcpts = malloc (2 * nspts * sizeof(float));
+		srcpts = malloc (2 * nspts * sizeof(real));
 		srcwts = srcpts + nspts;
 		gaussleg (srcpts, srcwts, nspts);
 		numsrcpts = nspts;
 	}
 	if (nrpts > 0) {
-		rcvpts = malloc (2 * nrpts * sizeof(float));
+		rcvpts = malloc (2 * nrpts * sizeof(real));
 		rcvwts = rcvpts + nrpts;
 		gaussleg (rcvpts, rcvwts, nrpts);
 		numrcvpts = nrpts;

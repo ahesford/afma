@@ -3,21 +3,19 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <complex.h>
-#include <float.h>
-#include <math.h>
+#include "precision.h"
 
-#define ALVTOL FLT_EPSILON
+#define ALVTOL REAL_EPSILON
 #define PTEQ(a,b) ((a)[0] == (b)[0] && (a)[1] == (b)[1] && (a)[2] == (b)[2])
 
 typedef struct {
-	float c, a, r;
+	real c, a, r;
 } material;
 
 /* Compute the wave number for dimensionless distances given the sound speed
  * (m/s), attenuation (dB / cm / MHz), and background sound speed (m/s). */
-complex float wavenum (float c, float a, float cb) {
-	float kr, ki;
+cplx wavenum (real c, real a, real cb) {
+	real kr, ki;
 
 	/* Unitless imaginary part. */
 	ki = 1e-4 * cb * a * log(10) / 20;
@@ -28,10 +26,10 @@ complex float wavenum (float c, float a, float cb) {
 }
 
 /* Compute the Laplacian of the density at a specified point. */
-float lapden (float *r, float *lr, float *nr, float delta,
+real lapden (real *r, real *lr, real *nr, real delta,
 		long pos, long nx, long ny) {
 	long x, y;
-	float dlap, nval, pval;
+	real dlap, nval, pval;
 
 	x = pos % nx;
 	y = pos / nx;
@@ -74,10 +72,10 @@ float lapden (float *r, float *lr, float *nr, float delta,
 
 /* Build the contrast of the current slab. Requires the previous and next
  * slab densities to evaluate the Laplacian of the density. */
-long ctslab (complex float *contrast, complex float *k, float *r, float *lr,
-		float *nr, complex float kbg, long nx, long ny, float delta) {
+long ctslab (cplx *contrast, cplx *k, real *r, real *lr,
+		real *nr, cplx kbg, long nx, long ny, real delta) {
 	long i, npx;
-	float rval;
+	real rval;
 
 	npx = nx * ny;
 
@@ -100,21 +98,21 @@ long ctslab (complex float *contrast, complex float *k, float *r, float *lr,
 
 
 /* Build the next z-slab of the model for specified parameters. */
-long modelslab (complex float *k, float *r, FILE *template, FILE *avlrand,
+long modelslab (cplx *k, real *r, FILE *template, FILE *avlrand,
 		FILE *adprand, long npx, material *bgval, material *ctval,
 		material *avlval, material *adpval) {
 	long i;
-	float *tmap, *arnd, *frnd, cs = 1.0, as = 0.0, rs = 1.0;
+	real *tmap, *arnd, *frnd, cs = 1.0, as = 0.0, rs = 1.0;
 
 	/* Allocate arrays to store the slab values. */
-	tmap = malloc (3 * npx * sizeof(float));
+	tmap = malloc (3 * npx * sizeof(real));
 	arnd = tmap + npx;
 	frnd = arnd + npx;
 
 	/* Read the tissue parameters for the current slab. */
-	fread (tmap, sizeof(float), npx, template);
-	fread (arnd, sizeof(float), npx, avlrand);
-	fread (frnd, sizeof(float), npx, adprand);
+	fread (tmap, sizeof(real), npx, template);
+	fread (arnd, sizeof(real), npx, avlrand);
+	fread (frnd, sizeof(real), npx, adprand);
 
 #pragma omp parallel for default(shared) private(i,cs,as,rs)
 	for (i = 0; i < npx; ++i) {
@@ -160,10 +158,10 @@ long modelslab (complex float *k, float *r, FILE *template, FILE *avlrand,
 
 /* Build the entire model, writing slab-by-slab to the output file. */
 long buildmodel (FILE *output, FILE *template, FILE *avlrand, FILE *adprand,
-		float delta, material *bgval, material *ctval,
+		real delta, material *bgval, material *ctval,
 		material *avlval, material *adpval) {
-	complex float *kslab, *contrast, *k, *nk, kbg;
-	float *rstore, *r, *lr, *nr;
+	cplx *kslab, *contrast, *k, *nk, kbg;
+	real *rstore, *r, *lr, *nr;
 	long npx, i, nx, ny, nz;
 	int size[3], nsize[3];
 
@@ -192,8 +190,8 @@ long buildmodel (FILE *output, FILE *template, FILE *avlrand, FILE *adprand,
 	fprintf (stderr, "Grid size is %ld x %ld x %ld.\n", nx, ny, nz);
 
 	/* Allocate the arrays used for storage. */
-	rstore = malloc (3 * npx * sizeof(float));
-	kslab = malloc (3 * npx * sizeof(complex float));
+	rstore = malloc (3 * npx * sizeof(real));
+	kslab = malloc (3 * npx * sizeof(cplx));
 	contrast = kslab + 2 * npx;
 
 	/* Point to the data stores. */
@@ -217,7 +215,7 @@ long buildmodel (FILE *output, FILE *template, FILE *avlrand, FILE *adprand,
 
 		/* Build and write the contrast for the previously-read slab. */
 		ctslab (contrast, k, r, lr, nr, kbg, nx, ny, delta);
-		fwrite (contrast, sizeof(complex float), npx, output);
+		fwrite (contrast, sizeof(cplx), npx, output);
 
 		/* Update the media pointers. */
 		k = kslab + (i % 2) * npx;
@@ -230,7 +228,7 @@ long buildmodel (FILE *output, FILE *template, FILE *avlrand, FILE *adprand,
 
 	/* Build and write out the last slab. */
 	ctslab (contrast, k, r, lr, NULL, kbg, nx, ny, delta);
-	fwrite (contrast, sizeof(complex float), npx, output);
+	fwrite (contrast, sizeof(cplx), npx, output);
 
 	free (kslab);
 	free (rstore);
@@ -280,7 +278,7 @@ int main (int argc, char **argv) {
 	char **arglist, ch, *tmplname = NULL, *avlname = NULL,
 	     *adpname = NULL, *outname = NULL;
 	material bgval, ctval, avlval[2], adpval[2];
-	float delta = 0.1;
+	real delta = 0.1;
 	FILE *template, *avlrand, *adprand, *output;
 
 	arglist = argv;

@@ -1,14 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <complex.h>
-#include <math.h>
 #include <unistd.h>
 #include <time.h>
 
 #include <mpi.h>
 
 #include "ScaleME.h"
+
+#include "precision.h"
 
 #include "itsolver.h"
 #include "measure.h"
@@ -39,10 +39,10 @@ int main (int argc, char **argv) {
 	int mpirank, mpisize, i, j, k, nit, gsize[3], obscount = 1;
 	int debug = 0, maxobs, useaca = 0, usebicg = 0, useloose = 0;
 	int numsrcpts = 4, singex = 0;
-	complex float *rhs, *sol, *field;
+	cplx *rhs, *sol, *field;
 	double cputime, wtime;
 	long nelt;
-	float acatol = -1;
+	real acatol = -1;
 	augspace aug;
 
 	measdesc *obsmeas, srcmeas;
@@ -121,14 +121,14 @@ int main (int argc, char **argv) {
 
 	nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 	/* Allocate the RHS vector, which will also store the solution. */
-	rhs = malloc (2 * nelt * sizeof(complex float));
+	rhs = malloc (2 * nelt * sizeof(cplx));
 	sol = rhs + nelt;
 	/* Allocate the local portion of the contrast storage. */
-	fmaconf.contrast = malloc (nelt * sizeof(complex float));
+	fmaconf.contrast = malloc (nelt * sizeof(cplx));
 	/* Allocate the observation array. */
 	for (i = 1, maxobs = obsmeas->count; i < obscount; ++i)
 		maxobs = MAX(maxobs, obsmeas[i].count);
-	field = malloc (maxobs * sizeof(complex float));
+	field = malloc (maxobs * sizeof(cplx));
 
 	/* Store the grid size for printing of field values. */
 	gsize[0] = fmaconf.nx; gsize[1] = fmaconf.ny; gsize[2] = fmaconf.nz;
@@ -178,7 +178,7 @@ int main (int argc, char **argv) {
 		aug.start = -1;
 		aug.nmax = useloose;
 		aug.ntot = 0;
-		aug.z = malloc(2 * aug.nmax * nelt * sizeof(complex float));
+		aug.z = malloc(2 * aug.nmax * nelt * sizeof(cplx));
 		aug.az = aug.z + aug.nmax * nelt;
 	}
 

@@ -17,23 +17,25 @@
  * "Robust selective Gram-Schmidt reorthogonalization". */
 #define IMGS_L 0.99
 
+#include "precision.h"
+
 #ifdef _FREEBSD
 #define log2(a) (log(a) / log(2))
 double complex cexp (double complex);
 #endif /* _FREEBSD */
 
-float sinc (float);
-float mse (complex float *, complex float *, long, int);
+real sinc (real);
+real mse (cplx *, cplx *, long, int);
 
-int sampcoords (float *, int, float *, int, int);
-int cellcoords (float *, int, int, float);
+int sampcoords (real *, int, real *, int, int);
+int cellcoords (real *, int, int, real);
 
 int inset (int, int *, int);
-int maxind (complex float *, int, int *, int);
+int maxind (cplx *, int, int *, int);
 
-int cmgs (complex float *, complex float *, complex float *, long, int);
-complex float pardot (complex float *, complex float *, long);
-float parnorm (complex float *, long);
+int cmgs (cplx *, cplx *, cplx *, long, int);
+cplx pardot (cplx *, cplx *, long);
+real parnorm (cplx *, long);
 
-int gaussleg (float *, float *, int);
+int gaussleg (real *, real *, int);
 #endif /* __UTIL_H_ */

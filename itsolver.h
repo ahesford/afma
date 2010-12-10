@@ -1,20 +1,20 @@
 #ifndef __ITSOLVER_H_
 #define __ITSOLVER_H_
 
-#include <complex.h>
+#include "precision.h"
 
 typedef struct {
   int restart, maxit;
-  float epscg;
+  real epscg;
 } solveparm;
 
 typedef struct {
-	complex float *z, *az;
+	cplx *z, *az;
 	int nmax, ntot, start;
 } augspace;
 
-int matvec (complex float *, complex float *, complex float *);
-int gmres (complex float *, complex float *, int, int, float, int, augspace *);
-int bicgstab (complex float *, complex float *, int, int, float, int);
+int matvec (cplx *, cplx *, cplx *);
+int gmres (cplx *, cplx *, int, int, real, int, augspace *);
+int bicgstab (cplx *, cplx *, int, int, real, int);
 
 #endif /* __ITSOLVER_H_ */

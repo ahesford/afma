@@ -1,13 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <complex.h>
-#include <math.h>
 #include <unistd.h>
 #include <string.h>
 
 #include <mpi.h>
 
 #include "ScaleME.h"
+
+#include "precision.h"
 
 #include "itsolver.h"
 #include "measure.h"
@@ -32,20 +32,20 @@ void usage (char *name) {
 
 }
 
-float dbimerr (complex float *error, complex float *rn, complex float *field,
+real dbimerr (cplx *error, cplx *rn, cplx *field,
 	solveparm *hislv, solveparm *loslv, measdesc *src, measdesc *obs) {
-	complex float *rhs, *crt, *err, *fldptr;
-	float errnorm = 0, lerr, errd = 0;
+	cplx *rhs, *crt, *err, *fldptr;
+	real errnorm = 0, lerr, errd = 0;
 	int j, i, nit;
 	long k, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 
-	if (!error) err = malloc (obs->count * sizeof(complex float));
+	if (!error) err = malloc (obs->count * sizeof(cplx));
 	else err = error;
 
-	rhs = malloc (2L * nelt * sizeof(complex float));
+	rhs = malloc (2L * nelt * sizeof(cplx));
 	crt = rhs + nelt;
 
-	if (rn) memset (rn, 0, nelt * sizeof(complex float));
+	if (rn) memset (rn, 0, nelt * sizeof(cplx));
 
 	for (j = 0, fldptr = field; j < src->count; ++j, fldptr += obs->count) {
 		/* Build the right-hand side for the specified location. Use
@@ -89,7 +89,7 @@ float dbimerr (complex float *error, complex float *rn, complex float *field,
 
 /* Establish the regularization parameter using an adapation of the
  * Lavarello and Oelze method described in their 2009 DBIM paper. */
-float scalereg (float fact, float mse) {
+real scalereg (real fact, real mse) {
 	return fact * mse * mse * mse;
 }
 
@@ -97,13 +97,13 @@ int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
 	int mpirank, mpisize, i, nmeas, dbimit[2], q, stride = 1,
 	    gsize[3], specit = 0, useaca = 0, singex = 0, numsrcpts = 4;
-	complex float *rn, *crt, *field, *fldptr, *error, *refct;
-	float errnorm = 0, tolerance[2], regparm[4], erninc,
+	cplx *rn, *crt, *field, *fldptr, *error, *refct;
+	real errnorm = 0, tolerance[2], regparm[4], erninc,
 	      trange[2], prange[2], crtmse = 0.0, gamma, sigma = 1.0;
 	solveparm hislv, loslv;
 	measdesc obsmeas, srcmeas, ssrc;
 	long nelt, j;
-	float acatol = -1;
+	real acatol = -1;
 
 	MPI_Init (&argc, &argv);
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
@@ -174,7 +174,7 @@ int main (int argc, char **argv) {
 	nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 
 	/* Allocate the RHS vector, residual vector and contrast. */
-	fmaconf.contrast = malloc (3L * nelt * sizeof(complex float));
+	fmaconf.contrast = malloc (3L * nelt * sizeof(cplx));
 	rn = fmaconf.contrast + nelt;
 	crt = rn + nelt;
 
@@ -190,7 +190,7 @@ int main (int argc, char **argv) {
 
 	/* Read the reference contrast for the local basis set. */
 	if (!mpirank)  fprintf (stderr, "Reading local portion of reference file.\n");
-	refct = malloc (nelt * sizeof(complex float));
+	refct = malloc (nelt * sizeof(cplx));
 	sprintf (fname, "%s.reference", inproj);
 	/* If the reference file is not found, set the reference to NULL to avoid
 	 * checking the MSE at each step. Try both formats. */
@@ -210,7 +210,7 @@ int main (int argc, char **argv) {
 	ScaleME_postconf ();
 
 	/* Allocate the observation array. */
-	field = malloc (nmeas * sizeof(complex float));
+	field = malloc (nmeas * sizeof(cplx));
 
 	/* Read the measurements and compute their norm. */
 	getfields (inproj, field, obsmeas.count, srcmeas.count, &erninc);
@@ -235,12 +235,12 @@ int main (int argc, char **argv) {
 	/* Set the number of per-leap transmissions. */
 	ssrc.count = stride = MAX(1,stride);
 	/* Allocate the transmitter specifications. */
-	ssrc.locations = malloc(3 * ssrc.count * sizeof(float));
+	ssrc.locations = malloc(3 * ssrc.count * sizeof(real));
 	/* Blank the interpolation matrices. */
 	ssrc.imat[0] = ssrc.imat[1] = NULL;
 
 	/* The error storage vector for a single transmitter group. */
-	error = malloc (ssrc.count * obsmeas.count * sizeof(complex float));
+	error = malloc (ssrc.count * obsmeas.count * sizeof(cplx));
 
 	/* Calculate the spectral radius, if desired. */
 	if (specit > 0 && dbimit[0] > 0) {
@@ -263,7 +263,7 @@ int main (int argc, char **argv) {
 			ssrc.count = MIN(srcmeas.count - q, stride);
 
 			/* Set the transmitter locations. */
-			memcpy (ssrc.locations, srcmeas.locations + 3 * q, 3 * ssrc.count * sizeof(float));
+			memcpy (ssrc.locations, srcmeas.locations + 3 * q, 3 * ssrc.count * sizeof(real));
 			errnorm = dbimerr (error, NULL, fldptr, &hislv, &loslv, &ssrc, &obsmeas);
 
 			/* Solve the system with CG for minimum norm. */
@@ -309,7 +309,7 @@ int main (int argc, char **argv) {
 
 	/* If the number of measurements is less than the number of pixels,
 	 * use the minimum-norm conjugate gradient. */
-	if (nmeas < fmaconf.gnumbases) error = malloc (nmeas * sizeof(complex float));
+	if (nmeas < fmaconf.gnumbases) error = malloc (nmeas * sizeof(cplx));
 
 	/* Recalculate the spectral radius, if desired. */
 	if (specit > 0 && dbimit[1] > 0) {

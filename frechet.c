@@ -1,10 +1,10 @@
 #include <string.h>
-#include <math.h>
-#include <complex.h>
 
 #include <mpi.h>
 
 #include "ScaleME.h"
+
+#include "precision.h"
 
 #include "mlfma.h"
 #include "itsolver.h"
@@ -12,13 +12,13 @@
 #include "frechet.h"
 
 /* Computes a contribution to the Frechet derivative for one transmitter. */
-int frechet (complex float *crt, complex float *fld,
-		complex float *sol, measdesc *obs, solveparm *slv) {
+int frechet (cplx *crt, cplx *fld,
+		cplx *sol, measdesc *obs, solveparm *slv) {
 	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
-	complex float *zwork, *zwcrt;
+	cplx *zwork, *zwcrt;
 
 	/* Set up the workspaces. */
-	zwork = malloc (2L * nelt * sizeof(complex float));
+	zwork = malloc (2L * nelt * sizeof(cplx));
 	zwcrt = zwork + nelt;
 
 	/* Given the test vector and field distribution, compute the currents. */
@@ -42,14 +42,14 @@ int frechet (complex float *crt, complex float *fld,
 	return obs->count;
 }
 
-int frechadj (complex float *mag, complex float *fld,
-		complex float *sol, measdesc *obs, solveparm *slv) {
+int frechadj (cplx *mag, cplx *fld,
+		cplx *sol, measdesc *obs, solveparm *slv) {
 	long j, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
-	float factor = fmaconf.k0 * fmaconf.k0 * fmaconf.cellvol;
-	complex float *zwork, *smag, scale;
+	real factor = fmaconf.k0 * fmaconf.k0 * fmaconf.cellvol;
+	cplx *zwork, *smag, scale;
 
 	/* Temporary workspaces. */
-	zwork = malloc ((nelt + (long)obs->count) * sizeof(complex float));
+	zwork = malloc ((nelt + (long)obs->count) * sizeof(cplx));
 	smag = zwork + nelt;
 
 	/* Compensate incident field for FMM incoming signature scaling. */
@@ -77,26 +77,26 @@ int frechadj (complex float *mag, complex float *fld,
 
 /* Estimate the square of the spectral radius of the Frechet derivative
  * using power iteration on the product of the derivative and its adjoint. */
-float specrad (int maxit, solveparm *slv, measdesc *src, measdesc *obs) {
-	complex float *ifld, *adjcrt, *scat, *pn, mu = 1.0, newmu;
+real specrad (int maxit, solveparm *slv, measdesc *src, measdesc *obs) {
+	cplx *ifld, *adjcrt, *scat, *pn, mu = 1.0, newmu;
 	long k, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol,
 	     randmax = (2L << 31) - 1;
-	float nrm, tmp;
+	real nrm, tmp;
 	int i, j;
 
-	ifld = malloc (3L * nelt * sizeof(complex float));
+	ifld = malloc (3L * nelt * sizeof(cplx));
 	adjcrt = ifld + nelt;
 	pn = adjcrt + nelt;
 
-	scat = malloc (obs->count * sizeof(complex float));
+	scat = malloc (obs->count * sizeof(cplx));
 
 	/* Build a random initial vector. */
 	for (k = 0, nrm = 0.0; k < nelt; ++k) {
-		pn[k] = ((float)random() + I * (float)random()) / (float)randmax;
+		pn[k] = ((real)random() + I * (real)random()) / (real)randmax;
 		tmp = cabs(pn[k]);
 		nrm += tmp * tmp;
 	}
-	MPI_Allreduce (MPI_IN_PLACE, &nrm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce (MPI_IN_PLACE, &nrm, 1, MPIREAL, MPI_SUM, MPI_COMM_WORLD);
 	nrm = sqrt(nrm);
 
 	/* Normalize the initial vector. */
@@ -104,7 +104,7 @@ float specrad (int maxit, solveparm *slv, measdesc *src, measdesc *obs) {
 
 	/* Loop through power iterations. */
 	for (j = 0; j < maxit; ++j) {
-		memset (adjcrt, 0, nelt * sizeof(complex float));
+		memset (adjcrt, 0, nelt * sizeof(cplx));
 
 		/* Compute the product (F*)(F)p. */
 		for (i = 0; i < src->count; ++i) {
@@ -125,8 +125,8 @@ float specrad (int maxit, solveparm *slv, measdesc *src, measdesc *obs) {
 			tmp = cabs(adjcrt[k]);
 			nrm += tmp * tmp;
 		}
-		MPI_Allreduce (MPI_IN_PLACE, &nrm, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-		MPI_Allreduce (MPI_IN_PLACE, &newmu, 2, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce (MPI_IN_PLACE, &nrm, 1, MPIREAL, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce (MPI_IN_PLACE, &newmu, 2, MPIREAL, MPI_SUM, MPI_COMM_WORLD);
 		nrm = sqrt(nrm);
 
 		/* Break if the updated singular value hasn't changed much. */

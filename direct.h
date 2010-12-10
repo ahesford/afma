@@ -1,12 +1,12 @@
 #ifndef __DIRECT_H_
 #define __DIRECT_H_
 
-#include <complex.h>
+#include "precision.h"
 
-int greengrid (complex float *, int, int, float, float, int *, int);
+int greengrid (cplx *, int, int, real, real, int *, int);
 int dirprecalc (int, int);
 
-complex float *cacheboxrhs (int, int);
+cplx *cacheboxrhs (int, int);
 void blockinteract(int, int, int *, int *, int);
 
 int mkdircache ();

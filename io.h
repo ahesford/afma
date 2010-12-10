@@ -1,12 +1,12 @@
 #ifndef __IO_H_
 #define __IO_H_
 
-#include <complex.h>
+#include "precision.h"
 
-int getctgrp (complex float *, char *, int *, int *, int, int);
-int prtctgrp (char *, complex float *, int *, int *, int, int);
-int writefld (char *, int, int, complex float *);
-int readfld (complex float *, char *, int);
-int getfields (char *, complex float *, int, int, float *);
+int getctgrp (cplx *, char *, int *, int *, int, int);
+int prtctgrp (char *, cplx *, int *, int *, int, int);
+int writefld (char *, int, int, cplx *);
+int readfld (cplx *, char *, int);
+int getfields (char *, cplx *, int, int, real *);
 
 #endif /* __IO_H_ */

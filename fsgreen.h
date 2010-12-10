@@ -1,10 +1,10 @@
 #ifndef __UTILITY_H_
 #define __UTILITY_H_
 
-#include <complex.h>
+#include "precision.h"
 
-complex float fsgreen (float, float *, float *);
-complex float fsgrnsmooth (float, float *, float *);
-complex float fsplane (float, float *, float *);
+cplx fsgreen (real, real *, real *);
+cplx fsgrnsmooth (real, real *, real *);
+cplx fsplane (real, real *, real *);
 
 #endif /* __UTILITY_H_ */
