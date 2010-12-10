@@ -153,8 +153,9 @@ int main (int argc, char **argv) {
 
 	/* Build the root interpolation matrix for measurements. */
 	for (i = 0; i < obscount; ++i)
-		ScaleME_buildRootInterpMat (obsmeas[i].imat, 6, obsmeas[i].ntheta,
-				obsmeas[i].nphi, obsmeas[i].trange, obsmeas[i].prange);
+		ScaleME_buildRootInterpMat (obsmeas[i].imat, fmaconf.interpord,
+				obsmeas[i].ntheta, obsmeas[i].nphi,
+				obsmeas[i].trange, obsmeas[i].prange);
 
 	/* Find the width of the integer label in the field name. */
 	i = (int)ceil(log10(srcmeas.count));

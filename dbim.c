@@ -216,8 +216,8 @@ int main (int argc, char **argv) {
 	getfields (inproj, field, obsmeas.count, srcmeas.count, &erninc);
 
 	/* Build the root interpolation matrix for measurements. */
-	ScaleME_buildRootInterpMat (obsmeas.imat, 6, obsmeas.ntheta,
-			obsmeas.nphi, obsmeas.trange, obsmeas.prange);
+	ScaleME_buildRootInterpMat (obsmeas.imat, fmaconf.interpord,
+			obsmeas.ntheta, obsmeas.nphi, obsmeas.trange, obsmeas.prange);
 
 	/* Build the root interpolation matrix for adjoint Frechet fields. Note the
 	 * angular shift since the incoming fields have to be flipped. */
@@ -225,7 +225,7 @@ int main (int argc, char **argv) {
 	trange[1] = M_PI - obsmeas.trange[1];
 	prange[0] = M_PI + obsmeas.prange[0];
 	prange[1] = M_PI + obsmeas.prange[1];
-	ScaleME_buildRootInterpMat (obsmeas.imat + 1, 6,
+	ScaleME_buildRootInterpMat (obsmeas.imat + 1, fmaconf.interpord,
 			obsmeas.ntheta, obsmeas.nphi, trange, prange);
 
 	MPI_Barrier (MPI_COMM_WORLD);
