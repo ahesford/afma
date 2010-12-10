@@ -205,6 +205,7 @@ int main (int argc, char **argv) {
 			trunc[0] = strtol(strtok(optarg, ","), NULL, 0);
 			trunc[1] = strtol(strtok(NULL, ","), NULL, 0);
 			trunc[2] = strtol(strtok(NULL, ","), NULL, 0);
+			break;
 		default:
 			usage (progname);
 			exit (EXIT_FAILURE);
