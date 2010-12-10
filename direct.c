@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <complex.h>
 #include <fftw3.h>
 
 /* Define OpenMP locking functions if locking is not used. */
