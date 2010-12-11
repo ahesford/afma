@@ -1,7 +1,8 @@
 CC=mpicc
 LD=$(CC)
 
-LIBS= -lScaleME -lfftw3f
+FFTW= fftw3f
+LIBS= -lScaleME -l$(FFTW)
 
 OPTFLAGS= -fopenmp -O3 -Xarch_x86_64 -march=core2 -Xarch_i386 -march=prescott
 ARCHFLAGS= -arch x86_64 -arch i386 -D_MACOSX
