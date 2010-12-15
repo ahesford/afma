@@ -4,7 +4,11 @@
 #include <unistd.h>
 #include <time.h>
 
+#ifdef _OPENMP
 #include <mpi.h>
+#else
+int omp_get_max_threads () { return 1; }
+#endif /* _OPENMP */
 
 #include "ScaleME.h"
 
@@ -54,7 +58,8 @@ int main (int argc, char **argv) {
 
 	if (!mpirank) fprintf (stderr, "Square-cell acoustic MLFMA.\n");
 
-	fprintf (stderr, "MPI Rank %d, pid %d\n", mpirank, getpid());
+	fprintf (stderr, "MPI Rank %d, pid %d, %d threads\n",
+			mpirank, getpid(), omp_get_max_threads());
 
 	arglist = argv;
 
