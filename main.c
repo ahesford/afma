@@ -25,22 +25,24 @@ int omp_get_max_threads () { return 1; }
 void usage (char *);
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-d] [-l #] [-r #] [-a #] [-n #] [-x] [-b] [-o <prefix>] -i <prefix>\n", name);
-	fprintf (stderr, "\t-i: Specify input file prefix\n");
-	fprintf (stderr, "\t-o: Specify output file prefix (defaults to input prefix)\n");
-	fprintf (stderr, "\t-d: Debug mode (prints induced field); specify twice to write after every restart\n");
-	fprintf (stderr, "\t-b: Use BiCG-STAB instead of GMRES\n");
-	fprintf (stderr, "\t-r: Specify the number of observation configurations\n");
-	fprintf (stderr, "\t-a: Use ACA far-field transformations, or SVD when tolerance is negative\n");
-	fprintf (stderr, "\t-l: Use loose GMRES with the specified number of augmented vectors\n");
-	fprintf (stderr, "\t-n: Specify number of points for near-field integration\n");
-	fprintf (stderr, "\t-x: Use singularity extraction for self terms\n");
+	fprintf (stderr, "Usage: %s [-d] [-l #] [-a #] [-n #] [-x] [-b]\n"
+			 "       [-o <prefix>] -s <src> -r <obs> -i <prefix>\n", name);
+	fprintf (stderr, "  -i: Specify input file prefix\n");
+	fprintf (stderr, "  -o: Specify output file prefix (defaults to input prefix)\n");
+	fprintf (stderr, "  -d: Debug mode (prints induced field); specify twice to write after every restart\n");
+	fprintf (stderr, "  -b: Use BiCG-STAB instead of GMRES\n");
+	fprintf (stderr, "  -a: Use ACA far-field transformations, or SVD when tolerance is negative\n");
+	fprintf (stderr, "  -l: Use loose GMRES with the specified number of augmented vectors\n");
+	fprintf (stderr, "  -n: Specify number of points for near-field integration\n");
+	fprintf (stderr, "  -x: Use singularity extraction for self terms\n");
+	fprintf (stderr, "  -s: Specify the source location or range\n");
+	fprintf (stderr, "  -r: Specify the observation range\n");
 }
 
 int main (int argc, char **argv) {
-	char ch, *inproj = NULL, *outproj = NULL, **arglist,
-	     fname[1024], fldfmt[1024], guessfmt[1024];
-	int mpirank, mpisize, i, j, k, nit, gsize[3], obscount = 1;
+	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024],
+	     fldfmt[1024], guessfmt[1024], *srcspec = NULL, *obspec = NULL;
+	int mpirank, mpisize, i, j, k, nit, gsize[3];
 	int debug = 0, maxobs, useaca = 0, usebicg = 0, useloose = 0;
 	int numsrcpts = 4, singex = 0;
 	cplx *rhs, *sol, *field;
@@ -49,7 +51,7 @@ int main (int argc, char **argv) {
 	real acatol = -1;
 	augspace aug;
 
-	measdesc *obsmeas, srcmeas;
+	measdesc obsmeas, srcmeas;
 	solveparm solver;
 
 	MPI_Init (&argc, &argv);
@@ -63,7 +65,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:dbr:a:hl:xn:")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:dba:hl:xn:s:r:")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -76,9 +78,6 @@ int main (int argc, char **argv) {
 			break;
 		case 'b':
 			usebicg = 1;
-			break;
-		case 'r':
-			obscount = strtol(optarg, NULL, 0);
 			break;
 		case 'a':
 			acatol = strtod(optarg, NULL);
@@ -93,13 +92,20 @@ int main (int argc, char **argv) {
 		case 'n':
 			numsrcpts = strtol(optarg, NULL, 0);
 			break;
+		case 'r':
+			obspec = optarg;
+			break;
+		case 's':
+			srcspec = optarg;
+			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
 			MPI_Abort (MPI_COMM_WORLD, EXIT_FAILURE);
 		}
 	}
 
-	if (!inproj) {
+	/* The project name must be specified. */
+	if (!inproj || !srcspec || !obspec) {
 		if (!mpirank) usage (arglist[0]);
 		MPI_Abort (MPI_COMM_WORLD, EXIT_FAILURE);
 	}
@@ -108,17 +114,13 @@ int main (int argc, char **argv) {
 
 	if (!mpirank) fprintf (stderr, "Reading configuration file.\n");
 
-	/* Allocate the observation configurations. */
-	obsmeas = calloc (obscount, sizeof(measdesc));
-
 	/* Read the basic configuration. */
 	sprintf (fname, "%s.input", inproj);
-	getconfig (fname, &solver, NULL, &srcmeas, obsmeas, obscount);
+	getconfig (fname, &solver, NULL);
 
-	/* Convert the source range format to an explicit location list. */
-	buildlocs (&srcmeas);
-	/* Do the same for the observation locations. */
-	for (i = 0; i < obscount; ++i) buildlocs (obsmeas + i);
+	/* Build the source and observer location specifiers. */
+	buildsrc (&srcmeas, srcspec);
+	buildobs (&obsmeas, obspec);
 
 	/* Initialize ScaleME and find the local basis set. */
 	ScaleME_preconf (useaca);
@@ -131,9 +133,7 @@ int main (int argc, char **argv) {
 	/* Allocate the local portion of the contrast storage. */
 	fmaconf.contrast = malloc (nelt * sizeof(cplx));
 	/* Allocate the observation array. */
-	for (i = 1, maxobs = obsmeas->count; i < obscount; ++i)
-		maxobs = MAX(maxobs, obsmeas[i].count);
-	field = malloc (maxobs * sizeof(cplx));
+	field = malloc (obsmeas.count * sizeof(cplx));
 
 	/* Store the grid size for printing of field values. */
 	gsize[0] = fmaconf.nx; gsize[1] = fmaconf.ny; gsize[2] = fmaconf.nz;
@@ -157,20 +157,12 @@ int main (int argc, char **argv) {
 	ScaleME_postconf ();
 
 	/* Build the root interpolation matrix for measurements. */
-	for (i = 0; i < obscount; ++i)
-		ScaleME_buildRootInterpMat (obsmeas[i].imat, fmaconf.interpord,
-				obsmeas[i].ntheta, obsmeas[i].nphi,
-				obsmeas[i].trange, obsmeas[i].prange);
+	ScaleME_buildRootInterpMat (obsmeas.imat, fmaconf.interpord,
+			obsmeas.ntheta, obsmeas.nphi, obsmeas.trange, obsmeas.prange);
 
 	/* Find the width of the integer label in the field name. */
 	i = (int)ceil(log10(srcmeas.count));
-	if (obscount < 2)
-		sprintf (fldfmt, "%%s.tx%%0%dd.field", i);
-	else {
-		j = (int)ceil(log10(obscount));
-		sprintf (fldfmt, "%%s.tx%%0%dd.rx%%0%dd.field", i, j);
-	}
-
+	sprintf (fldfmt, "%%s.tx%%0%dd.field", i);
 	sprintf (guessfmt, "%%s.tx%%0%dd.%%s", i);
 
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
@@ -198,7 +190,7 @@ int main (int argc, char **argv) {
 		if (!getctgrp (rhs, fname, gsize, fmaconf.bslist,
 					fmaconf.numbases, fmaconf.bspbox)) {
 			if (!mpirank) fprintf (stderr, "Building RHS.\n");
-			buildrhs (rhs, srcmeas.locations + 3 * i);
+			buildrhs (rhs, srcmeas.locations + 3 * i, srcmeas.plane);
 		}
 
 		/* Attempt to read an initial first guess from a file. */
@@ -251,14 +243,12 @@ int main (int argc, char **argv) {
 		for (j = 0; j < nelt; ++j) sol[j] *= fmaconf.contrast[j];
 
 		/* Compute and write out all observation fields. */
-		for (k = 0; k < obscount; ++k) {
-			farfield (sol, obsmeas + k, field);
+		farfield (sol, &obsmeas, field);
 
-			/* Append the field for the current transmitter. */
-			if (!mpirank) {
-				sprintf (fname, fldfmt,  outproj, i, k);
-				writefld (fname, obsmeas[k].nphi, obsmeas[k].ntheta, field);
-			}
+		/* Append the field for the current transmitter. */
+		if (!mpirank) {
+			sprintf (fname, fldfmt,  outproj, i);
+			writefld (fname, obsmeas.nphi, obsmeas.ntheta, field);
 		}
 	}
 
@@ -266,8 +256,7 @@ int main (int argc, char **argv) {
 
 	freedircache ();
 	delmeas (&srcmeas);
-	for (i = 0; i < obscount; ++i) delmeas (obsmeas + i);
-	free (obsmeas);
+	delmeas (&obsmeas);
 
 	if (useloose > 0) free (aug.z);
 

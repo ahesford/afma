@@ -6,10 +6,9 @@
 #include "precision.h"
 
 #include "itsolver.h"
-#include "measure.h"
 
 void skipcomments (FILE *);
 void getdbimcfg (char *, int *, real *, real *);
-void getconfig (char *, solveparm *, solveparm *, measdesc *, measdesc *, int);
+void getconfig (char *, solveparm *, solveparm *);
 
 #endif /* __CONFIG_H_ */

@@ -21,14 +21,17 @@
 #include "util.h"
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-s #] [-r #] [-a #] [-n #] [-x] [-o <prefix>] -i <prefix>\n", name);
-	fprintf (stderr, "\t-i: Specify input file prefix\n");
-	fprintf (stderr, "\t-o: Specify output file prefix (defaults to input prefix)\n");
-	fprintf (stderr, "\t-s #: The number of per-leap simultaneous views (default: 1)\n");
-	fprintf (stderr, "\t-r #: The number of iterations for spectral radius estimation (default: none)\n");
-	fprintf (stderr, "\t-a: Use ACA with specified tolerance for far-field transformations\n");
-	fprintf (stderr, "\t-n: Specify number of points for near-field integration\n");
-	fprintf (stderr, "\t-x: Use singularity extraction for self terms\n");
+	fprintf (stderr, "Usage: %s [-s #] [-r #] [-a #] [-n #] [-x]\n"
+			 "       -s <src> -r <obs> [-o <prefix>] -i <prefix>\n", name);
+	fprintf (stderr, "  -i: Specify input file prefix\n");
+	fprintf (stderr, "  -o: Specify output file prefix (defaults to input prefix)\n");
+	fprintf (stderr, "  -v #: The number of per-leap simultaneous views (default: 1)\n");
+	fprintf (stderr, "  -e #: The number of iterations for spectral radius estimation (default: none)\n");
+	fprintf (stderr, "  -a: Use ACA with specified tolerance for far-field transformations\n");
+	fprintf (stderr, "  -n: Specify number of points for near-field integration\n");
+	fprintf (stderr, "  -x: Use singularity extraction for self terms\n");
+	fprintf (stderr, "  -s: Specify the source location or range\n");
+	fprintf (stderr, "  -r: Specify the observer range\n");
 
 }
 
@@ -50,7 +53,7 @@ real dbimerr (cplx *error, cplx *rn, cplx *field,
 	for (j = 0, fldptr = field; j < src->count; ++j, fldptr += obs->count) {
 		/* Build the right-hand side for the specified location. Use
 		 * point sources, rather than plane waves, for excitation. */
-		buildrhs (rhs, src->locations + 3 * j);
+		buildrhs (rhs, src->locations + 3 * j, src->plane);
 
 		MPI_Barrier (MPI_COMM_WORLD);
 		/* Run the iterative solver. The solution is stored in the RHS. */
@@ -94,7 +97,8 @@ real scalereg (real fact, real mse) {
 }
 
 int main (int argc, char **argv) {
-	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024];
+	char ch, *inproj = NULL, *outproj = NULL, **arglist,
+	     fname[1024], *srcspec = NULL, *obspec = NULL;
 	int mpirank, mpisize, i, nmeas, dbimit[2], q, stride = 1,
 	    gsize[3], specit = 0, useaca = 0, singex = 0, numsrcpts = 4;
 	cplx *rn, *crt, *field, *fldptr, *error, *refct;
@@ -113,7 +117,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:s:r:a:n:x")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:s:r:a:n:x:v:e:")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -121,10 +125,10 @@ int main (int argc, char **argv) {
 		case 'o':
 			outproj = optarg;
 			break;
-		case's':
+		case'v':
 			stride = strtol(optarg, NULL, 0);
 			break;
-		case 'r':
+		case 'e':
 			specit = strtol(optarg, NULL, 0);
 			break;
 		case 'a':
@@ -137,13 +141,19 @@ int main (int argc, char **argv) {
 		case 'n':
 			numsrcpts = strtol(optarg, NULL, 0);
 			break;
+		case 'r':
+			obspec = optarg;
+			break;
+		case 's':
+			srcspec = optarg;
+			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
 			MPI_Abort (MPI_COMM_WORLD, EXIT_FAILURE);
 		}
 	}
 
-	if (!inproj) {
+	if (!inproj || !srcspec || !obspec) {
 		if (!mpirank) usage (arglist[0]);
 		MPI_Abort (MPI_COMM_WORLD, EXIT_FAILURE);
 	}
@@ -154,16 +164,16 @@ int main (int argc, char **argv) {
 
 	/* Read the basic configuration for only one observation shell. */
 	sprintf (fname, "%s.input", inproj);
-	getconfig (fname, &hislv, &loslv, &srcmeas, &obsmeas, 1);
+	getconfig (fname, &hislv, &loslv);
 
 	/* Read the DBIM-specific configuration. */
 	sprintf (fname, "%s.dbimin", inproj);
 	getdbimcfg (fname, dbimit, regparm, tolerance);
 
 	/* Convert the source range format to an explicit location list. */
-	buildlocs (&srcmeas);
+	buildsrc (&srcmeas, srcspec);
 	/* Do the same for the observation locations. */
-	buildlocs (&obsmeas);
+	buildobs (&obsmeas, obspec);
 	/* The total number of measurements. */
 	nmeas = srcmeas.count * obsmeas.count;
 

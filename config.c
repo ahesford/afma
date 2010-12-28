@@ -68,8 +68,7 @@ void getdbimcfg (char *fname, int *maxit, real *regparm, real *tol) {
 }
 
 /* Read the configuration file and set parameters. */
-void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
-		measdesc *src, measdesc *obs, int obscount) {
+void getconfig (char *fname, solveparm *hislv, solveparm *loslv) {
 	FILE *fp;
 	char buf[1024];
 	int nmax, nbox, i;
@@ -168,61 +167,6 @@ void getconfig (char *fname, solveparm *hislv, solveparm *loslv,
 	if (loslv) {
 		sscanf (buf, "%d %d %lf", &(loslv->maxit), &(loslv->restart), rbuf);
 		loslv->epscg = (real) rbuf[0];
-	}
-
-	/* Read the source radius and ignore it since plane waves are used. */
-	skipcomments (fp);
-	fgets (buf, 1024, fp);
-
-	/* Read the source theta values. */
-	skipcomments (fp);
-	fgets (buf, 1024, fp);
-	sscanf (buf, "%lf %lf %d", rbuf, rbuf + 1, &(src->ntheta));
-	src->trange[0] = (real) rbuf[0];
-	src->trange[1] = (real) rbuf[1];
-
-	/* Convert the degree values to radians. */
-	src->trange[0] *= M_PI / 180;
-	src->trange[1] *= M_PI / 180;
-
-	/* Read the source phi values. */
-	skipcomments (fp);
-	fgets (buf, 1024, fp);
-	sscanf (buf, "%lf %lf %d", rbuf, rbuf + 1, &(src->nphi));
-	src->prange[0] = (real) rbuf[0];
-	src->prange[1] = (real) rbuf[1];
-
-	/* Convert the degree values to radians. */
-	src->prange[0] *= M_PI / 180;
-	src->prange[1] *= M_PI / 180;
-
-	/* Read the observer radius and skip it since plane waves are used. */
-	skipcomments (fp);
-	fgets (buf, 1024, fp);
-
-	/* Read the specified number of observation configurations. */
-	for (i = 0; i < obscount && !feof(fp); ++i) {
-		/* Read the observer theta values. */
-		skipcomments (fp);
-		fgets (buf, 1024, fp);
-		sscanf (buf, "%lf %lf %d", rbuf, rbuf + 1, &(obs[i].ntheta));
-		obs[i].trange[0] = (real) rbuf[0];
-		obs[i].trange[1] = (real) rbuf[1]; 
-
-		/* Convert the degree values to radians. */
-		obs[i].trange[0] *= M_PI / 180;
-		obs[i].trange[1] *= M_PI / 180;
-
-		/* Read the observer phi values. */
-		skipcomments (fp);
-		fgets (buf, 1024, fp);
-		sscanf (buf, "%lf %lf %d", rbuf, rbuf + 1, &(obs[i].nphi));
-		obs[i].prange[0] = (real) rbuf[0];
-		obs[i].prange[1] = (real) rbuf[1]; 
-
-		/* Convert the degree values to radians. */
-		obs[i].prange[0] *= M_PI / 180;
-		obs[i].prange[1] *= M_PI / 180;
 	}
 
 	fclose (fp);
