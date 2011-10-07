@@ -206,11 +206,14 @@ int main (int argc, char **argv) {
 		refct = NULL;
 	}
 
-
+	/* First build the integration rules that will be used. */
+	bldintrules (numsrcpts, 0);
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc (acatol, useaca);
 	i = dirprecalc (numsrcpts);
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
+	/* Now destroy the integration rules, they are no longer required. */
+	delintrules ();
 
 	/* Finish the ScaleME initialization. */
 	ScaleME_postconf ();

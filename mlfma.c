@@ -47,7 +47,7 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, real *cen, int sgn) 
 
 	if (sgn >= 0) {
 		/* Scalar factors for the matrix multiplication. */
-		fact = fmaconf.k0 * fmaconf.cellvol;
+		fact = fmaconf.k0;
 
 		/* Don't add in the existing output vector since it should
 		 * have been zeroed anyway. */
@@ -60,7 +60,7 @@ void farpattern (int nbs, int *bsl, void *vcrt, void *vpat, real *cen, int sgn) 
 	} else {
 		/* Distribute the far-field patterns to the basis functions. */
 		/* Scalar factors for the matrix multiplication. */
-		fact = I * fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
+		fact = I * fmaconf.k0 * fmaconf.k0 / (4 * M_PI * fmaconf.cellvol);
 
 		/* Perform the matrix-vector product. */
 		GEMV (CblasColMajor, CblasConjTrans, fmaconf.nsamp,
@@ -95,7 +95,7 @@ void acafarpattern (int nbs, int *bsl, void *vcrt, void *vpat, real *cen, int sg
 				crt, 1, &beta, work, 1);
 
 		/* Scalar factors for the matrix multiplication. */
-		fact = fmaconf.k0 * fmaconf.cellvol;
+		fact = fmaconf.k0;
 
 		/* Perform the matrix-vector product. */
 		GEMV (CblasColMajor, CblasNoTrans, fmaconf.nsamp,
@@ -111,7 +111,7 @@ void acafarpattern (int nbs, int *bsl, void *vcrt, void *vpat, real *cen, int sg
 
 		/* Distribute the far-field patterns to the basis functions. */
 		/* Scalar factors for the matrix multiplication. */
-		fact = I * fmaconf.k0 * fmaconf.k0 / (4 * M_PI);
+		fact = I * fmaconf.k0 * fmaconf.k0 / (4 * M_PI * fmaconf.cellvol);
 		beta = 1.0;
 
 		/* Perform the matrix-vector product. */
@@ -138,7 +138,7 @@ static int farmatcol (cplx *col, real k, real *rmc,
 		/* Compute the Cartesian coordinates of the far-field sample. */
 		sampcoords (s, i, thetas, ntheta, nphi);
 		/* Compute the far-field sample. */
-		col[i] = srcint(k, rmc, s, fmaconf.cell, fsplane) / fmaconf.cellvol;
+		col[i] = srcint(k, rmc, s, fmaconf.cell, fsplane);
 	}
 }
 
@@ -160,7 +160,7 @@ static int farmatrow (cplx *row, real k, real *s, real dx, int bpd) {
 		cellcoords (dist, l, bpd, dx);
 
 		/* The value of the far-field sample of the cell. */
-		row[l] = srcint(k, dist, s, fmaconf.cell, fsplane) / fmaconf.cellvol;
+		row[l] = srcint(k, dist, s, fmaconf.cell, fsplane);
 	}
 }
 	return 0;

@@ -225,9 +225,6 @@ int dirprecalc (int numsrcpts) {
 	bplan = FFTW_PLAN_DFT_3D (nfft, nfft, nfft,
 			gridints, gridints, FFTW_BACKWARD, FFTW_MEASURE);
 
-	/* Initialize the integration rules for direct interations. */
-	bldintrules (numsrcpts, 0);
-
 #pragma omp parallel default(shared)
 {
 	int off[3], l, idx[3];
@@ -251,9 +248,6 @@ int dirprecalc (int numsrcpts) {
 		FFTW_EXECUTE_DFT (fplan, grf, grf);
 	}
 }
-
-	/* Destroy the integration rules. */
-	delintrules ();
 
 	/* Allocate the local cache structure. */
 	mkdircache ();
