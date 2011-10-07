@@ -25,7 +25,7 @@ int omp_get_max_threads () { return 1; }
 void usage (char *);
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-d] [-l #] [-a #] [-n #] [-x] [-b]\n"
+	fprintf (stderr, "Usage: %s [-d] [-l #] [-a #] [-n #] [-b]\n"
 			 "       [-o <prefix>] -s <src> -r <obs> -i <prefix>\n", name);
 	fprintf (stderr, "  -i: Specify input file prefix\n");
 	fprintf (stderr, "  -o: Specify output file prefix (defaults to input prefix)\n");
@@ -34,7 +34,6 @@ void usage (char *name) {
 	fprintf (stderr, "  -a: Use ACA far-field transformations, or SVD when tolerance is negative\n");
 	fprintf (stderr, "  -l: Use loose GMRES with the specified number of augmented vectors\n");
 	fprintf (stderr, "  -n: Specify number of points for near-field integration\n");
-	fprintf (stderr, "  -x: Use singularity extraction for self terms\n");
 	fprintf (stderr, "  -s: Specify the source location or range\n");
 	fprintf (stderr, "  -r: Specify the observation range\n");
 }
@@ -44,7 +43,7 @@ int main (int argc, char **argv) {
 	     fldfmt[1024], guessfmt[1024], *srcspec = NULL, *obspec = NULL;
 	int mpirank, mpisize, i, j, k, nit, gsize[3];
 	int debug = 0, maxobs, useaca = 0, usebicg = 0, useloose = 0;
-	int numsrcpts = 4, singex = 0;
+	int numsrcpts = 10;
 	cplx *rhs, *sol, *field;
 	double cputime, wtime;
 	long nelt;
@@ -65,7 +64,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:dba:hl:xn:s:r:")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:dba:hl:n:s:r:")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -85,9 +84,6 @@ int main (int argc, char **argv) {
 			break;
 		case 'l':
 			useloose = strtol(optarg, NULL, 0);
-			break;
-		case 'x':
-			singex = 1;
 			break;
 		case 'n':
 			numsrcpts = strtol(optarg, NULL, 0);
@@ -150,7 +146,7 @@ int main (int argc, char **argv) {
 
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc (acatol, useaca);
-	i = dirprecalc (numsrcpts, singex);
+	i = dirprecalc (numsrcpts);
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
 
 	/* Finish the ScaleME initialization. */

@@ -4,7 +4,7 @@
 #include "precision.h"
 
 cplx fsgreen (real, real *, real *);
-cplx fsgrnsmooth (real, real *, real *);
+cplx fsgrnduffy (real, real *);
 cplx fsplane (real, real *, real *);
 
 #endif /* __UTILITY_H_ */

@@ -9,7 +9,7 @@
 static real *rcvpts = NULL, *rcvwts = NULL, *srcpts = NULL, *srcwts = NULL;
 static int numrcvpts = 0, numsrcpts = 0;
 
-/* Three-point (per dimension) integration of the observer. */
+/* N-point (per dimension) integration of the observer. */
 cplx rcvint (real k, real *src, real *obs, real dc, ifunc grf) {
 	cplx ans = 0, val;
 	int i, j, l;
@@ -31,7 +31,7 @@ cplx rcvint (real k, real *src, real *obs, real dc, ifunc grf) {
 	return ans;
 }
 
-/* Four-point (per dimension) integration of the source. */
+/* N-point (per dimension) integration of the source. */
 cplx srcint (real k, real *src, real *obs, real dc, ifunc grf) {
 	cplx ans = 0, val;
 	int i, j, l;
@@ -53,18 +53,37 @@ cplx srcint (real k, real *src, real *obs, real dc, ifunc grf) {
 	return ans;
 }
 
-/* Use either the singularity-extracted approximation to the self-integration
- * term, with four-point source integration; or use an analytic approximation. */
-cplx selfint (real k, real dc, int singex) {
+/* N-point (per dimension) Duffy integration of the self term. */
+cplx duffyint (real k, real dc) {
+	cplx ans = 0, val;
+	int i, j, l;
+	real spt[3];
+
+	for (i = 0; i < numsrcpts; ++i) {
+		spt[0] = 0.25 * dc * (srcpts[i] + 1.);
+		for (j = 0; j < numsrcpts; ++j) {
+			spt[1] = srcpts[j];
+			for (l = 0; l < numsrcpts; ++l) {
+				spt[2] = srcpts[l];
+				val = fsgrnduffy (k, spt);
+				ans += srcwts[i] * srcwts[j] * srcwts[l] * val;
+			}
+		}
+	}
+
+	 /* The pyramidal integration must be scaled by dc/4 due to the change
+	  * of variables. This is then scaled by 6 because a pyramid is 1/6 the
+	  * total cubic cell. */
+	return 1.5 * dc * ans;
+}
+
+/* Use an analytic approximation to the self-integration. */
+cplx selfint (real k, real dc) {
 	cplx ikr;
 	real r, zero[3] = {0., 0., 0.};
 
 	r = cbrt (3. / (4. * M_PI)) * dc;
 
-	/* Sum the contributions of the smooth and singular parts. */
-	if (singex) return srcint (k, zero, zero, dc, fsgrnsmooth) + 0.5 * r * r;
-
-	/* Otherwise use the analytic approximation. */
 	ikr = I * k * r;
 	return ((1.0 - ikr) * cexp (ikr) - 1.0) / (k * k);
 }

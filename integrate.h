@@ -7,7 +7,8 @@ typedef cplx (*ifunc)(real, real *, real *);
 
 cplx rcvint (real, real *, real *, real, ifunc);
 cplx srcint (real, real *, real *, real, ifunc);
-cplx selfint (real, real, int);
+cplx duffyint (real, real);
+cplx selfint (real, real);
 
 void bldintrules (int, int);
 void delintrules ();

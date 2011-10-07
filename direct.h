@@ -3,8 +3,8 @@
 
 #include "precision.h"
 
-int greengrid (cplx *, int, int, real, real, int *, int);
-int dirprecalc (int, int);
+int greengrid (cplx *, int, int, real, real, int *);
+int dirprecalc (int);
 
 cplx *cacheboxrhs (int, int);
 void blockinteract(int, int, int *, int *, int);

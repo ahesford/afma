@@ -138,7 +138,7 @@ static int farmatcol (cplx *col, real k, real *rmc,
 		/* Compute the Cartesian coordinates of the far-field sample. */
 		sampcoords (s, i, thetas, ntheta, nphi);
 		/* Compute the far-field sample. */
-		col[i] = fsplane (k, rmc, s);
+		col[i] = srcint(k, rmc, s, fmaconf.cell, fsplane) / fmaconf.cellvol;
 	}
 }
 
@@ -160,7 +160,7 @@ static int farmatrow (cplx *row, real k, real *s, real dx, int bpd) {
 		cellcoords (dist, l, bpd, dx);
 
 		/* The value of the far-field sample of the cell. */
-		row[l] = fsplane (k, dist, s);
+		row[l] = srcint(k, dist, s, fmaconf.cell, fsplane) / fmaconf.cellvol;
 	}
 }
 	return 0;

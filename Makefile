@@ -8,8 +8,8 @@ OPTFLAGS= -fopenmp -O3 -Xarch_x86_64 -march=core2 -Xarch_i386 -march=prescott
 ARCHFLAGS= -arch x86_64 -arch i386 -D_MACOSX
 ARCHLIBS= -framework Accelerate
 
-CINCDIR= -I../scaleme/include -I/usr/local/include -I/opt/local/include
-LIBDIR= -L../scaleme -L/usr/local/lib -L/opt/local/lib
+CINCDIR= -I../scaleme/include -I/usr/local/include
+LIBDIR= -L../scaleme -L/usr/local/lib
 
 DFLAGS=
 CFLAGS= $(OPTFLAGS) $(ARCHFLAGS)

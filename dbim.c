@@ -21,7 +21,7 @@
 #include "util.h"
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-s #] [-r #] [-a #] [-n #] [-x]\n"
+	fprintf (stderr, "Usage: %s [-s #] [-r #] [-a #] [-n #] \n"
 			 "       -s <src> -r <obs> [-o <prefix>] -i <prefix>\n", name);
 	fprintf (stderr, "  -i: Specify input file prefix\n");
 	fprintf (stderr, "  -o: Specify output file prefix (defaults to input prefix)\n");
@@ -29,7 +29,6 @@ void usage (char *name) {
 	fprintf (stderr, "  -e #: The number of iterations for spectral radius estimation (default: none)\n");
 	fprintf (stderr, "  -a: Use ACA with specified tolerance for far-field transformations\n");
 	fprintf (stderr, "  -n: Specify number of points for near-field integration\n");
-	fprintf (stderr, "  -x: Use singularity extraction for self terms\n");
 	fprintf (stderr, "  -s: Specify the source location or range\n");
 	fprintf (stderr, "  -r: Specify the observer range\n");
 
@@ -100,7 +99,7 @@ int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist,
 	     fname[1024], *srcspec = NULL, *obspec = NULL;
 	int mpirank, mpisize, i, nmeas, dbimit[2], q, stride = 1,
-	    gsize[3], specit = 0, useaca = 0, singex = 0, numsrcpts = 4;
+	    gsize[3], specit = 0, useaca = 0, numsrcpts = 10;
 	cplx *rn, *crt, *field, *fldptr, *error, *refct;
 	real errnorm = 0, tolerance[2], regparm[4], erninc,
 	      trange[2], prange[2], crtmse = 0.0, gamma, sigma = 1.0;
@@ -117,7 +116,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:s:r:a:n:x:v:e:")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:s:r:a:n:v:e:")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -134,9 +133,6 @@ int main (int argc, char **argv) {
 		case 'a':
 			acatol = strtod(optarg, NULL);
 			useaca = 1;
-			break;
-		case 'x':
-			singex = 1;
 			break;
 		case 'n':
 			numsrcpts = strtol(optarg, NULL, 0);
@@ -213,7 +209,7 @@ int main (int argc, char **argv) {
 
 	/* Precalculate some values for the FMM and direct interactions. */
 	fmmprecalc (acatol, useaca);
-	i = dirprecalc (numsrcpts, singex);
+	i = dirprecalc (numsrcpts);
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
 
 	/* Finish the ScaleME initialization. */
