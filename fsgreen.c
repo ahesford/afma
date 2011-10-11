@@ -18,9 +18,11 @@ cplx fsgreen (real k, real *r, real *rp) {
 	return ans;
 }
 
-/* Computes the free-space Green's function with the source in
- * Duffy-transformed coordinates and the observation at the origin. */
-cplx fsgrnduffy (real k, real *r) {
+/* Computes the free-space Green's function with the source in coordinates
+ * transformed according to Duffy's rule and the observation at the origin. The
+ * argument rv is ignored but is present so the function can be plugged into
+ * the source integration routine. */
+cplx fsgrnduffy (real k, real *r, real *rv) {
 	cplx ans;
 	real dist;
 

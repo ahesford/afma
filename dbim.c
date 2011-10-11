@@ -99,7 +99,7 @@ int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist,
 	     fname[1024], *srcspec = NULL, *obspec = NULL;
 	int mpirank, mpisize, i, nmeas, dbimit[2], q, stride = 1,
-	    gsize[3], specit = 0, useaca = 0, numsrcpts = 10;
+	    gsize[3], specit = 0, useaca = 0, numsrcpts = 5;
 	cplx *rn, *crt, *field, *fldptr, *error, *refct;
 	real errnorm = 0, tolerance[2], regparm[4], erninc,
 	      trange[2], prange[2], crtmse = 0.0, gamma, sigma = 1.0;
@@ -212,8 +212,6 @@ int main (int argc, char **argv) {
 	fmmprecalc (acatol, useaca);
 	i = dirprecalc (numsrcpts);
 	if (!mpirank) fprintf (stderr, "Finished precomputing %d near interactions.\n", i);
-	/* Now destroy the integration rules, they are no longer required. */
-	delintrules ();
 
 	/* Finish the ScaleME initialization. */
 	ScaleME_postconf ();
@@ -381,6 +379,7 @@ int main (int argc, char **argv) {
 	delmeas (&srcmeas);
 	delmeas (&obsmeas);
 	delmeas (&ssrc);
+	delintrules ();
 
 	if (refct) free (refct);
 

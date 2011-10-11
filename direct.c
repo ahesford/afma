@@ -321,7 +321,7 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 /* Build the extended Green's function on an expanded cubic grid. */
 int greengrid (cplx *grf, int m, int mex, real k0, real cell, int *off) {
 	int ip, jp, kp, l, mt, idx[3];
-	real dist[3], zero[3] = {0., 0., 0.}, scale;
+	real dist[3], zero[3] = {0., 0., 0.}, scale, dc[3] = { cell, cell, cell };
 
 	/* The total number of samples. */
 	mt = mex * mex * mex;
@@ -334,17 +334,19 @@ int greengrid (cplx *grf, int m, int mex, real k0, real cell, int *off) {
 		GRID(idx, l, mex, mex);
 
 		ip = (idx[0] < m) ? idx[0] : (idx[0] - mex);
-		dist[0] = (real)(ip - off[0]) * fmaconf.cell;
+		dist[0] = (real)(ip - off[0]) * cell;
 
 		jp = (idx[1] < m) ? idx[1] : (idx[1] - mex);
-		dist[1] = (real)(jp - off[1]) * fmaconf.cell;
+		dist[1] = (real)(jp - off[1]) * cell;
 
 		kp = (idx[2] < m) ? idx[2] : (idx[2] - mex);
-		dist[2] = (real)(kp - off[2]) * fmaconf.cell;
+		dist[2] = (real)(kp - off[2]) * cell;
 
+		/* Use Duffy's transformation to compute the self term. */
 		if (kp == off[2] && jp == off[1] && ip == off[0])
-			*(grf++) = scale * duffyint (k0, cell);
-		else *(grf++) = scale * srcint (k0, zero, dist, cell, fsgreen);
+			*(grf++) = scale * rcvint (k0, NULL, zero, dc, duffyint, fsgrnduffy);
+		/* Compute the other, non-singular terms. */
+		else *(grf++) = scale * rcvint (k0, zero, dist, dc, srcint, fsgreen);
 	}
 
 	return mex;

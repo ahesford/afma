@@ -3,12 +3,17 @@
 
 #include "precision.h"
 
+/* A function to serve as an integrand. */
 typedef cplx (*ifunc)(real, real *, real *);
+/* A function to serve as an integrator. */
+typedef cplx (*integrator)(real, real *, real *, real *, ifunc);
 
-cplx rcvint (real, real *, real *, real, ifunc);
-cplx srcint (real, real *, real *, real, ifunc);
-cplx duffyint (real, real);
-cplx selfint (real, real);
+/* A routine for double integration. */
+cplx rcvint (real, real *, real *, real *, integrator, ifunc);
+
+/* Routines for singular and smooth single integration. */
+cplx srcint (real, real *, real *, real *, ifunc);
+cplx duffyint (real, real *, real *, real *, ifunc);
 
 void bldintrules (int, int);
 void delintrules ();

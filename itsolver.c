@@ -39,7 +39,7 @@ int matvec (cplx *out, cplx *in, cplx *cur) {
 
 	/* Add in the identity portion. */
 #pragma omp parallel for default(shared) private(i)
-	for (i = 0; i < nelt; ++i) out[i] = in[i] - out[i];
+	for (i = 0; i < nelt; ++i) out[i] = fmaconf.cellvol * in[i] - out[i];
 
 	return 0;
 }

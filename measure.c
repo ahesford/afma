@@ -8,13 +8,14 @@
 
 #include "measure.h"
 #include "fsgreen.h"
+#include "integrate.h"
 #include "mlfma.h"
 #include "util.h"
 
 /* Slow computation of incident field for a single source. */
 int buildrhs (cplx *rhs, real *srcloc, int plane) {
-	real scale = 1.0;
-	cplx (*rhsfunc) (real, real *, real *) = fsgreen;
+	real scale = 1.0, dc[3] = { fmaconf.cell, fmaconf.cell, fmaconf.cell };
+	ifunc rhsfunc = fsgreen;
 
 	/* Use a plane wave instead of a point source. */
 	if (plane) {
@@ -49,7 +50,7 @@ int buildrhs (cplx *rhs, real *srcloc, int plane) {
 			ctr[1] = off[1] + fmaconf.cell * (real)idx[1];
 			ctr[2] = off[2] + fmaconf.cell * (real)idx[2];
 
-			*rptr = scale * rhsfunc (fmaconf.k0, ctr, srcloc);
+			*rptr = scale * srcint (fmaconf.k0, ctr, srcloc, dc, rhsfunc);
 		}
 	}
 }
