@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include <complex.h>
+#include <math.h>
 #include <fftw3.h>
 
 /* Define OpenMP locking functions if locking is not used. */
@@ -23,6 +24,10 @@ int omp_unset_lock (omp_lock_t *x) { return 0; }
 #include "fsgreen.h"
 #include "mlfma.h"
 #include "integrate.h"
+
+/* Define macros for packed indexing. */
+#define PPYR(i) (((i) * ((i) + 1) * ((i) + 2)) / 6)
+#define PTRI(i) (((i) * ((i) + 1)) / 2)
 
 typedef struct {
 	int index[3], fill;
@@ -196,9 +201,52 @@ cplx *cacheboxrhs (int bsl, int boxkey) {
 	return bptr;
 }
 
+/* Precompute a cache of unique, integrated Green's function values in a packed
+ * array to be later used to populate the near-field interactions. */
+int greencache (cplx *grf, int n, real k0, real cell) {
+	real zero[3] = { 0., 0., 0. }, dc[3] = { cell, cell, cell };
+
+	/* Compute the self term. */
+	grf[0] = rcvint (k0, NULL, zero, dc, duffyint, fsgrnduffy);
+
+#pragma omp parallel default(shared)
+{
+	int i, j, k, m, l;
+	real dist[3];
+
+#pragma omp for
+	for (l = 1; l < n; ++l) {
+		/* Compute the first grid index from the linear index. */
+		i = cbrt (6 * l);
+		if (PPYR(i) > l) --i;
+
+		/* Compute the remainder of the index. */
+		m = l - PPYR(i);
+
+		/* Compute the second grid index from the linear index remainder. */
+		j = sqrt (2 * m);
+		if (PTRI(j) > m) --j;
+
+		/* Compute the final grid index. */
+		k = m - PTRI(j);
+
+		/* Compute the distance. */
+		dist[0] = cell * i;
+		dist[1] = cell * j;
+		dist[2] = cell * k;
+
+		/* Integrate the appropraite term. */
+		grf[l] = rcvint (k0, zero, dist, dc, srcint, fsgreen);
+	}
+}
+
+	return n;
+}
+
 /* Precompute some values for the direct interactions. */
 int dirprecalc (int numsrcpts) {
-	int totbpnbr, nborsvol, rank;
+	int totbpnbr, nborsvol, rank, sepmax, ncache;
+	cplx *grc;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
 
@@ -225,6 +273,16 @@ int dirprecalc (int numsrcpts) {
 	bplan = FFTW_PLAN_DFT_3D (nfft, nfft, nfft,
 			gridints, gridints, FFTW_BACKWARD, FFTW_MEASURE);
 
+	/* This is the maximum single-index basis separation to be cached. */
+	sepmax = nfft + fmaconf.numbuffer * fmaconf.bspbox;
+	/* This is the size of the packed-storage value cache. */
+	ncache = PPYR(sepmax);
+	/* Allocate and fill the Green's function integration cache. */
+	grc = malloc(ncache * sizeof(cplx));
+	greencache (grc, ncache, fmaconf.k0, fmaconf.cell);
+	if (!rank)
+		fprintf (stderr, "Cached %d Green's function integrations\n", ncache);
+
 #pragma omp parallel default(shared)
 {
 	int off[3], l, idx[3];
@@ -241,8 +299,7 @@ int dirprecalc (int numsrcpts) {
 		off[2] = (idx[2] - fmaconf.numbuffer) * fmaconf.bspbox;
 
 		/* Build the Green's function grid for this local box. */
-		greengrid (grf, fmaconf.bspbox, nfft,
-				fmaconf.k0, fmaconf.cell, off);
+		greengrid (grf, fmaconf.bspbox, nfft, off, fmaconf.k0, grc);
 
 		/* Fourier transform the Green's function. */
 		FFTW_EXECUTE_DFT (fplan, grf, grf);
@@ -251,6 +308,9 @@ int dirprecalc (int numsrcpts) {
 
 	/* Allocate the local cache structure. */
 	mkdircache ();
+
+	/* Free the integration cache. */
+	free (grc);
 
 	return nfftprod;
 }
@@ -318,10 +378,11 @@ void blockinteract (int tkey, int tct, int *skeys, int *scts, int numsrc) {
 	return;
 }
 
-/* Build the extended Green's function on an expanded cubic grid. */
-int greengrid (cplx *grf, int m, int mex, real k0, real cell, int *off) {
+/* Build the scaled, extended Green's function grf on an expanded cubic grid
+ * with values taken from the cache grc. */
+int greengrid (cplx *grf, int m, int mex, int *off, real k0, cplx *grc) {
 	int ip, jp, kp, l, mt, idx[3];
-	real dist[3], zero[3] = {0., 0., 0.}, scale, dc[3] = { cell, cell, cell };
+	real scale;
 
 	/* The total number of samples. */
 	mt = mex * mex * mex;
@@ -333,20 +394,25 @@ int greengrid (cplx *grf, int m, int mex, real k0, real cell, int *off) {
 	for (l = 0; l < mt; ++l) {
 		GRID(idx, l, mex, mex);
 
+		/* Compute the source and observer separation in cell lengths. */
 		ip = (idx[0] < m) ? idx[0] : (idx[0] - mex);
-		dist[0] = (real)(ip - off[0]) * cell;
+		ip = abs (ip - off[0]);
 
 		jp = (idx[1] < m) ? idx[1] : (idx[1] - mex);
-		dist[1] = (real)(jp - off[1]) * cell;
+		jp = abs (jp - off[1]);
 
 		kp = (idx[2] < m) ? idx[2] : (idx[2] - mex);
-		dist[2] = (real)(kp - off[2]) * cell;
+		kp = abs (kp - off[2]);
 
-		/* Use Duffy's transformation to compute the self term. */
-		if (kp == off[2] && jp == off[1] && ip == off[0])
-			*(grf++) = scale * rcvint (k0, NULL, zero, dc, duffyint, fsgrnduffy);
-		/* Compute the other, non-singular terms. */
-		else *(grf++) = scale * rcvint (k0, zero, dist, dc, srcint, fsgreen);
+		/* The maximum separation index gets stored in idx[0]. */
+		idx[0] = MAX(ip, MAX(jp, kp));
+		/* The minimum separation index gets stored in idx[2]. */
+		idx[2] = MIN(ip, MIN(jp, kp));
+		/* The middle (remaining) index gets stored in idx[1]. */
+		idx[1] = ip + jp + kp - idx[0] - idx[2];
+
+		/* Copy the proper integration into place from the cache. */
+		*(grf++) = scale * grc[PPYR(idx[0]) + PTRI(idx[1]) + idx[2]];
 	}
 
 	return mex;
