@@ -5,7 +5,7 @@
 #include <time.h>
 
 #ifdef _OPENMP
-#include <mpi.h>
+#include <omp.h>
 #else
 int omp_get_max_threads () { return 1; }
 #endif /* _OPENMP */
