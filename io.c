@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <unistd.h>
+
 #include <mpi.h>
 
 #include "precision.h"
@@ -41,8 +43,9 @@ static int sortbsmap (ctmap *map, int *bsl, int nbs, int bpvol) {
 /* Read the gridded file into local arrays. */
 int getctgrp (cplx *crt, char *fname, int *size, int *bsl, int nbs, int bpb) {
 	long i, nelt;
-	int bsize[HLEN], bpbvol = bpb * bpb * bpb;
+	int bsize[HLEN], bpbvol = bpb * bpb * bpb, mpirank;
 	ctmap *map;
+	double wtime;
 
 	MPI_File fh;
 	MPI_Datatype cplx;
@@ -50,8 +53,12 @@ int getctgrp (cplx *crt, char *fname, int *size, int *bsl, int nbs, int bpb) {
 
 	nelt = (long)nbs * (long)bpbvol;
 
+	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
+
 	/* Zero out the contrast in case nothing can be read. */
 	memset (crt, 0, nelt * sizeof(cplx));
+
+	wtime = MPI_Wtime();
 
 	/* Open the MPI file with the specified name. */
 	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_RDONLY,
@@ -97,6 +104,9 @@ int getctgrp (cplx *crt, char *fname, int *size, int *bsl, int nbs, int bpb) {
 
 	free (map);
 
+	wtime = MPI_Wtime() - wtime;
+	if (!mpirank) fprintf (stderr, "Wall time for volume read: %0.6g\n", wtime);
+
 	return nbs;
 }
 
@@ -105,6 +115,7 @@ int prtctgrp (char *fname, cplx *crt, int *size, int *bsl, int nbs, int bpb) {
 	int mpirank, bpbvol = bpb * bpb * bpb, bhdr[HLEN];
 	long i, nelt;
 	ctmap *map;
+	double wtime;
 
 	MPI_File fh;
 	MPI_Datatype cplx;
@@ -113,6 +124,8 @@ int prtctgrp (char *fname, cplx *crt, int *size, int *bsl, int nbs, int bpb) {
 	nelt = (long)nbs * (long)bpbvol;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &mpirank);
+
+	wtime = MPI_Wtime();
 
 	/* Open the MPI file with the specified name. */
 	if (MPI_File_open (MPI_COMM_WORLD, fname, MPI_MODE_WRONLY |
@@ -151,7 +164,23 @@ int prtctgrp (char *fname, cplx *crt, int *size, int *bsl, int nbs, int bpb) {
 
 	free (map);
 
+	wtime = MPI_Wtime() - wtime;
+	if (!mpirank) fprintf (stderr, "Wall time for volume write: %0.6g\n", wtime);
+
 	return nbs;
+}
+
+/* Check for the existence of a file to determine whether the contrast should
+ * be printed. If it exists, delete it. The user can touch this file to force a
+ * write of the contrast at the end of a restart. */
+int chkctprt (char *fname) {
+	/* If the file doesn't exist, return false. */
+	if (access (fname, F_OK)) return 0;
+
+	/* Unlink the file and return true. It matters not whether this fails,
+	 * in which case the contrast is written after each restart. */
+	unlink (fname);
+	return 1;
 }
 
 /* Append the provided field to the specified field file. */

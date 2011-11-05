@@ -73,7 +73,7 @@ int main (int argc, char **argv) {
 			outproj = optarg;
 			break;
 		case 'd':
-			++debug;
+			debug = 1;
 			break;
 		case 'b':
 			usebicg = 1;
@@ -134,15 +134,12 @@ int main (int argc, char **argv) {
 	/* Store the grid size for printing of field values. */
 	gsize[0] = fmaconf.nx; gsize[1] = fmaconf.ny; gsize[2] = fmaconf.nz;
 
-	wtime = MPI_Wtime();
 	if (!mpirank) fprintf (stderr, "Reading local portion of contrast file.\n");
 	/* Read the contrast for the local basis set. */
 	sprintf (fname, "%s.contrast", inproj);
 	/* Try both formats. */
 	getctgrp (fmaconf.contrast, fname, gsize,
 			fmaconf.bslist, fmaconf.numbases, fmaconf.bspbox);
-	wtime = MPI_Wtime() - wtime;
-	if (!mpirank) fprintf (stderr, "Wall time for contrast read: %0.6g\n", wtime);
 
 	/* First build the integration rules that will be used. */
 	bldintrules (numsrcpts, 0);
@@ -198,6 +195,10 @@ int main (int argc, char **argv) {
 
 		/* Restart if the true residual is not sufficiently low. */
 		for (j = 0, nit = 1; j < solver.restart && nit > 0; ++j) {
+			/* Reset the debug tripwire to ensure the final output
+			 * is written if intermediate writes were performed. */
+			debug = debug ? 1 : 0;
+
 			cputime = (double)clock() / CLOCKS_PER_SEC;
 			wtime = MPI_Wtime();
 
@@ -214,27 +215,24 @@ int main (int argc, char **argv) {
 				fprintf (stderr, "Wall time for solution: %0.6g\n", wtime);
 			}
 
-			/* Update the internal field before every restart, but
-			 * only when the debug flag has been specified twice. */
-			if (debug > 1) {
-				wtime = MPI_Wtime();
+			/* Update the total field before every restart, but
+			 * only if the tripwire file exists. */
+			sprintf (fname, guessfmt, inproj, i, "volwrite");
+			if (chkctprt (fname)) {
 				sprintf (fname, guessfmt, outproj, i, "solution");
 				prtctgrp (fname, sol, gsize, fmaconf.bslist,
 						fmaconf.numbases, fmaconf.bspbox);
-				wtime = MPI_Wtime() - wtime;
-				if (!mpirank) fprintf (stderr, "Wall time for field write: %0.6g\n", wtime);
+				/* If restarts have finished, avoid an
+				 * immediate rewrite of this field. */
+				debug = debug ? 2 : 0;
 			}
 		}
 
-		/* Update the field after all iterations, but only with a
-		 * single debug flag. Otherwise, it has already been written. */
+		/* Write the total field if desired and not just written. */
 		if (debug == 1) {
-			wtime = MPI_Wtime();
 			sprintf (fname, guessfmt, outproj, i, "solution");
 			prtctgrp (fname, sol, gsize, fmaconf.bslist,
 					fmaconf.numbases, fmaconf.bspbox);
-			wtime = MPI_Wtime() - wtime;
-			if (!mpirank) fprintf (stderr, "Wall time for field write: %0.6g\n", wtime);
 		}
 
 		/* Convert total field into contrast current. */

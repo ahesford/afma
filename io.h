@@ -4,6 +4,7 @@
 #include "precision.h"
 
 int getctgrp (cplx *, char *, int *, int *, int, int);
+int chkctprt (char *);
 int prtctgrp (char *, cplx *, int *, int *, int, int);
 int writefld (char *, int, int, cplx *);
 int readfld (cplx *, char *, int);
