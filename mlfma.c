@@ -29,9 +29,9 @@
 fmadesc fmaconf;
 
 static int farmatrow (cplx *, real, real *, real, int);
-static int farmatcol (cplx *, real, real *, real *, int, int);
-static int acabuild (cplx **, real, real, real *, int, int, real, int);
-static int fullbuild (cplx **, real, real *, int, int, real, int);
+static int farmatcol (cplx *, real, real *, int, int);
+static int acabuild (cplx **, real, real, int, int, real, int);
+static int fullbuild (cplx **, real, int, int, real, int);
 static int recaca (cplx *, cplx *, int, int, int, real);
 
 /* Computes the far-field pattern for the specified group with the specified
@@ -125,8 +125,7 @@ void acafarpattern (int nbs, int *bsl, void *vcrt, void *vpat, real *cen, int sg
 
 /* Build a column of the far-field signature for a point a distance rmc
  * from the center of the parent box. */
-static int farmatcol (cplx *col, real k, real *rmc,
-		real *thetas, int ntheta, int nphi) {
+static int farmatcol (cplx *col, real k, real *rmc, int ntheta, int nphi) {
 	int nsamp = nphi * (ntheta - 2) + 2;
 	real cell[3] = { fmaconf.cell, fmaconf.cell, fmaconf.cell };
 
@@ -137,7 +136,7 @@ static int farmatcol (cplx *col, real k, real *rmc,
 #pragma omp for
 	for (i = 0; i < nsamp; ++i) {
 		/* Compute the Cartesian coordinates of the far-field sample. */
-		sampcoords (s, i, thetas, ntheta, nphi);
+		sampcoords (s, i, ntheta, nphi);
 		/* Compute the far-field sample. */
 		col[i] = srcint(k, rmc, s, cell, fsplane);
 	}
@@ -169,7 +168,7 @@ static int farmatrow (cplx *row, real k, real *s, real dx, int bpd) {
 }
 
 /* Construct an ACA approximation to the far-field signature matrix. */
-static int acabuild (cplx **mats, real k0, real tol, real *thetas,
+static int acabuild (cplx **mats, real k0, real tol,
 		int ntheta, int nphi, real dx, int bpd) {
 	int maxrank, *irow, *icol, i, j, k,
 	    nsamp = (ntheta - 2) * nphi + 2, nelt = bpd * bpd * bpd;
@@ -197,7 +196,7 @@ static int acabuild (cplx **mats, real k0, real tol, real *thetas,
 
 	for (i = 0, row = v, col = u; i < maxrank; ++i, row += nelt, col += nsamp) {
 		/* Find the coordinate of the observer element. */
-		sampcoords (s, irow[i], thetas, ntheta, nphi);
+		sampcoords (s, irow[i], ntheta, nphi);
 
 		/* Fill the row for the selected observer element. */
 		farmatrow (row, k0, s, dx, bpd);
@@ -224,7 +223,7 @@ static int acabuild (cplx **mats, real k0, real tol, real *thetas,
 		cellcoords (dist, icol[i], bpd, dx);
 
 		/* Construct the radiation pattern of the source cell. */
-		farmatcol (col, k0, dist, thetas, ntheta, nphi);
+		farmatcol (col, k0, dist, ntheta, nphi);
 
 		/* Subtract existing contributions from earlier ranks. */
 #pragma omp parallel for default(shared) private(vptr, uptr, j, k)
@@ -359,7 +358,7 @@ static int recaca (cplx *u, cplx *v, int m, int n, int k, real tol) {
 	return rank;
 }
 
-static int svdbuild (cplx **mats, real k0, real tol, real *thetas,
+static int svdbuild (cplx **mats, real k0, real tol,
 		int ntheta, int nphi, real dx, int bpd) {
 	int nsamp = (ntheta - 2) * nphi + 2, nelt = bpd * bpd * bpd,
 	    lwork, info, mindim, rank, l, i;
@@ -395,7 +394,7 @@ static int svdbuild (cplx **mats, real k0, real tol, real *thetas,
 		cellcoords (dist, l, bpd, dx);
 
 		/* Build the corresponding matrix column. */
-		farmatcol (col, k0, dist, thetas, ntheta, nphi);
+		farmatcol (col, k0, dist, ntheta, nphi);
 	}
 
 	/* Perform an SVD on the matrix. */
@@ -426,8 +425,7 @@ static int svdbuild (cplx **mats, real k0, real tol, real *thetas,
 	return rank;
 }
 
-static int fullbuild (cplx **mats, real k0, real *thetas,
-		int ntheta, int nphi, real dx, int bpd) {
+static int fullbuild (cplx **mats, real k0, int ntheta, int nphi, real dx, int bpd) {
 	int nsamp = (ntheta - 2) * nphi + 2, nelt = bpd * bpd * bpd, l;
 	cplx *col;
 	real dist[3];
@@ -441,7 +439,7 @@ static int fullbuild (cplx **mats, real k0, real *thetas,
 		cellcoords (dist, l, bpd, dx);
 
 		/* Build the corresponding matrix column. */
-		farmatcol (col, k0, dist, thetas, ntheta, nphi);
+		farmatcol (col, k0, dist, ntheta, nphi);
 	}
 
 	return nelt * nsamp;
@@ -450,43 +448,32 @@ static int fullbuild (cplx **mats, real k0, real *thetas,
 /* Precomputes the near interactions for redundant calculations and sets up
  * the wave vector directions to be used for fast calculation of far-field patterns. */
 int fmmprecalc (real acatol, int useaca) {
-	real *thetas;
 	int ntheta, nphi, rank, i;
 
 	MPI_Comm_rank (MPI_COMM_WORLD, &rank);
 
 	/* Get the finest level parameters. */
-	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, NULL, NULL);
-	/* Allocate the theta array. */
-	thetas = malloc (ntheta * sizeof(real));
-	/* Populate the theta array. */
-	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, thetas, NULL);
-
-	/* Convert the theta samples from the cosines of the angles to the angles. */
-	for (i = 0; i < ntheta; ++i) thetas[i] = acos(thetas[i]);
-
+	ScaleME_getFinestLevelParams (&(fmaconf.nsamp), &ntheta, &nphi, NULL);
 
 	if (!useaca) {
 		/* Build the direct far-field matrices. */
 		fmaconf.acarank = 0;
-		i = fullbuild (&(fmaconf.radpats), fmaconf.k0, thetas,
-				ntheta, nphi, fmaconf.cell, fmaconf.bspbox);
+		i = fullbuild (&(fmaconf.radpats), fmaconf.k0, ntheta,
+				nphi, fmaconf.cell, fmaconf.bspbox);
 		fprintf (stderr, "Rank %d: Far-field matrix element count: %d\n", rank, i);
 	} else {
 		/* Use ACA if the tolerance is positive, otherwise use SVD. */
 		if (acatol > 0)
 			fmaconf.acarank = acabuild (&(fmaconf.radpats),
-					fmaconf.k0, acatol, thetas, ntheta,
-					nphi, fmaconf.cell, fmaconf.bspbox);
+					fmaconf.k0, acatol, ntheta, nphi,
+					fmaconf.cell, fmaconf.bspbox);
 		else
 			fmaconf.acarank = svdbuild (&(fmaconf.radpats),
-					fmaconf.k0, -acatol, thetas, ntheta,
+					fmaconf.k0, -acatol, ntheta,
 					nphi, fmaconf.cell, fmaconf.bspbox);
 
 		fprintf (stderr, "Rank %d: Far-field matrix rank: %d\n", rank, fmaconf.acarank);
 	}
-
-	free (thetas);
 
 	return fmaconf.acarank;
 }

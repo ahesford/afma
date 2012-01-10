@@ -27,7 +27,7 @@ double complex cexp (double complex);
 real sinc (real);
 real mse (cplx *, cplx *, long, int);
 
-int sampcoords (real *, int, real *, int, int);
+int sampcoords (real *, int, int, int);
 int cellcoords (real *, int, int, real);
 
 int inset (int, int *, int);

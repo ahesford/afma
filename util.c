@@ -121,7 +121,7 @@ real sinc (real x) {
 }
 
 /* Compute the coordinates of the indexed far-field sample. */
-int sampcoords (real *s, int i, real *th, int nt, int np) {
+int sampcoords (real *s, int i, int nt, int np) {
 	int pi, ti;
 	real st, theta, phi;
 
@@ -145,8 +145,8 @@ int sampcoords (real *s, int i, real *th, int nt, int np) {
 	}
 
 	/* Compute the angular position from the sample indices. */
-	phi = 2 * M_PI * pi / (real)np;
-	theta = th[ti];
+	phi = 2 * M_PI * pi / (real) np;
+	theta = M_PI * (1. - ti / (real) (nt - 1));
 
 	/* Compute the cartesian position. */
 	st = sin(theta);
