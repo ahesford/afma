@@ -109,7 +109,7 @@ real specrad (int maxit, solveparm *slv, measdesc *src, measdesc *obs) {
 		/* Compute the product (F*)(F)p. */
 		for (i = 0; i < src->count; ++i) {
 			/* Build the incident field. */
-			buildrhs (ifld, src->locations + 3 * i, src->plane);
+			buildrhs (ifld, src->locations + 3 * i, src->plane, NULL);
 			/* Solve for the internal field. */
 			bicgstab (ifld, ifld, 0, slv->maxit, slv->epscg, 1);
 			/* Compute the Frechet derivative. */

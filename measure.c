@@ -12,8 +12,30 @@
 #include "mlfma.h"
 #include "util.h"
 
+/* Evaluate a directivity pattern cos(theta) exp(-a sin(theta)**2), in which
+ * theta is the angle between a focal axis d and r = (obs - src), where obs and
+ * src are the of the observer and source positions, respectively. */
+float directivity(real *obs, real *src, real *d, real a) {
+	float r[3], dn, rn, ctheta, stheta;
+
+	/* Compute the distance. */
+	r[0] = obs[0] - src[0];
+	r[1] = obs[1] - src[1];
+	r[2] = obs[2] - src[2];
+
+	/* Compute the norms of the distance and focal axis. */
+	rn = sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+	dn = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+
+	/* Compute the cosine of the angle, as the scaled dot product. */
+	ctheta = (r[0] * d[0] + r[1] * d[1] + r[2] * d[2]) / (rn * dn);
+	stheta = sin(acos(ctheta));
+
+	return ctheta * exp(-a * stheta * stheta);
+}
+
 /* Slow computation of incident field for a single source. */
-int buildrhs (cplx *rhs, real *srcloc, int plane) {
+int buildrhs (cplx *rhs, real *srcloc, int plane, real *dir) {
 	real scale = 1.0, dc[3] = { fmaconf.cell, fmaconf.cell, fmaconf.cell };
 	ifunc rhsfunc = fsgreen;
 
@@ -51,6 +73,9 @@ int buildrhs (cplx *rhs, real *srcloc, int plane) {
 			ctr[2] = off[2] + fmaconf.cell * (real)idx[2];
 
 			*rptr = scale * srcint (fmaconf.k0, ctr, srcloc, dc, rhsfunc);
+			/* Include a directivity, if appropriate. */
+			if (dir && !plane)
+				*rptr *= directivity(ctr, srcloc, dir, dir[3]);
 		}
 	}
 }

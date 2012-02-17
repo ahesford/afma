@@ -25,7 +25,7 @@ int omp_get_max_threads () { return 1; }
 void usage (char *);
 
 void usage (char *name) {
-	fprintf (stderr, "Usage: %s [-d] [-l #] [-a #] [-n #] [-b]\n"
+	fprintf (stderr, "Usage: %s [-d] [-l #] [-a #] [-n #] [-b] [-f x,y,z,a]\n"
 			 "       [-o <prefix>] -s <src> -r <obs> -i <prefix>\n", name);
 	fprintf (stderr, "  -i: Specify input file prefix\n");
 	fprintf (stderr, "  -o: Specify output file prefix (defaults to input prefix)\n");
@@ -36,18 +36,20 @@ void usage (char *name) {
 	fprintf (stderr, "  -n: Specify number of points for near-field integration\n");
 	fprintf (stderr, "  -s: Specify the source location or range\n");
 	fprintf (stderr, "  -r: Specify the observation range\n");
+	fprintf (stderr, "  -f: Specify a focal axis x,y,z and width a for the incident field\n");
 }
 
 int main (int argc, char **argv) {
 	char ch, *inproj = NULL, *outproj = NULL, **arglist, fname[1024],
 	     fldfmt[1024], guessfmt[1024], *srcspec = NULL, *obspec = NULL;
 	int mpirank, mpisize, i, j, k, nit, gsize[3];
-	int debug = 0, maxobs, useaca = 0, usebicg = 0, useloose = 0;
+	int debug = 0, maxobs, useaca = 0, usebicg = 0, useloose = 0, usedir = 0;
 	int numsrcpts = 5;
 	cplx *rhs, *sol, *field;
 	double cputime, wtime;
 	long nelt;
 	real acatol = -1;
+	real dir[4];
 	augspace aug;
 
 	measdesc obsmeas, srcmeas;
@@ -64,7 +66,7 @@ int main (int argc, char **argv) {
 
 	arglist = argv;
 
-	while ((ch = getopt (argc, argv, "i:o:dba:hl:n:s:r:")) != -1) {
+	while ((ch = getopt (argc, argv, "i:o:dba:hl:n:s:r:f:")) != -1) {
 		switch (ch) {
 		case 'i':
 			inproj = optarg;
@@ -93,6 +95,13 @@ int main (int argc, char **argv) {
 			break;
 		case 's':
 			srcspec = optarg;
+			break;
+		case 'f':
+			dir[0] = strtod(strtok(optarg, ","), NULL);
+			dir[1] = strtod(strtok(NULL, ","), NULL);
+			dir[2] = strtod(strtok(NULL, ","), NULL);
+			dir[3] = strtod(strtok(NULL, ","), NULL);
+			usedir = 1;
 			break;
 		default:
 			if (!mpirank) usage (arglist[0]);
@@ -185,7 +194,7 @@ int main (int argc, char **argv) {
 		if (!getctgrp (rhs, fname, gsize, fmaconf.bslist,
 					fmaconf.numbases, fmaconf.bspbox)) {
 			if (!mpirank) fprintf (stderr, "Building RHS.\n");
-			buildrhs (rhs, srcmeas.locations + 3 * i, srcmeas.plane);
+			buildrhs (rhs, srcmeas.locations + 3 * i, srcmeas.plane, usedir ? dir : NULL);
 		}
 
 		/* Attempt to read an initial first guess from a file. */

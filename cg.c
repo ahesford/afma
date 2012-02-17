@@ -44,7 +44,7 @@ real cgls (cplx *rn, cplx *sol, solveparm *slv,
 		alpha = 0;
 		for (i = 0; i < src->count; ++i) {
 			/* Build the incident field. */
-			buildrhs (ifld, src->locations + 3 * i, src->plane);
+			buildrhs (ifld, src->locations + 3 * i, src->plane, NULL);
 			/* Solve for the internal field. */
 			bicgstab (ifld, ifld, 0, slv->maxit, slv->epscg, 1);
 			/* Compute the Frechet derivative. */
@@ -128,7 +128,7 @@ real cgmn (cplx *rhs, cplx *sol, solveparm *slv,
 		memset (adjcrt, 0, nelt * sizeof(cplx));
 		for (i = 0, mptr = pn; i < src->count; ++i, mptr += obs->count) {
 			/* Build the incident field. */
-			buildrhs (ifld, src->locations + 3 * i, src->plane);
+			buildrhs (ifld, src->locations + 3 * i, src->plane, NULL);
 			/* Solve for the internal field. */
 			bicgstab (ifld, ifld, 0, slv->maxit, slv->epscg, 1);
 			/* Compute the adjoint Frechet derivative. */
@@ -147,7 +147,7 @@ real cgmn (cplx *rhs, cplx *sol, solveparm *slv,
 
 		for (i = 0, mptr = scat; i < src->count; ++i, mptr += obs->count) {
 			/* Build the incident field. */
-			buildrhs (ifld, src->locations + 3 * i, src->plane);
+			buildrhs (ifld, src->locations + 3 * i, src->plane, NULL);
 			/* Solve for the internal field. */
 			bicgstab (ifld, ifld, 0, slv->maxit, slv->epscg, 1);
 			/* Compute the adjoint Frechet derivative. */
@@ -178,7 +178,7 @@ real cgmn (cplx *rhs, cplx *sol, solveparm *slv,
 	/* Compute the adjoint acting on the RHS. */
 	for (i = 0, mptr = asol; i < src->count; ++i, mptr += obs->count) {
 		/* Build the incident field. */
-		buildrhs (ifld, src->locations + 3 * i, src->plane);
+		buildrhs (ifld, src->locations + 3 * i, src->plane, NULL);
 		/* Solve for the internal field. */
 		bicgstab (ifld, ifld, 0, slv->maxit, slv->epscg, 1);
 		/* The contribution to the adjoint Frechet derivative. */

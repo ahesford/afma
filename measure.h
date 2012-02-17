@@ -9,7 +9,7 @@ typedef struct {
 	void *imat[2];
 } measdesc;
 
-int buildrhs (cplx *, real *, int);
+int buildrhs (cplx *, real *, int, real *);
 
 int farfield (cplx *, measdesc *, cplx *);
 

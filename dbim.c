@@ -52,7 +52,7 @@ real dbimerr (cplx *error, cplx *rn, cplx *field,
 	for (j = 0, fldptr = field; j < src->count; ++j, fldptr += obs->count) {
 		/* Build the right-hand side for the specified location. Use
 		 * point sources, rather than plane waves, for excitation. */
-		buildrhs (rhs, src->locations + 3 * j, src->plane);
+		buildrhs (rhs, src->locations + 3 * j, src->plane, NULL);
 
 		MPI_Barrier (MPI_COMM_WORLD);
 		/* Run the iterative solver. The solution is stored in the RHS. */
