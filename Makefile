@@ -19,7 +19,7 @@ FWDOBJS= main.o
 INVOBJS= frechet.o cg.o dbim.o
 OBJS= fsgreen.o integrate.o mlfma.o itsolver.o direct.o io.o measure.o util.o config.o
 
-EXECS= adbim afma tissue mat2grp
+EXECS= adbim afma tissue mat2grp lapden
 
 all: $(EXECS)
 	@echo "Building for Darwin (universal)."
@@ -35,6 +35,11 @@ adbim: $(INVOBJS) $(OBJS)
 tissue: tissue.o
 	@echo "Building $@."
 	$(LD) $(DFLAGS) $(LFLAGS) -o $@ $^ $(LIBDIR) $(ARCHLIBS)
+
+lapden: lapden.o
+	@echo "Building $@."
+	$(LD) $(DFLAGS) $(LFLAGS) -o $@ $^ $(LIBDIR) \
+		-l$(FFTW)_threads $(LIBS) $(ARCHLIBS)
 
 mat2grp: mat2grp.o
 	@echo "Building $@."
@@ -78,7 +83,7 @@ kraken: all
 	@echo "Building for NICS Kraken."
 
 clean:
-	rm -f $(OBJS) $(FWDOBJS) $(INVOBJS) $(EXECS) tissue.o mat2grp.o
+	rm -f $(OBJS) $(FWDOBJS) $(INVOBJS) $(EXECS) tissue.o mat2grp.o lapden.o
 	rm -f *.core core 
 
 .SUFFIXES: .o .c
