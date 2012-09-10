@@ -25,7 +25,7 @@
 #include "itsolver.h"
 #include "util.h"
 
-int matvec (cplx *out, cplx *in, cplx *cur) {
+int matvec (cplx *out, cplx *in, cplx *cur, int id) {
 	long i, nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
 
 	/* Compute the contrast pressure. */
@@ -36,6 +36,8 @@ int matvec (cplx *out, cplx *in, cplx *cur) {
 	 * the matrix-vector product for the Green's matrix. */
 	clrdircache();
 	ScaleME_applyParFMA (cur, out);
+
+	if (!id) return 0;
 
 	/* Add in the identity portion. */
 #pragma omp parallel for default(shared) private(i)
@@ -69,7 +71,7 @@ int gmres (cplx *rhs, cplx *sol, int guess,
 	rhn = parnorm(rhs, nelt);
 
 	/* Compute the initial matrix-vector product for the input guess. */
-	if (guess) matvec (v, sol, mvp);
+	if (guess) matvec (v, sol, mvp, 1);
 
 	/* Subtract from the RHS to form the residual. */
 #pragma omp parallel for default(shared) private(j)
@@ -101,7 +103,7 @@ int gmres (cplx *rhs, cplx *sol, int guess,
 		hp = h + i * (mit + 1);
 
 		/* Compute the next expansion of the Krylov space. */
-		if (!aug || i < mred) matvec (vp + nelt, vp, mvp);
+		if (!aug || i < mred) matvec (vp + nelt, vp, mvp, 1);
 		else {
 			/* Update with the next augmented vector. */
 			azp = aug->az + nelt * 
@@ -220,7 +222,7 @@ int bicgstab (cplx *rhs, cplx *sol,
 	rhn = parnorm(rhs, nelt);
 
 	/* Compute the inital matrix-vector product for the input guess. */
-	if (guess) matvec (r, sol, mvp);
+	if (guess) matvec (r, sol, mvp, 1);
 
 	/* Subtract from the RHS to form the residual. */
 #pragma omp parallel for default(shared) private(j)
@@ -250,7 +252,7 @@ int bicgstab (cplx *rhs, cplx *sol,
 			p[j] = r[j] + beta * (p[j] - omega * v[j]);
 
 		/* Compute the first search step, v = A * p. */
-		matvec (v, p, mvp);
+		matvec (v, p, mvp, 1);
 
 		/* Compute the next alpha. */
 		alpha = rho / pardot (rhat, v, nelt);
@@ -275,7 +277,7 @@ int bicgstab (cplx *rhs, cplx *sol,
 		if (err < tol) break;
 
 		/* Compute the next search step, t = A * r. */
-		matvec (t, r, mvp);
+		matvec (t, r, mvp, 1);
 
 		/* Compute the update direction. */
 		omega = pardot (t, r, nelt) / pardot (t, t, nelt);

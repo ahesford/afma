@@ -45,7 +45,7 @@ int main (int argc, char **argv) {
 	int mpirank, mpisize, i, j, k, nit, gsize[3];
 	int debug = 0, maxobs, useaca = 0, usebicg = 0, useloose = 0, usedir = 0;
 	int numsrcpts = 5;
-	cplx *rhs, *sol, *field;
+	cplx *rhs, *sol, *inc, *field;
 	double cputime, wtime;
 	long nelt;
 	real acatol = -1;
@@ -132,9 +132,10 @@ int main (int argc, char **argv) {
 	ScaleME_getListOfLocalBasis (&(fmaconf.numbases), &(fmaconf.bslist));
 
 	nelt = (long)fmaconf.numbases * (long)fmaconf.bspboxvol;
-	/* Allocate the RHS vector, which will also store the solution. */
-	rhs = malloc (2 * nelt * sizeof(cplx));
+	/* Allocate the RHS vector, solution and incident field. */
+	rhs = malloc (3 * nelt * sizeof(cplx));
 	sol = rhs + nelt;
+	inc = sol + nelt;
 	/* Allocate the local portion of the contrast storage. */
 	fmaconf.contrast = malloc (nelt * sizeof(cplx));
 	/* Allocate the observation array. */
@@ -194,7 +195,18 @@ int main (int argc, char **argv) {
 		if (!getctgrp (rhs, fname, gsize, fmaconf.bslist,
 					fmaconf.numbases, fmaconf.bspbox)) {
 			if (!mpirank) fprintf (stderr, "Building RHS.\n");
-			buildrhs (rhs, srcmeas.locations + 3 * i, srcmeas.plane, usedir ? dir : NULL);
+			/* Integrate the incident field over each cell. */
+			buildrhs (inc, srcmeas.locations + 3 * i, srcmeas.plane, usedir ? dir : NULL);
+			/* Convert the integrated field to the average. */
+#pragma omp parallel for default(shared) private(j)
+			for (j = 0; j < nelt; ++j) inc[j] /= fmaconf.cellvol;
+			/* Apply the scattering integral to the incident field. */
+			matvec(rhs, inc, sol, 0);
+		} else {
+			/* If the RHS was read, it is the incident field.
+			 * Set the incident field in inc to zero. */
+#pragma omp parallel for default(shared) private(j)
+			for (j = 0; j < nelt; ++j) inc[j] = 0.0;
 		}
 
 		/* Attempt to read an initial first guess from a file. */
@@ -227,8 +239,11 @@ int main (int argc, char **argv) {
 			/* Update the total field before every restart, but
 			 * only if the tripwire file exists. */
 			sprintf (fname, guessfmt, inproj, i, "volwrite");
-			if (chkctprt (fname)) {
-				sprintf (fname, guessfmt, outproj, i, "solution");
+			if (!access (fname, F_OK)) {
+				/* The master process should unlink the tripwire. */
+				MPI_Barrier (MPI_COMM_WORLD);
+				if (!mpirank) unlink (fname);
+				sprintf (fname, guessfmt, outproj, i, "scatfld");
 				prtctgrp (fname, sol, gsize, fmaconf.bslist,
 						fmaconf.numbases, fmaconf.bspbox);
 				/* If restarts have finished, avoid an
@@ -237,14 +252,26 @@ int main (int argc, char **argv) {
 			}
 		}
 
-		/* Write the total field if desired and not just written. */
+		/* Write the scattered field if desired and not just written. */
 		if (debug == 1) {
-			sprintf (fname, guessfmt, outproj, i, "solution");
+			sprintf (fname, guessfmt, outproj, i, "scatfld");
+			prtctgrp (fname, sol, gsize, fmaconf.bslist,
+					fmaconf.numbases, fmaconf.bspbox);
+		}
+
+		/* Convert the scattered field to the total field. */
+#pragma omp parallel for default(shared) private(j)
+		for (j = 0; j < nelt; ++j) sol[j] += inc[j];
+
+		/* Write the total field if desired and not just written. */
+		if (debug > 0) {
+			sprintf (fname, guessfmt, outproj, i, "totfld");
 			prtctgrp (fname, sol, gsize, fmaconf.bslist,
 					fmaconf.numbases, fmaconf.bspbox);
 		}
 
 		/* Convert total field into contrast current. */
+#pragma omp parallel for default(shared) private(j)
 		for (j = 0; j < nelt; ++j) sol[j] *= fmaconf.contrast[j];
 
 		/* Compute and write out all observation fields. */

@@ -170,19 +170,6 @@ int prtctgrp (char *fname, cplx *crt, int *size, int *bsl, int nbs, int bpb) {
 	return nbs;
 }
 
-/* Check for the existence of a file to determine whether the contrast should
- * be printed. If it exists, delete it. The user can touch this file to force a
- * write of the contrast at the end of a restart. */
-int chkctprt (char *fname) {
-	/* If the file doesn't exist, return false. */
-	if (access (fname, F_OK)) return 0;
-
-	/* Unlink the file and return true. It matters not whether this fails,
-	 * in which case the contrast is written after each restart. */
-	unlink (fname);
-	return 1;
-}
-
 /* Append the provided field to the specified field file. */
 int writefld (char *fname, int nrows, int ncols, cplx *field) {
 	FILE *fp;

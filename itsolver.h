@@ -13,7 +13,7 @@ typedef struct {
 	int nmax, ntot, start;
 } augspace;
 
-int matvec (cplx *, cplx *, cplx *);
+int matvec (cplx *, cplx *, cplx *, int);
 int gmres (cplx *, cplx *, int, int, real, int, augspace *);
 int bicgstab (cplx *, cplx *, int, int, real, int);
 
