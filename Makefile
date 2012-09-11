@@ -78,7 +78,7 @@ kraken: CC= cc
 kraken: LD= ftn
 kraken: OPTFLAGS= -fastsse -mp
 kraken: ARCHFLAGS= -D_LINUX -I$(GSL_DIR)/include/gsl -I$(FFTW_INC)
-kraken: ARCHLIBS= -L$(GSL_DIR)/lib -L$(FFTW_DIR) -Mnomain -lgslcblas -llapack -lblas
+kraken: ARCHLIBS= -L$(GSL_DIR)/lib -L$(FFTW_DIR) -Mnomain -lgslcblas
 kraken: all
 	@echo "Building for NICS Kraken."
 
