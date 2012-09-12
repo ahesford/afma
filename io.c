@@ -222,7 +222,7 @@ int getfields (char *inproj, cplx *field, int nobs, int nsrc, real *nrm) {
 
 	/* Find the width of the integer label in the field name. */
 	j = (int)ceil(log10(nsrc));
-	sprintf (fmt, "%%s.tx%%0%dd.field", j);
+	sprintf (fmt, "%%s.tx%%0%dd.farfld", j);
 
 	/* The initial norm of the matrix is zero, if it is desired. */
 	if (nrm) *nrm = 0;

@@ -167,7 +167,7 @@ int main (int argc, char **argv) {
 
 	/* Find the width of the integer label in the field name. */
 	i = (int)ceil(log10(srcmeas.count));
-	sprintf (fldfmt, "%%s.tx%%0%dd.field", i);
+	sprintf (fldfmt, "%%s.tx%%0%dd.farfld", i);
 	sprintf (guessfmt, "%%s.tx%%0%dd.%%s", i);
 
 	if (!mpirank) fprintf (stderr, "Initialization complete.\n");
