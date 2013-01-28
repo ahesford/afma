@@ -16,7 +16,7 @@
  * theta is the angle between a focal axis d and r = (obs - src), where obs and
  * src are the of the observer and source positions, respectively. */
 float directivity(real *obs, real *src, real *d, real a) {
-	float r[3], dn, rn, ctheta, stheta;
+	float r[3], dn, rn, ctheta, sthsq;
 
 	/* Compute the distance. */
 	r[0] = obs[0] - src[0];
@@ -29,9 +29,10 @@ float directivity(real *obs, real *src, real *d, real a) {
 
 	/* Compute the cosine of the angle, as the scaled dot product. */
 	ctheta = (r[0] * d[0] + r[1] * d[1] + r[2] * d[2]) / (rn * dn);
-	stheta = sin(acos(ctheta));
+	/* Compute the square of the sine of the angle. */
+	sthsq = 1. - ctheta * ctheta;
 
-	return ctheta * exp(-a * stheta * stheta);
+	return ctheta * exp(-a * sthsq);
 }
 
 /* Slow computation of incident field for a single source. */
