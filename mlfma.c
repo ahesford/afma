@@ -8,11 +8,11 @@
 #ifdef _MACOSX
 #include <Accelerate/Accelerate.h>
 #else
-#ifdef _FREEBSD
+#ifdef _ATLAS
 #include <cblas.h>
 #else
 #include <gsl_cblas.h>
-#endif /* _FREEBSD */
+#endif /* _ATLAS */
 #endif /* _MACOSX */
 
 #include "ScaleME.h"

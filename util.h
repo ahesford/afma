@@ -19,10 +19,10 @@
 
 #include "precision.h"
 
-#ifdef _FREEBSD
+#ifdef _ATLAS
 #define log2(a) (log(a) / log(2))
 double complex cexp (double complex);
-#endif /* _FREEBSD */
+#endif /* _ATLAS */
 
 real sinc (real);
 real mse (cplx *, cplx *, long, int);

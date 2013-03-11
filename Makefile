@@ -53,7 +53,7 @@ darwin32: all
 bsd: LD= mpif77
 bsd: OPTFLAGS= -fopenmp -O3 -mtune=native -march=native
 bsd: ARCHLIBS= -lalapack_r -lptf77blas -lptcblas -latlas_r
-bsd: ARCHFLAGS= -m64 -D_FREEBSD
+bsd: ARCHFLAGS= -m64 -D_ATLAS
 bsd: all
 	@echo "Building for FreeBSD."
 
@@ -81,6 +81,13 @@ kraken: ARCHFLAGS= -D_LINUX -I$(GSL_DIR)/include/gsl -I$(FFTW_INC)
 kraken: ARCHLIBS= -L$(GSL_DIR)/lib -L$(FFTW_DIR) -Mnomain -lgslcblas
 kraken: all
 	@echo "Building for NICS Kraken."
+
+ultra: LD= mpif77
+ultra: OPTFLAGS= -fopenmp -O3 -mtune=native -march=native
+ultra: ARCHLIBS= -L/usr/lib64/atlas-sse3 -llapack -lptf77blas -lptcblas -latlas
+ultra: ARCHFLAGS= -m64 -D_ATLAS
+ultra: all
+	@echo "Building for Ultra."
 
 clean:
 	rm -f $(OBJS) $(FWDOBJS) $(INVOBJS) $(EXECS) tissue.o mat2grp.o lapden.o
