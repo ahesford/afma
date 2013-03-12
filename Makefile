@@ -84,8 +84,9 @@ kraken: all
 
 ultra: LD= mpif77
 ultra: OPTFLAGS= -fopenmp -O3 -mtune=native -march=native
-ultra: ARCHLIBS= -L/usr/lib64/atlas-sse3 -llapack -lptf77blas -lptcblas -latlas
-ultra: ARCHFLAGS= -m64 -D_ATLAS
+ultra: ARCHLIBS= -L$(ATLAS_DIR)/lib -L$(FFTW_DIR)/lib \
+	-llapack -lptf77blas -lptcblas -latlas
+ultra: ARCHFLAGS= -m64 -D_ATLAS -I$(ATLAS_DIR)/include -I$(FFTW_DIR)/include
 ultra: all
 	@echo "Building for Ultra."
 
