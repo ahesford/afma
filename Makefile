@@ -4,8 +4,8 @@ LD=$(CC)
 FFTW= fftw3f
 LIBS= -lScaleME -l$(FFTW)
 
-OPTFLAGS= -fopenmp -O3 -Xarch_x86_64 -march=core2 -Xarch_i386 -march=prescott
-ARCHFLAGS= -arch x86_64 -arch i386 -D_MACOSX
+OPTFLAGS= -fopenmp -O3 -march=core2
+ARCHFLAGS= -D_MACOSX -flax-vector-conversions
 ARCHLIBS= -framework Accelerate
 
 CINCDIR= -I../scaleme/include -I/usr/local/include
@@ -22,7 +22,7 @@ OBJS= fsgreen.o integrate.o mlfma.o itsolver.o direct.o io.o measure.o util.o co
 EXECS= adbim afma tissue mat2grp lapden
 
 all: $(EXECS)
-	@echo "Building for Darwin (universal)."
+	@echo "Building for Darwin (64-bit)."
 
 afma: $(FWDOBJS) $(OBJS)
 	@echo "Building $@."
@@ -44,11 +44,6 @@ lapden: lapden.o
 mat2grp: mat2grp.o
 	@echo "Building $@."
 	$(LD) $(DFLAGS) $(LFLAGS) -o $@ $^ $(LIBDIR) $(ARCHLIBS)
-
-darwin32: OPTFLAGS= -fopenmp -O3 -march=prescott
-darwin32: ARCHFLAGS= -arch i386 -D_MACOSX
-darwin32: all
-	@echo "Building for Darwin (32 bits)."
 
 bsd: LD= mpif77
 bsd: OPTFLAGS= -fopenmp -O3 -mtune=native -march=native
@@ -82,13 +77,13 @@ kraken: ARCHLIBS= -L$(GSL_DIR)/lib -L$(FFTW_DIR) -Mnomain -lgslcblas
 kraken: all
 	@echo "Building for NICS Kraken."
 
-ultra: LD= mpif77
-ultra: OPTFLAGS= -fopenmp -O3 -mtune=native -march=native
-ultra: ARCHLIBS= -L$(ATLAS_DIR)/lib -L$(FFTW_DIR)/lib \
+habis: LD= mpif77
+habis: OPTFLAGS= -fopenmp -O3 -mtune=native -march=native
+habis: ARCHLIBS= -L$(ATLAS_DIR)/lib -L$(FFTW_DIR)/lib \
 	-llapack -lptf77blas -lptcblas -latlas
-ultra: ARCHFLAGS= -m64 -D_ATLAS -I$(ATLAS_DIR)/include -I$(FFTW_DIR)/include
-ultra: all
-	@echo "Building for Ultra."
+habis: ARCHFLAGS= -m64 -D_ATLAS -I$(ATLAS_DIR)/include -I$(FFTW_DIR)/include
+habis: all
+	@echo "Building for HABIS."
 
 clean:
 	rm -f $(OBJS) $(FWDOBJS) $(INVOBJS) $(EXECS) tissue.o mat2grp.o lapden.o

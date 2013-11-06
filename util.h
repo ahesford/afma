@@ -1,8 +1,12 @@
 #ifndef __UTIL_H_
 #define __UTIL_H_
 
+#ifndef MAX
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+#ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#endif
 #define ABS(x) ((x) > 0 ? (x) : -(x))
 
 #define GRID(a,gi,nx,ny) { (a)[0] = (gi) % (nx); \
